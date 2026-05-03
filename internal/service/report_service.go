@@ -50,7 +50,15 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		return err
 	}
 
-	if len(data) == 0 {
+	// Filter out invalid GPS data (lat/lng = 0)
+	var validData []decoder.AVLData
+	for _, p := range data {
+		if p.Lat != 0 && p.Lng != 0 {
+			validData = append(validData, p)
+		}
+	}
+
+	if len(validData) == 0 {
 		return nil
 	}
 
@@ -62,7 +70,7 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	// State tracking
 	var lastPoint *decoder.AVLData
 	
-	for i, p := range data {
+	for i, p := range validData {
 		if i > 0 {
 			dist := haversine(lastPoint.Lat, lastPoint.Lng, p.Lat, p.Lng)
 			totalDistance += dist
@@ -89,27 +97,27 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 			maxSpeed = p.Speed
 		}
 		sumSpeed += p.Speed
-		lastPoint = &data[i]
+		lastPoint = &validData[i]
 	}
 
-	avgSpeed := sumSpeed / float64(len(data))
+	avgSpeed := sumSpeed / float64(len(validData))
 
 	report := &repository.MovementReport{
 		VehicleID:                 vehicleID,
-		IMEI:                      data[0].IMEI,
+		IMEI:                      validData[0].IMEI,
 		ReportDate:                start,
 		AverageSpeed:              avgSpeed,
 		TotalDistance:             totalDistance,
-		StartTime:                 data[0].Time,
-		EndTime:                   data[len(data)-1].Time,
+		StartTime:                 validData[0].Time,
+		EndTime:                   validData[len(validData)-1].Time,
 		TotalActiveDuration:       formatDuration(activeSec),
 		TotalIdleDuration:         formatDuration(idleSec),
 		TotalStoppageDuration:     formatDuration(stoppageSec),
 		ActualIgnitionOnDuration:  formatDuration(ignitionOnSec),
-		TotalIgnitionOnDuration:   formatDuration(ignitionOnSec), // Simplification for now
+		TotalIgnitionOnDuration:   formatDuration(ignitionOnSec),
 		MaxSpeed:                  maxSpeed,
-		StartPoint:                fmt.Sprintf("{\"x\": %f, \"y\": %f}", data[0].Lng, data[0].Lat),
-		EndPoint:                  fmt.Sprintf("{\"x\": %f, \"y\": %f}", data[len(data)-1].Lng, data[len(data)-1].Lat),
+		StartPoint:                fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", validData[0].Lng, validData[0].Lat),
+		EndPoint:                  fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", validData[len(validData)-1].Lng, validData[len(validData)-1].Lat),
 	}
 
 	return s.repo.Upsert(ctx, report)
