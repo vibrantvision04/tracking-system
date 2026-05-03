@@ -22,11 +22,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
 	// 1. Broadcast to Redis Pub/Sub for WebSockets
 	// Channel name: gps:live:{imei}
 	payload := map[string]interface{}{
-		"type": "gps_update",
-		"imei": data.IMEI,
-		"lat":  data.Lat,
-		"lng":  data.Lng,
-		"speed": data.Speed,
+		"type":      "gps_update",
+		"imei":      data.IMEI,
+		"lat":       data.Lat,
+		"lng":       data.Lng,
+		"speed":     data.Speed,
+		"ignition":  data.Ignition,
 		"timestamp": data.Time,
 	}
 	jsonData, _ := json.Marshal(payload)

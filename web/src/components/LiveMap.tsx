@@ -39,7 +39,7 @@ export default function LiveMap({ vehicles }: Props) {
   }, []);
 
   // ─── Marker helper ───
-  const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, regNo: string, typeName: string) => {
+  const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string) => {
     if (!mapRef.current) return;
     const color = speed > 3 ? "#22c55e" : speed > 0 ? "#f59e0b" : "#ef4444";
     const icon = L.divIcon({
@@ -56,7 +56,10 @@ export default function LiveMap({ vehicles }: Props) {
       <div style="font-family:Inter,sans-serif;min-width:170px;font-size:12px;">
         <div style="font-weight:700;font-size:13px;margin-bottom:2px;">${regNo}</div>
         <div style="color:#888;margin-bottom:6px;">${typeName}</div>
-        <div>Speed: <b>${speed} km/h</b></div>
+        <div style="display:flex;gap:10px;margin-bottom:4px;">
+          <span>Speed: <b>${speed} km/h</b></span>
+          <span style="color:${ignition ? "#22c55e" : "#ef4444"}">Ignition: <b>${ignition ? "ON" : "OFF"}</b></span>
+        </div>
         <div style="color:#6366f1;font-size:11px;margin-top:4px;">IMEI: ${imei}</div>
       </div>
     `);
@@ -73,7 +76,7 @@ export default function LiveMap({ vehicles }: Props) {
       if (!imei) return;
       const pos = livePos[imei];
       if (pos) {
-        upsertMarker(imei, pos.lat, pos.lng, pos.speed, v.registration_no, v.vehicle_type?.name || "Vehicle");
+        upsertMarker(imei, pos.lat, pos.lng, pos.speed, !!pos.ignition, v.registration_no, v.vehicle_type?.name || "Vehicle");
         bounds.extend([pos.lat, pos.lng]);
         hasMarkers = true;
       }
@@ -123,7 +126,7 @@ export default function LiveMap({ vehicles }: Props) {
               }
               
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);
-              upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, v?.registration_no || msg.imei, v?.vehicle_type?.name || "");
+              upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "");
             }
             if (msg.type === "snapshot" && Array.isArray(msg.data)) {
               const map: Record<string, LivePosition> = {};
@@ -236,7 +239,14 @@ export default function LiveMap({ vehicles }: Props) {
               >
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.realStatus === "running" ? `0 0 6px ${dotColor}` : "none" }} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-slate-200 truncate">{v.registration_no}</div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-[13px] font-semibold text-slate-200 truncate">{v.registration_no}</div>
+                    {pos && (
+                      <div className={`text-[9px] px-1.5 py-0.5 rounded border ${pos.ignition ? "text-green-400 border-green-400/30" : "text-red-400 border-red-400/30"}`}>
+                        IGN {pos.ignition ? "ON" : "OFF"}
+                      </div>
+                    )}
+                  </div>
                   <div className="text-[11px] text-slate-500 truncate">{v.vehicle_type?.name || "—"}</div>
                   {pos && <div className="text-[10px] text-indigo-400 mt-0.5">{pos.speed} km/h</div>}
                 </div>
