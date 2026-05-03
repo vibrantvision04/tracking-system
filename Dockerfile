@@ -15,6 +15,7 @@ WORKDIR /root/
 COPY --from=builder /app/tracker-backend .
 
 # Expose HTTP port (Railway injects PORT automatically)
+ENV PORT=8080
 EXPOSE 8080
 
 CMD ["./tracker-backend"]
