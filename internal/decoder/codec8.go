@@ -95,14 +95,6 @@ func DecodeCodec8(imei string, data []byte) ([]AVLData, error) {
 			offset += 9
 		}
 
-		// Ignition is usually IO 239 in Teltonika
-		ignition := false
-		if val, ok := io[239]; ok {
-			if v, ok2 := val.(uint8); ok2 {
-				ignition = v == 1
-			}
-		}
-
 		// Odometer (IO 16)
 		var odometer int64 = 0
 		if val, ok := io[16]; ok {
@@ -127,7 +119,7 @@ func DecodeCodec8(imei string, data []byte) ([]AVLData, error) {
 			if v, ok2 := val.(int16); ok2 { zAxis = int(v) }
 		}
 
-		records = append(records, AVLData{
+		data := AVLData{
 			IMEI:           imei,
 			Time:           time.Unix(0, timestamp*int64(time.Millisecond)),
 			Priority:       priority,
@@ -137,13 +129,14 @@ func DecodeCodec8(imei string, data []byte) ([]AVLData, error) {
 			Heading:        heading,
 			Satellites:     satellites,
 			Speed:          speed,
-			Ignition:       ignition,
 			Odometer:       odometer,
 			XAxis:          xAxis,
 			YAxis:          yAxis,
 			ZAxis:          zAxis,
 			IO:             io,
-		})
+		}
+		data.Ignition = data.GetIgnitionFromIO()
+		records = append(records, data)
 		_ = eventID // Just to avoid unused var
 		_ = totalIO
 	}

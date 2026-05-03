@@ -103,15 +103,9 @@ func DecodeCodec8E(imei string, data []byte) ([]AVLData, error) {
 			offset += 4 + length
 		}
 
-		// Ignition is usually IO 239
-		ignition := false
-		if val, ok := io[239]; ok {
-			if v, ok2 := val.(uint8); ok2 {
-				ignition = v == 1
-			}
-		}
+		// Final data construction
 
-		records = append(records, AVLData{
+		data := AVLData{
 			IMEI:       imei,
 			Time:       time.Unix(0, timestamp*int64(time.Millisecond)),
 			Priority:   priority,
@@ -121,9 +115,10 @@ func DecodeCodec8E(imei string, data []byte) ([]AVLData, error) {
 			Heading:    heading,
 			Satellites: satellites,
 			Speed:      speed,
-			Ignition:   ignition,
 			IO:         io,
-		})
+		}
+		data.Ignition = data.GetIgnitionFromIO()
+		records = append(records, data)
 		_ = eventID
 		_ = totalIO
 	}

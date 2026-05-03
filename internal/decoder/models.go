@@ -22,6 +22,27 @@ type AVLData struct {
 	IO             map[uint16]interface{} `json:"io"`
 }
 
+// GetIgnitionFromIO extracts ignition status from common Teltonika IO IDs (239 or 1)
+func (a *AVLData) GetIgnitionFromIO() bool {
+	ids := []uint16{239, 1}
+	for _, id := range ids {
+		if val, ok := a.IO[id]; ok {
+			switch v := val.(type) {
+			case uint8:
+				return v == 1
+			case uint16:
+				return v == 1
+			case uint32:
+				return v == 1
+			case uint64:
+				return v == 1
+			}
+		}
+	}
+	// Fallback: If moving, ignition is effectively on
+	return a.Speed > 2
+}
+
 type Packet struct {
 	IMEI    string
 	Records []AVLData
