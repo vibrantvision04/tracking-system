@@ -31,6 +31,7 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 	// 3. API Routes (v1)
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/vehicles", h.GetVehicles)
+		r.Get("/vehicles/imei/{imei}", h.GetVehicleByIMEI)
 		r.Post("/vehicles", h.CreateVehicle)
 		r.Delete("/vehicles/{id}", h.DeleteVehicle)
 		r.Get("/vehicle-types", h.GetVehicleTypes)

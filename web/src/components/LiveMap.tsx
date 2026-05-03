@@ -62,15 +62,28 @@ export default function LiveMap({ vehicles }: Props) {
     `);
   }, []);
 
-  // ─── Place initial markers ───
+  // ─── Place initial markers & auto-fit bounds ───
   useEffect(() => {
+    if (!mapRef.current) return;
+    const bounds = L.latLngBounds([]);
+    let hasMarkers = false;
+
     vehicles.forEach((v) => {
       const imei = v.gps_device?.imei;
       if (!imei) return;
       const pos = livePos[imei];
-      if (pos) upsertMarker(imei, pos.lat, pos.lng, pos.speed, v.registration_no, v.vehicle_type?.name || "Vehicle");
+      if (pos) {
+        upsertMarker(imei, pos.lat, pos.lng, pos.speed, v.registration_no, v.vehicle_type?.name || "Vehicle");
+        bounds.extend([pos.lat, pos.lng]);
+        hasMarkers = true;
+      }
     });
-  }, [vehicles, livePos, upsertMarker]);
+
+    // Auto-fit the map to show all vehicles when positions first load
+    if (hasMarkers && Object.keys(livePos).length > 0 && !selected) {
+      mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
+    }
+  }, [vehicles, livePos, upsertMarker, selected]);
 
   const vehiclesRef = useRef(vehicles);
   useEffect(() => { vehiclesRef.current = vehicles; }, [vehicles]);
@@ -96,7 +109,19 @@ export default function LiveMap({ vehicles }: Props) {
           try {
             const msg = JSON.parse(e.data);
             if (msg.type === "gps_update") {
-              setLivePos((prev) => ({ ...prev, [msg.imei]: msg }));
+              const imei = msg.imei;
+              setLivePos((prev) => ({ ...prev, [imei]: msg }));
+              
+              // If this is a new vehicle we haven't seen in our list, fetch its metadata
+              const knownVehicles = vehiclesRef.current;
+              if (!knownVehicles.find(v => v.gps_device?.imei === imei)) {
+                api<{ data: Vehicle }>(`/api/vehicles/imei/${imei}`).then(res => {
+                  if (res.data) {
+                    useStore.getState().addOrUpdateVehicle(res.data);
+                  }
+                }).catch(() => {});
+              }
+              
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);
               upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, v?.registration_no || msg.imei, v?.vehicle_type?.name || "");
             }
@@ -125,13 +150,11 @@ export default function LiveMap({ vehicles }: Props) {
       }
     };
 
-    const timer = setTimeout(() => {
-      connect();
-    }, 100);
+    // Connect instantly without delay
+    connect();
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
       if (ws) {
         ws.onclose = null;
         ws.onerror = null;

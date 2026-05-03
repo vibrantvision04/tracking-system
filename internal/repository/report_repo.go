@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -11,6 +12,8 @@ type MovementReport struct {
 	ID                        int64     `json:"id"`
 	IMEI                      string    `json:"imei"`
 	VehicleID                 int       `json:"vehicle_id"`
+	RegistrationNo            string    `json:"registration_no"`
+	VehicleType               string    `json:"vehicle_type"`
 	ReportDate                time.Time `json:"report_date"`
 	AverageSpeed              float64   `json:"average_speed"`
 	TotalDistance             float64   `json:"total_distance"`
@@ -95,15 +98,28 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 }
 
 func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time.Time) ([]MovementReport, error) {
-	query := `SELECT id, imei, vehicle_id, report_date, average_speed, total_distance, start_point, end_point, 
-			  start_time, end_time, alert, total_active_duration, total_idle_duration, 
-			  total_stoppage_duration, in_parking_duration, actual_ignition_on_duration, 
-			  total_ignition_on_duration, total_running_duration, total_running_time, 
-			  day_running_time, night_running_time, fuel_in_ltr, fuel_consumption, 
-			  speed_limit, max_speed, min_speed, overspeed_distance, overspeed_count, overspeed_time
-			  FROM movement_reports WHERE vehicle_id = $1 AND report_date BETWEEN $2 AND $3 ORDER BY report_date DESC`
+	var query string
+	var rows pgx.Rows
+	var err error
+
+	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, v.registration_no, vt.vehicle_type_name, r.report_date, r.average_speed, r.total_distance, r.start_point, r.end_point, 
+			  r.start_time, r.end_time, r.alert, r.total_active_duration, r.total_idle_duration, 
+			  r.total_stoppage_duration, r.in_parking_duration, r.actual_ignition_on_duration, 
+			  r.total_ignition_on_duration, r.total_running_duration, r.total_running_time, 
+			  r.day_running_time, r.night_running_time, r.fuel_in_ltr, r.fuel_consumption, 
+			  r.speed_limit, r.max_speed, r.min_speed, r.overspeed_distance, r.overspeed_count, r.overspeed_time
+			  FROM movement_reports r
+			  JOIN vehicles v ON r.vehicle_id = v.id
+			  LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id `
+
+	if vehicleID > 0 {
+		query = baseQuery + `WHERE r.vehicle_id = $1 AND r.report_date BETWEEN $2 AND $3 ORDER BY r.report_date DESC`
+		rows, err = r.pool.Query(ctx, query, vehicleID, from, to)
+	} else {
+		query = baseQuery + `WHERE r.report_date BETWEEN $1 AND $2 ORDER BY r.report_date DESC`
+		rows, err = r.pool.Query(ctx, query, from, to)
+	}
 	
-	rows, err := r.pool.Query(ctx, query, vehicleID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +129,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 	for rows.Next() {
 		var rep MovementReport
 		err := rows.Scan(
-			&rep.ID, &rep.IMEI, &rep.VehicleID, &rep.ReportDate, &rep.AverageSpeed, &rep.TotalDistance, &rep.StartPoint, &rep.EndPoint,
+			&rep.ID, &rep.IMEI, &rep.VehicleID, &rep.RegistrationNo, &rep.VehicleType, &rep.ReportDate, &rep.AverageSpeed, &rep.TotalDistance, &rep.StartPoint, &rep.EndPoint,
 			&rep.StartTime, &rep.EndTime, &rep.Alert, &rep.TotalActiveDuration, &rep.TotalIdleDuration,
 			&rep.TotalStoppageDuration, &rep.InParkingDuration, &rep.ActualIgnitionOnDuration,
 			&rep.TotalIgnitionOnDuration, &rep.TotalRunningDuration, &rep.TotalRunningTime,

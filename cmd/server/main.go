@@ -58,7 +58,7 @@ func main() {
 	locCache := cache.NewLocationCache(rdb)
 
 	// 6. Initialize Services
-	rService := service.NewReportService(rRepo, gpsRepo)
+	rService := service.NewReportService(rRepo, gpsRepo, vRepo)
 
 	// 7. Initialize Ingestion Pipeline
 	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond)

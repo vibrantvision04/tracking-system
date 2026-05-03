@@ -39,6 +39,16 @@ func (h *Handler) GetVehicles(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": vehicles})
 }
 
+func (h *Handler) GetVehicleByIMEI(w http.ResponseWriter, r *http.Request) {
+	imei := chi.URLParam(r, "imei")
+	vehicle, err := h.vRepo.GetByIMEI(r.Context(), imei)
+	if err != nil {
+		sendJSON(w, http.StatusNotFound, map[string]string{"error": "Vehicle not found"})
+		return
+	}
+	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": vehicle})
+}
+
 func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.URL.Query().Get("date")
 	date, err := time.Parse("2006-01-02", dateStr)

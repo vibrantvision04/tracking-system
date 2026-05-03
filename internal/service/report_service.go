@@ -12,12 +12,14 @@ import (
 type ReportService struct {
 	repo  *repository.ReportRepository
 	gRepo *repository.GPSRepository
+	vRepo *repository.VehicleRepository
 }
 
-func NewReportService(repo *repository.ReportRepository, gRepo *repository.GPSRepository) *ReportService {
+func NewReportService(repo *repository.ReportRepository, gRepo *repository.GPSRepository, vRepo *repository.VehicleRepository) *ReportService {
 	return &ReportService{
 		repo:  repo,
 		gRepo: gRepo,
+		vRepo: vRepo,
 	}
 }
 
@@ -65,17 +67,21 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 			dist := haversine(lastPoint.Lat, lastPoint.Lng, p.Lat, p.Lng)
 			totalDistance += dist
 			
+			// Ensure duration is reasonable (e.g. less than 1 hour between points to avoid huge jumps)
 			duration := p.Time.Sub(lastPoint.Time).Seconds()
-			
-			if p.Ignition {
-				ignitionOnSec += int(duration)
-				if p.Speed > 5 {
-					activeSec += int(duration)
+			if duration > 0 && duration < 3600 {
+				isIgnitionOn := p.Ignition || p.Speed > 5 // Fallback to speed if ignition wire is disconnected
+				
+				if isIgnitionOn {
+					ignitionOnSec += int(duration)
+					if p.Speed > 5 {
+						activeSec += int(duration)
+					} else {
+						idleSec += int(duration)
+					}
 				} else {
-					idleSec += int(duration)
+					stoppageSec += int(duration)
 				}
-			} else {
-				stoppageSec += int(duration)
 			}
 		}
 		
@@ -110,6 +116,20 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 }
 
 func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time) ([]repository.MovementReport, error) {
+	// Dynamically generate reports for the requested days to ensure real-time accuracy
+	vehicles, err := s.vRepo.GetAll(ctx)
+	if err == nil {
+		for _, v := range vehicles {
+			if v.GpsDevice != nil {
+				// Iterate through each day in the range
+				for d := from; !d.After(to); d = d.Add(24 * time.Hour) {
+					// We ignore errors here since some days/vehicles might legitimately have no data
+					s.GenerateDailyReport(ctx, v.ID, d)
+				}
+			}
+		}
+	}
+
 	return s.repo.Get(ctx, vehicleID, from, to)
 }
 

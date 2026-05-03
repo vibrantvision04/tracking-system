@@ -7,7 +7,9 @@ interface AppState {
   devices: GpsDevice[];
   types: VehicleType[];
   loaded: boolean;
+  lastLoaded: number;
   loadAll: () => Promise<void>;
+  addOrUpdateVehicle: (vehicle: Vehicle) => void;
   updateVehicleStatus: (id: number, status: string) => void;
   updateDevice: (device: GpsDevice) => void;
 }
@@ -17,7 +19,14 @@ export const useStore = create<AppState>((set, get) => ({
   devices: [],
   types: [],
   loaded: false,
+  lastLoaded: 0,
   loadAll: async () => {
+    const now = Date.now();
+    const { lastLoaded, loaded } = get();
+    
+    // If loaded in the last 30 seconds, don't refetch everything
+    if (loaded && now - lastLoaded < 30000) return;
+
     try {
       const [vRes, dRes, tRes] = await Promise.all([
         api<{ data: Vehicle[] }>("/api/vehicles"),
@@ -28,11 +37,21 @@ export const useStore = create<AppState>((set, get) => ({
         vehicles: vRes.data || [], 
         devices: dRes.data || [], 
         types: tRes.data || [], 
-        loaded: true 
+        loaded: true,
+        lastLoaded: now
       });
     } catch (err) {
       console.error("Failed to load initial data", err);
     }
+  },
+  addOrUpdateVehicle: (vehicle: Vehicle) => {
+    set((state) => {
+      const exists = state.vehicles.find(v => v.id === vehicle.id);
+      if (exists) {
+        return { vehicles: state.vehicles.map(v => v.id === vehicle.id ? vehicle : v) };
+      }
+      return { vehicles: [...state.vehicles, vehicle] };
+    });
   },
   updateVehicleStatus: (id, status) => {
     set((state) => ({
