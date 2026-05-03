@@ -84,6 +84,11 @@ func (p *Pipeline) processMessage(ctx context.Context, msg redis.XMessage) {
 		return
 	}
 
+	// 0. Ignore invalid GPS data (lat/lng = 0) - means no GPS signal fix
+	if data.Lat == 0 && data.Lng == 0 {
+		return
+	}
+
 	// 1. Add to batch writer for DB insert
 	p.batchWriter.Add(data)
 
