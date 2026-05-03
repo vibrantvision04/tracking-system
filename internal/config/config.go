@@ -31,9 +31,18 @@ func LoadConfig() *Config {
 		log.Warn().Msg("No .env file found, using system environment variables")
 	}
 
+	httpPort := getEnv("PORT", getEnv("HTTP_PORT", "8080"))
+	gpsTcpPort := getEnv("GPS_TCP_PORT", "5027")
+	
+	// Railway sometimes forcefully overrides PORT to match the TCP proxy port
+	// If it does, we ignore it and force 8080 so the web server doesn't crash
+	if httpPort == gpsTcpPort {
+		httpPort = getEnv("HTTP_PORT", "8080")
+	}
+
 	return &Config{
-		GPSTCPPort:        getEnv("GPS_TCP_PORT", "5027"),
-		HTTPPort:          getEnv("PORT", getEnv("HTTP_PORT", "8080")), // Railway injects PORT
+		GPSTCPPort:        gpsTcpPort,
+		HTTPPort:          httpPort,
 		WSPort:            getEnv("WS_PORT", "8081"),
 		DBDSN:             getEnv("DB_DSN", "postgres://gps:password@localhost:5432/gpsdb"),
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
