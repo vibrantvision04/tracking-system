@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"sync"
 
@@ -53,6 +54,30 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Register(client)
 
 	log.Info().Str("remote", conn.RemoteAddr().String()).Msg("WebSocket client connected")
+
+	// Send initial snapshot of all known locations
+	go func() {
+		ctx := context.Background()
+		keys, err := h.rdb.Keys(ctx, "gps:latest:*").Result()
+		if err == nil && len(keys) > 0 {
+			vals, err := h.rdb.MGet(ctx, keys...).Result()
+			if err == nil {
+				var snapshot []json.RawMessage
+				for _, val := range vals {
+					if strVal, ok := val.(string); ok {
+						snapshot = append(snapshot, json.RawMessage(strVal))
+					}
+				}
+				
+				payload, _ := json.Marshal(map[string]interface{}{
+					"type": "snapshot",
+					"data": snapshot,
+				})
+				
+				client.send <- payload
+			}
+		}
+	}()
 
 	go client.writePump()
 	go client.readPump()

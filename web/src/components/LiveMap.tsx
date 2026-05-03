@@ -141,17 +141,30 @@ export default function LiveMap({ vehicles }: Props) {
     };
   }, [upsertMarker]);
 
-  // ─── Filter ───
-  const filtered = vehicles.filter((v) =>
+  // ─── Filter & Dynamic Status ───
+  const getStatus = (imei: string) => {
+    const pos = livePos[imei];
+    if (!pos) return "offline";
+    if (pos.speed > 5) return "running";
+    if (pos.speed > 0) return "idle";
+    return "stopped";
+  };
+
+  const processedVehicles = vehicles.map(v => ({
+    ...v,
+    realStatus: getStatus(v.gps_device?.imei || "")
+  }));
+
+  const filtered = processedVehicles.filter((v) =>
     v.registration_no.toLowerCase().includes(search.toLowerCase()) ||
     (v.vehicle_type?.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const counts = {
-    running: vehicles.filter((v) => v.status === "running").length,
-    idle: vehicles.filter((v) => v.status === "idle").length,
-    stopped: vehicles.filter((v) => v.status === "stopped").length,
-    offline: vehicles.filter((v) => v.status === "offline").length,
+    running: processedVehicles.filter((v) => v.realStatus === "running").length,
+    idle: processedVehicles.filter((v) => v.realStatus === "idle").length,
+    stopped: processedVehicles.filter((v) => v.realStatus === "stopped").length,
+    offline: processedVehicles.filter((v) => v.realStatus === "offline").length,
   };
 
   return (
@@ -184,7 +197,7 @@ export default function LiveMap({ vehicles }: Props) {
             const imei = v.gps_device?.imei || "";
             const pos = livePos[imei];
             const sel = selected === imei;
-            const dotColor = v.status === "running" ? "#22c55e" : v.status === "idle" ? "#f59e0b" : v.status === "stopped" ? "#ef4444" : "#475569";
+            const dotColor = v.realStatus === "running" ? "#22c55e" : v.realStatus === "idle" ? "#f59e0b" : v.realStatus === "stopped" ? "#ef4444" : "#475569";
             return (
               <div
                 key={v.id}
@@ -198,7 +211,7 @@ export default function LiveMap({ vehicles }: Props) {
                 className={`flex items-center gap-3 px-4 py-3 border-b border-white/[.04] cursor-pointer transition
                   ${sel ? "bg-indigo-500/[.1] border-l-[3px] border-l-indigo-500" : "hover:bg-white/[.02]"}`}
               >
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.status === "running" ? `0 0 6px ${dotColor}` : "none" }} />
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.realStatus === "running" ? `0 0 6px ${dotColor}` : "none" }} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-semibold text-slate-200 truncate">{v.registration_no}</div>
                   <div className="text-[11px] text-slate-500 truncate">{v.vehicle_type?.name || "—"}</div>

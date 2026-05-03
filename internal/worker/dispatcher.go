@@ -21,7 +21,15 @@ func NewDispatcher(rdb *redis.Client) *Dispatcher {
 func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
 	// 1. Broadcast to Redis Pub/Sub for WebSockets
 	// Channel name: gps:live:{imei}
-	jsonData, _ := json.Marshal(data)
+	payload := map[string]interface{}{
+		"type": "gps_update",
+		"imei": data.IMEI,
+		"lat":  data.Lat,
+		"lng":  data.Lng,
+		"speed": data.Speed,
+		"timestamp": data.Time,
+	}
+	jsonData, _ := json.Marshal(payload)
 	err := d.rdb.Publish(ctx, "gps:live:"+data.IMEI, jsonData).Err()
 	if err != nil {
 		log.Error().Err(err).Str("imei", data.IMEI).Msg("Failed to publish to Redis PubSub")
