@@ -97,7 +97,7 @@ func main() {
 	go func() {
 		log.Info().Str("port", cfg.HTTPPort).Msg("HTTP API & WebSocket server listening")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal().Err(err).Msg("HTTP API server failed")
+			log.Fatal().Err(err).Msgf("HTTP API server failed to bind to port %s. Error: %v", cfg.HTTPPort, err)
 		}
 	}()
 
