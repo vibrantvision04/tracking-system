@@ -17,7 +17,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	// Set initial read deadline for handshake
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(300 * time.Second))
 
 	// 1. Read IMEI (first 15-17 bytes usually)
 	// Teltonika protocol: 2 bytes length, then IMEI string
@@ -111,6 +111,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 
 		log.Info().Str("imei", imei).Int("records", len(records)).Msg("Successfully decoded AVL records")
+		conn.SetReadDeadline(time.Now().Add(300 * time.Second))
 
 		// 4. Push to Redis Stream
 		for _, rec := range records {
