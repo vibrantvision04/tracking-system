@@ -52,6 +52,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 			break
 		}
 
+		// VALIDATION: Teltonika packets MUST start with 4 zeros
+		if binary.BigEndian.Uint32(preamble) != 0 {
+			log.Error().Hex("preamble", preamble).Str("imei", imei).Msg("Invalid preamble, out of sync. Closing connection.")
+			break
+		}
+
 		// Read data length (4 bytes)
 		lenBuf := make([]byte, 4)
 		_, err = io.ReadFull(conn, lenBuf)
@@ -63,7 +69,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		// SAFETY CHECK: Limit max packet size to 128KB to prevent OOM
 		if dataLen > 128*1024 {
-			log.Error().Uint32("len", dataLen).Str("imei", imei).Msg("Packet too large, closing connection")
+			log.Error().Uint32("len", dataLen).Str("imei", imei).Msg("Packet too large, closing connection to prevent OOM")
 			break
 		}
 
