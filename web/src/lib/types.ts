@@ -41,11 +41,11 @@ export interface LivePosition {
 }
 
 export interface GpsDataPoint {
-  timestamp: string;
-  latitude: number;
-  longitude: number;
+  time: string;
+  lat: number;
+  lng: number;
   speed: number;
-  angle: number;
+  heading: number;
   ignition: boolean | null;
   satellites: number;
 }

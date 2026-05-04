@@ -48,6 +48,8 @@ export default function LiveMap({ vehicles }: Props) {
       html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);box-shadow:0 0 10px ${color}"></div>`,
       iconSize: [14, 14], iconAnchor: [7, 7],
     });
+    if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) return;
+
     if (markers.current[imei]) {
       markers.current[imei].setLatLng([lat, lng]).setIcon(icon);
     } else {

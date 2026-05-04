@@ -37,7 +37,8 @@ export default function PlaybackPage() {
     try {
       const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${imei}?from=${from}&to=${to}`);
       const data = r.data || [];
-      setPoints(data);
+      const validPoints = data.filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number' && p.lat !== 0);
+      setPoints(validPoints);
       setIdx(0);
       setPlaying(false);
 
@@ -46,11 +47,16 @@ export default function PlaybackPage() {
       if (!map) return;
       if (lineRef.current) map.removeLayer(lineRef.current);
       if (mkRef.current) map.removeLayer(mkRef.current);
-      if (data.length === 0) return;
+      if (validPoints.length === 0) return;
 
-      const ll = data.map((p) => [p.latitude, p.longitude] as [number, number]);
+      const ll = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
       lineRef.current = L.polyline(ll, { color: "#6366f1", weight: 3, opacity: .7 }).addTo(map);
-      map.fitBounds(lineRef.current.getBounds(), { padding: [40, 40] });
+      
+      const bounds = lineRef.current.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
+      
       mkRef.current = L.circleMarker(ll[0], { radius: 8, fillColor: "#22c55e", fillOpacity: 1, color: "#fff", weight: 2 }).addTo(map);
     } catch (err) {
       console.error("Playback load error:", err);
@@ -65,7 +71,7 @@ export default function PlaybackPage() {
         if (prev >= points.length - 1) { setPlaying(false); return prev; }
         const next = prev + 1;
         const p = points[next];
-        if (mkRef.current) mkRef.current.setLatLng([p.latitude, p.longitude]);
+        if (mkRef.current) mkRef.current.setLatLng([p.lat, p.lng]);
         return next;
       });
     }, 150);
@@ -74,7 +80,7 @@ export default function PlaybackPage() {
 
   // Scrub
   useEffect(() => {
-    if (points[idx] && mkRef.current) mkRef.current.setLatLng([points[idx].latitude, points[idx].longitude]);
+    if (points[idx] && mkRef.current) mkRef.current.setLatLng([points[idx].lat, points[idx].lng]);
   }, [idx, points]);
 
   const p = points[idx];
@@ -106,7 +112,7 @@ export default function PlaybackPage() {
           {points.length > 0 && (
             <div className="border-t border-white/[.05] pt-3 space-y-2">
               <div className="text-xs text-slate-400">
-                {p ? <><b>{new Date(p.timestamp).toLocaleTimeString()}</b> — {p.speed} km/h — Pt {idx + 1}/{points.length}</> : ""}
+                {p ? <><b>{new Date(p.time).toLocaleTimeString()}</b> — {p.speed} km/h — Pt {idx + 1}/{points.length}</> : ""}
               </div>
               <input type="range" min={0} max={points.length - 1} value={idx}
                 onChange={(e) => { setPlaying(false); setIdx(Number(e.target.value)); }}
