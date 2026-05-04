@@ -1,0 +1,58 @@
+# ========================
+# Environment / Secrets
+# ========================
+.env
+.env.*
+!.env.example
+web/.env
+web/.env.*
+!web/.env.example
+
+# ========================
+# Go Backend
+# ========================
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/gps-tracking-system
+/server
+/bin/
+
+# Go build cache
+/vendor/
+*.test
+*.out
+
+# Air (live reload)
+tmp/
+
+# ========================
+# Next.js Frontend
+# ========================
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/.vercel/
+
+# Next.js cache
+web/.cache/
+
+# ========================
+# OS & Editor
+# ========================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/
