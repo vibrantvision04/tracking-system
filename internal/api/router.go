@@ -15,7 +15,6 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 	// 1. Middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Compress(5)) // Enable gzip compression for faster API response transfer
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"}, // Change to specific URLs in production
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
