@@ -36,24 +36,54 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// 2. Send acceptance (01)
 	conn.Write([]byte{0x01})
 
-	// 3. Receive AVL packets
-	buf := make([]byte, 4096)
+	// 3. Receive AVL packets (Infinite Loop)
 	for {
-		n, err := conn.Read(buf)
+		// Read preamble (4 bytes of zeros)
+		preamble := make([]byte, 4)
+		_, err := io.ReadFull(conn, preamble)
 		if err != nil {
 			if err != io.EOF {
-				log.Error().Err(err).Str("imei", imei).Msg("Connection read error")
+				log.Error().Err(err).Str("imei", imei).Msg("Failed to read packet preamble")
 			}
 			break
 		}
 
-		packet := buf[:n]
-		if len(packet) < 12 {
-			continue
+		// Read data length (4 bytes)
+		lenBuf := make([]byte, 4)
+		_, err = io.ReadFull(conn, lenBuf)
+		if err != nil {
+			log.Error().Err(err).Str("imei", imei).Msg("Failed to read packet length")
+			break
+		}
+		dataLen := binary.BigEndian.Uint32(lenBuf)
+
+		// Read data (codec + records)
+		data := make([]byte, dataLen)
+		_, err = io.ReadFull(conn, data)
+		if err != nil {
+			log.Error().Err(err).Str("imei", imei).Msg("Failed to read packet data")
+			break
 		}
 
+		// Read CRC (4 bytes)
+		crcBuf := make([]byte, 4)
+		_, err = io.ReadFull(conn, crcBuf)
+		if err != nil {
+			log.Error().Err(err).Str("imei", imei).Msg("Failed to read packet CRC")
+			break
+		}
+
+		// Construct full packet for decoder
+		packet := make([]byte, 0, 8+dataLen+4)
+		packet = append(packet, preamble...)
+		packet = append(packet, lenBuf...)
+		packet = append(packet, data...)
+		packet = append(packet, crcBuf...)
+
+		log.Debug().Str("imei", imei).Uint32("dataLen", dataLen).Msg("Received full AVL packet")
+
 		// Decode based on codec
-		codecID := packet[8]
+		codecID := data[0] // Codec ID is the first byte of data
 		var records []decoder.AVLData
 		var decodeErr error
 
@@ -70,6 +100,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 			log.Error().Err(decodeErr).Str("imei", imei).Msg("Failed to decode packet")
 			continue
 		}
+
+		log.Info().Str("imei", imei).Int("records", len(records)).Msg("Successfully decoded AVL records")
 
 		// 4. Push to Redis Stream
 		for _, rec := range records {

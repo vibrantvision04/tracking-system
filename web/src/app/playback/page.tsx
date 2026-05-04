@@ -18,7 +18,7 @@ export default function PlaybackPage() {
   const intervalRef = useRef<any>(null);
 
   useEffect(() => {
-    api<{ data: Vehicle[] }>("/api/vehicles").then((r) => setVehicles(r.data || [])).catch(() => {});
+    api<{ data: Vehicle[] }>("/api/vehicles").then((r) => setVehicles(r.data || [])).catch(() => { });
   }, []);
 
   // Init map

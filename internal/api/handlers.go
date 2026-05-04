@@ -13,12 +13,14 @@ import (
 
 type Handler struct {
 	vRepo    *repository.VehicleRepository
+	gpsRepo  *repository.GPSRepository
 	rService *service.ReportService
 }
 
-func NewHandler(vRepo *repository.VehicleRepository, rService *service.ReportService) *Handler {
+func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService) *Handler {
 	return &Handler{
 		vRepo:    vRepo,
+		gpsRepo:  gpsRepo,
 		rService: rService,
 	}
 }
@@ -126,11 +128,35 @@ func (h *Handler) GetGpsData(w http.ResponseWriter, r *http.Request) {
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	
-	from, _ := time.Parse(time.RFC3339, fromStr)
-	to, _ := time.Parse(time.RFC3339, toStr)
+	from, err := time.Parse(time.RFC3339, fromStr)
+	if err != nil {
+		from = time.Now().Add(-24 * time.Hour)
+	}
+	to, err := time.Parse(time.RFC3339, toStr)
+	if err != nil {
+		to = time.Now()
+	}
 
-	// Fetch historical points from gps_repo
-	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": []interface{}{}, "imei": imei, "from": from, "to": to})
+	// 1. Get vehicle ID from IMEI
+	vehicle, err := h.vRepo.GetByIMEI(r.Context(), imei)
+	if err != nil {
+		sendJSON(w, http.StatusNotFound, map[string]string{"error": "Vehicle/IMEI mapping not found"})
+		return
+	}
+
+	// 2. Fetch historical points from gps_repo using vehicle ID
+	data, err := h.gpsRepo.GetByVehicle(r.Context(), vehicle.ID, from, to)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch GPS data: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true, 
+		"data":    data, 
+		"imei":    imei, 
+		"count":   len(data),
+	})
 }
 
 func (h *Handler) GetVehicleTypes(w http.ResponseWriter, r *http.Request) {

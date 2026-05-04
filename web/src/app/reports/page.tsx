@@ -9,7 +9,7 @@ export default function ReportsPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const load = (d: string) => {
-    api<{ data: MovementReport[] }>(`/api/reports?date=${d}`).then((r) => setReports(r.data || [])).catch(() => {});
+    api<{ data: MovementReport[] }>(`/api/reports?date=${d}`).then((r) => setReports(r.data || [])).catch(() => { });
   };
   useEffect(() => load(date), [date]);
 

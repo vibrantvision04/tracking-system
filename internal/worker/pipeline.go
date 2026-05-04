@@ -13,26 +13,26 @@ import (
 )
 
 type Pipeline struct {
-	cfg        *config.Config
-	rdb        *redis.Client
+	cfg         *config.Config
+	rdb         *redis.Client
 	batchWriter *BatchWriter
-	locCache   *cache.LocationCache
-	dispatcher *Dispatcher
+	locCache    *cache.LocationCache
+	dispatcher  *Dispatcher
 }
 
 func NewPipeline(cfg *config.Config, rdb *redis.Client, bw *BatchWriter, lc *cache.LocationCache, d *Dispatcher) *Pipeline {
 	return &Pipeline{
-		cfg:        cfg,
-		rdb:        rdb,
+		cfg:         cfg,
+		rdb:         rdb,
 		batchWriter: bw,
-		locCache:   lc,
-		dispatcher: d,
+		locCache:    lc,
+		dispatcher:  d,
 	}
 }
 
 func (p *Pipeline) Start() {
 	log.Info().Msg("Starting GPS processing pipeline")
-	
+
 	// Create consumer group if not exists
 	ctx := context.Background()
 	p.rdb.XGroupCreateMkStream(ctx, "gps:stream", "workers", "0").Err()
