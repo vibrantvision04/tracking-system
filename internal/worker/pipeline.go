@@ -80,25 +80,33 @@ func (p *Pipeline) processMessage(ctx context.Context, msg redis.XMessage) {
 		return
 	}
 
-	var data decoder.AVLData
-	if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
-		log.Error().Err(err).Msg("Failed to unmarshal AVLData from stream")
-		return
+	// Try unmarshaling as a slice first (for batch ingestion)
+	var records []decoder.AVLData
+	if err := json.Unmarshal([]byte(dataStr), &records); err != nil {
+		// If fails, try as a single record (legacy/single ingestion)
+		var single decoder.AVLData
+		if err := json.Unmarshal([]byte(dataStr), &single); err != nil {
+			log.Error().Err(err).Msg("Failed to unmarshal AVLData from stream")
+			return
+		}
+		records = []decoder.AVLData{single}
 	}
 
-	// 0. Ignore invalid GPS data (lat/lng = 0) - means no GPS signal fix
-	if data.Lat == 0 && data.Lng == 0 {
-		return
+	for _, data := range records {
+		// 0. Ignore invalid GPS data (lat/lng = 0)
+		if data.Lat == 0 && data.Lng == 0 {
+			continue
+		}
+
+		// 1. Add to batch writer for DB insert
+		p.batchWriter.Add(data)
+
+		// 2. Update latest location cache
+		if err := p.locCache.SetLatest(ctx, data); err != nil {
+			log.Error().Err(err).Str("imei", data.IMEI).Msg("Failed to update location cache")
+		}
+
+		// 3. Dispatch to other services (WS, Geofence, etc.)
+		p.dispatcher.Dispatch(ctx, data)
 	}
-
-	// 1. Add to batch writer for DB insert
-	p.batchWriter.Add(data)
-
-	// 2. Update latest location cache
-	if err := p.locCache.SetLatest(ctx, data); err != nil {
-		log.Error().Err(err).Str("imei", data.IMEI).Msg("Failed to update location cache")
-	}
-
-	// 3. Dispatch to other services (WS, Geofence, etc.)
-	p.dispatcher.Dispatch(ctx, data)
 }

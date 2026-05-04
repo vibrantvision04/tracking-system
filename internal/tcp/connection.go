@@ -113,10 +113,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 		log.Info().Str("imei", imei).Int("records", len(records)).Msg("Successfully decoded AVL records")
 		conn.SetReadDeadline(time.Now().Add(300 * time.Second))
 
-		// 4. Push to Redis Stream
-		for _, rec := range records {
-			s.pushToStream(rec)
-		}
+		// 4. Push to Redis Stream (Batch)
+		s.pushBatchToStream(records)
 
 		// 5. Send ACK (4-byte record count)
 		ack := make([]byte, 4)
@@ -125,17 +123,21 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server) pushToStream(data decoder.AVLData) {
+func (s *Server) pushBatchToStream(data []decoder.AVLData) {
+	if len(data) == 0 {
+		return
+	}
+
 	ctx := context.Background()
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal AVLData")
+		log.Error().Err(err).Msg("Failed to marshal AVLData batch")
 		return
 	}
 
 	err = s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: "gps:stream",
-		MaxLen: 100000,
+		MaxLen: 5000,
 		Approx: true,
 		Values: map[string]interface{}{
 			"data": jsonData,
@@ -143,6 +145,6 @@ func (s *Server) pushToStream(data decoder.AVLData) {
 	}).Err()
 
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to add to Redis Stream")
+		log.Error().Err(err).Msg("Failed to add batch to Redis Stream")
 	}
 }

@@ -18,6 +18,9 @@ func DecodeCodec8E(imei string, data []byte) ([]AVLData, error) {
 	}
 
 	recordCount := int(data[9])
+	if recordCount > 255 {
+		return nil, fmt.Errorf("too many records in one packet: %d", recordCount)
+	}
 	records := make([]AVLData, 0, recordCount)
 	offset := 10
 
