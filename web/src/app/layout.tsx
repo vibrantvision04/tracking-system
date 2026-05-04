@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Sidebar />
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
             <MobileHeader />
-            <main className="flex-1 overflow-y-auto bg-[var(--bg-dark)]">{children}</main>
+            <main className="flex-1 flex flex-col min-h-0 bg-[var(--bg-dark)]">{children}</main>
           </div>
         </div>
         <ToastContainer
