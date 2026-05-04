@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"gps-tracking-system/internal/cache"
 	"gps-tracking-system/internal/config"
 	"gps-tracking-system/internal/decoder"
@@ -44,7 +45,7 @@ func (p *Pipeline) Start() {
 
 func (p *Pipeline) worker(id int) {
 	ctx := context.Background()
-	consumerName := "worker-" + string(rune(id))
+	consumerName := fmt.Sprintf("worker-%d", id)
 
 	for {
 		streams, err := p.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
