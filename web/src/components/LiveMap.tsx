@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Vehicle, LivePosition } from "@/lib/types";
-import { wsUrl } from "@/lib/api";
+import { api, wsUrl } from "@/lib/api";
+import { useStore } from "@/lib/store";
 
 interface Props { vehicles: Vehicle[] }
 

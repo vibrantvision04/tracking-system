@@ -10,7 +10,7 @@ interface AppState {
   lastLoaded: number;
   loadAll: () => Promise<void>;
   addOrUpdateVehicle: (vehicle: Vehicle) => void;
-  updateVehicleStatus: (id: number, status: string) => void;
+  updateVehicleStatus: (id: number, status: Vehicle["status"]) => void;
   updateDevice: (device: GpsDevice) => void;
 }
 

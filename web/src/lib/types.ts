@@ -9,6 +9,7 @@ export interface GpsDevice {
   device_type: string;
   is_active: boolean;
   created_at: string;
+  vehicle?: Vehicle | null;
 }
 
 export interface VehicleType {
