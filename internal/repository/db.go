@@ -14,6 +14,9 @@ func InitDB(cfg *config.Config) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 
+	dbConfig.MaxConns = 5
+	dbConfig.MinConns = 1
+
 	pool, err := pgxpool.NewWithConfig(context.Background(), dbConfig)
 	if err != nil {
 		return nil, err

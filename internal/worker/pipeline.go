@@ -60,6 +60,7 @@ func (p *Pipeline) worker(id int) {
 			if err != redis.Nil {
 				log.Error().Err(err).Msg("Error reading from Redis Stream")
 			}
+			time.Sleep(100 * time.Millisecond) // Safety sleep to prevent tight-looping
 			continue
 		}
 

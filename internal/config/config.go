@@ -50,7 +50,7 @@ func LoadConfig() *Config {
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:     getEnv("REDIS_PASSWORD", ""),
 		JWTSecret:         getEnv("JWT_SECRET", "your-super-secret-key-here"),
-		WorkerPoolSize:    getEnvInt("WORKER_POOL_SIZE", 5),
+		WorkerPoolSize:    getEnvInt("WORKER_POOL_SIZE", 2),
 		BatchSize:         getEnvInt("BATCH_SIZE", 100),
 		BatchTimeoutMS:    getEnvInt("BATCH_TIMEOUT_MS", 5000),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),

@@ -10,16 +10,18 @@ import (
 )
 
 type Server struct {
-	cfg   *config.Config
-	rdb   *redis.Client
-	port  string
+	cfg       *config.Config
+	rdb       *redis.Client
+	port      string
+	semaphore chan struct{}
 }
 
 func NewServer(cfg *config.Config, rdb *redis.Client) *Server {
 	return &Server{
-		cfg:  cfg,
-		rdb:  rdb,
-		port: cfg.GPSTCPPort,
+		cfg:       cfg,
+		rdb:       rdb,
+		port:      cfg.GPSTCPPort,
+		semaphore: make(chan struct{}, 50), // Limit to 50 concurrent connections
 	}
 }
 
@@ -40,6 +42,11 @@ func (s *Server) Start() error {
 			continue
 		}
 
-		go s.handleConnection(conn)
+		// Use semaphore to limit goroutines
+		s.semaphore <- struct{}{}
+		go func(c net.Conn) {
+			defer func() { <-s.semaphore }()
+			s.handleConnection(c)
+		}(conn)
 	}
 }

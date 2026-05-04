@@ -7,6 +7,7 @@ import (
 	"gps-tracking-system/internal/decoder"
 	"io"
 	"net"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
@@ -14,6 +15,9 @@ import (
 
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
+
+	// Set initial read deadline for handshake
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	// 1. Read IMEI (first 15-17 bytes usually)
 	// Teltonika protocol: 2 bytes length, then IMEI string
