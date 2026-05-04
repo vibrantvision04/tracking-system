@@ -33,23 +33,28 @@ export default function PlaybackPage() {
     if (!imei || !date) return;
     const from = `${date}T00:00:00.000Z`;
     const to = `${date}T23:59:59.999Z`;
-    const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${imei}?from=${from}&to=${to}`);
-    const data = r.data || [];
-    setPoints(data);
-    setIdx(0);
-    setPlaying(false);
+    
+    try {
+      const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${imei}?from=${from}&to=${to}`);
+      const data = r.data || [];
+      setPoints(data);
+      setIdx(0);
+      setPlaying(false);
 
-    const L = require("leaflet");
-    const map = mapRef.current;
-    if (!map) return;
-    if (lineRef.current) map.removeLayer(lineRef.current);
-    if (mkRef.current) map.removeLayer(mkRef.current);
-    if (data.length === 0) return;
+      const L = require("leaflet");
+      const map = mapRef.current;
+      if (!map) return;
+      if (lineRef.current) map.removeLayer(lineRef.current);
+      if (mkRef.current) map.removeLayer(mkRef.current);
+      if (data.length === 0) return;
 
-    const ll = data.map((p) => [p.latitude, p.longitude] as [number, number]);
-    lineRef.current = L.polyline(ll, { color: "#6366f1", weight: 3, opacity: .7 }).addTo(map);
-    map.fitBounds(lineRef.current.getBounds(), { padding: [40, 40] });
-    mkRef.current = L.circleMarker(ll[0], { radius: 8, fillColor: "#22c55e", fillOpacity: 1, color: "#fff", weight: 2 }).addTo(map);
+      const ll = data.map((p) => [p.latitude, p.longitude] as [number, number]);
+      lineRef.current = L.polyline(ll, { color: "#6366f1", weight: 3, opacity: .7 }).addTo(map);
+      map.fitBounds(lineRef.current.getBounds(), { padding: [40, 40] });
+      mkRef.current = L.circleMarker(ll[0], { radius: 8, fillColor: "#22c55e", fillOpacity: 1, color: "#fff", weight: 2 }).addTo(map);
+    } catch (err) {
+      console.error("Playback load error:", err);
+    }
   }, [imei, date]);
 
   // Playback animation

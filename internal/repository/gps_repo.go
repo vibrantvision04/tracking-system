@@ -73,7 +73,8 @@ func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, 
 	query := `
 		SELECT g.imei, g.time, g.lat, g.lng, g.speed, g.heading, g.altitude, g.satellites, g.ignition, g.io
 		FROM gps_data g
-		JOIN vehicle_gps_map m ON g.imei = (SELECT imei FROM gps_devices WHERE id = m.device_id)
+		JOIN gps_devices d ON g.imei = d.imei
+		JOIN vehicle_gps_map m ON d.id = m.device_id AND m.unassigned_at IS NULL
 		WHERE m.vehicle_id = $1 AND g.time >= $2 AND g.time < $3
 		ORDER BY g.time ASC
 	`

@@ -88,10 +88,11 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicle, error) {
 	query := `
 		SELECT 
-			v.id, v.registration_no, v.chassis_no, v.is_owned, v.vehicle_type_id, v.is_active,
-			vt.vehicle_type_name, vt.icon_color,
-			d.id, d.imei, d.serial_no, d.sim_no, d.device_type, d.is_active
+			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
+			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
+			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active
 		FROM vehicles v
+		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
 		JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		JOIN gps_devices d ON m.device_id = d.id
 		WHERE d.imei = $1
