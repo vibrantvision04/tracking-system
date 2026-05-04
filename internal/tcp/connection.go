@@ -82,6 +82,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		log.Debug().Str("imei", imei).Uint32("dataLen", dataLen).Msg("Received full AVL packet")
 
+		if dataLen == 0 {
+			log.Warn().Str("imei", imei).Msg("Received empty AVL data, skipping")
+			continue
+		}
+
 		// Decode based on codec
 		codecID := data[0] // Codec ID is the first byte of data
 		var records []decoder.AVLData

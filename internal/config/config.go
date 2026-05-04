@@ -13,6 +13,7 @@ type Config struct {
 	HTTPPort          string
 	WSPort            string
 	DBDSN             string
+	RedisURL          string
 	RedisAddr         string
 	RedisPassword     string
 	JWTSecret         string
@@ -45,6 +46,7 @@ func LoadConfig() *Config {
 		HTTPPort:          httpPort,
 		WSPort:            getEnv("WS_PORT", "8081"),
 		DBDSN:             getEnv("DB_DSN", "postgres://gps:password@localhost:5432/gpsdb"),
+		RedisURL:          getEnv("REDISURL", getEnv("REDIS_URL", "")),
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:     getEnv("REDIS_PASSWORD", ""),
 		JWTSecret:         getEnv("JWT_SECRET", "your-super-secret-key-here"),

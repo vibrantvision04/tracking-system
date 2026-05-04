@@ -10,20 +10,29 @@ import (
 )
 
 func InitRedis(cfg *config.Config) (*redis.Client, error) {
-	opts := &redis.Options{
-		Addr:     cfg.RedisAddr,
-		Password: cfg.RedisPassword,
-		DB:       0,
-	}
+	var opts *redis.Options
+	var err error
 
-	// Always use TLS for Upstash
-	opts.TLSConfig = &tls.Config{
-		InsecureSkipVerify: true, // Upstash certs are usually fine but this ensures connection
+	if cfg.RedisURL != "" {
+		opts, err = redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		opts = &redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+			DB:       0,
+		}
+		// Fallback TLS for Upstash if needed
+		if cfg.RedisPassword != "" {
+			opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+		}
 	}
 
 	rdb := redis.NewClient(opts)
 
-	err := rdb.Ping(context.Background()).Err()
+	err = rdb.Ping(context.Background()).Err()
 	if err != nil {
 		return nil, err
 	}
