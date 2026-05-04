@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -102,16 +101,7 @@ func main() {
 		}
 	}()
 
-	// 12. Memory Optimizer (Keep RAM low on Railway)
-	go func() {
-		ticker := time.NewTicker(2 * time.Minute)
-		for range ticker.C {
-			log.Debug().Msg("Performing proactive memory release")
-			debug.FreeOSMemory()
-		}
-	}()
-
-	// 13. Graceful Shutdown
+	// 12. Graceful Shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
