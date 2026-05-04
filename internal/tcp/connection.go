@@ -61,6 +61,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 		dataLen := binary.BigEndian.Uint32(lenBuf)
 
+		// SAFETY CHECK: Limit max packet size to 128KB to prevent OOM
+		if dataLen > 128*1024 {
+			log.Error().Uint32("len", dataLen).Str("imei", imei).Msg("Packet too large, closing connection")
+			break
+		}
+
 		// Read data (codec + records)
 		data := make([]byte, dataLen)
 		_, err = io.ReadFull(conn, data)

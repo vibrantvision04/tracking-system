@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
@@ -56,8 +57,10 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Info().Str("remote", conn.RemoteAddr().String()).Msg("WebSocket client connected")
 
 	// Send initial snapshot of all known locations
-	go func() {
-		ctx := context.Background()
+	go func(c *Client) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		keys, err := h.rdb.Keys(ctx, "gps:latest:*").Result()
 		if err == nil && len(keys) > 0 {
 			vals, err := h.rdb.MGet(ctx, keys...).Result()
@@ -74,10 +77,15 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					"data": snapshot,
 				})
 				
-				client.send <- payload
+				// Safe send to avoid blocking or panicking
+				select {
+				case c.send <- payload:
+				case <-time.After(1 * time.Second):
+					log.Warn().Msg("Timed out sending snapshot to client")
+				}
 			}
 		}
-	}()
+	}(client)
 
 	go client.writePump()
 	go client.readPump()

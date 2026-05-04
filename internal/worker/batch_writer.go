@@ -35,6 +35,14 @@ func NewBatchWriter(repo *repository.GPSRepository, size int, timeout time.Durat
 
 func (bw *BatchWriter) Add(data decoder.AVLData) {
 	bw.mu.Lock()
+	
+	// HARD CEILING: Prevent buffer from growing infinitely if DB is slow
+	if len(bw.buffer) >= 1000 {
+		bw.mu.Unlock()
+		log.Warn().Str("imei", data.IMEI).Msg("Batch writer buffer full, dropping record to prevent OOM")
+		return
+	}
+
 	bw.buffer = append(bw.buffer, data)
 	shouldFlush := len(bw.buffer) >= bw.batchSize
 	bw.mu.Unlock()
