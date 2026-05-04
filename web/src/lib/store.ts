@@ -8,7 +8,10 @@ interface AppState {
   types: VehicleType[];
   loaded: boolean;
   lastLoaded: number;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
   loadAll: () => Promise<void>;
+
   addOrUpdateVehicle: (vehicle: Vehicle) => void;
   updateVehicleStatus: (id: number, status: Vehicle["status"]) => void;
   updateDevice: (device: GpsDevice) => void;
@@ -20,6 +23,9 @@ export const useStore = create<AppState>((set, get) => ({
   types: [],
   loaded: false,
   lastLoaded: 0,
+  sidebarOpen: false,
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
   loadAll: async () => {
     const now = Date.now();
     const { lastLoaded, loaded } = get();

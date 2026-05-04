@@ -21,14 +21,16 @@ export default function ReportsPage() {
   const r = expanded !== null ? reports.find((rr) => rr.id === expanded) : null;
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[var(--bg-dark)]">
-      <div className="flex justify-between items-center mb-5">
-        <h1 className="text-lg font-bold tracking-tight">📊 Movement Reports</h1>
-        <div className="flex gap-3 items-center">
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[var(--bg-dark)]">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="hidden md:block text-lg font-bold tracking-tight">📊 Movement Reports</h1>
+        <div className="flex flex-wrap gap-3 items-center w-full sm:w-auto">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            className="px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-sm text-white outline-none" />
-          <button className="px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-xs text-white hover:bg-red-600/20 transition">📄 PDF</button>
-          <button className="px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-xs text-white hover:bg-green-600/20 transition">📊 CSV</button>
+            className="flex-1 sm:flex-none px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-sm text-white outline-none" />
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button className="flex-1 sm:flex-none px-4 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-xs text-white hover:bg-red-600/20 transition font-medium">📄 PDF</button>
+            <button className="flex-1 sm:flex-none px-4 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-xs text-white hover:bg-green-600/20 transition font-medium">📊 CSV</button>
+          </div>
         </div>
       </div>
 
@@ -85,9 +87,9 @@ export default function ReportsPage() {
 
       {/* Expanded Detail */}
       {r && (
-        <div className="bg-[var(--bg-card)] border border-white/[.05] rounded-xl p-5 mt-4">
+        <div className="bg-[var(--bg-card)] border border-white/[.05] rounded-xl p-4 md:p-5 mt-4">
           <h3 className="text-sm font-bold mb-4">{r.registration_no} — Detailed Report</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {[
               ["Distance", `${r.total_distance} km`],
               ["Avg Speed", `${r.average_speed} km/h`],
@@ -108,7 +110,7 @@ export default function ReportsPage() {
             ].map(([label, value]) => (
               <div key={label} className="bg-[var(--bg-surface)] rounded-lg p-3">
                 <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">{label}</div>
-                <div className="text-sm font-semibold truncate">{value}</div>
+                <div className="text-[13px] font-semibold truncate text-white">{value}</div>
               </div>
             ))}
           </div>

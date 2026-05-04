@@ -76,15 +76,15 @@ export default function PlaybackPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="h-14 bg-[var(--bg-card)] px-6 flex items-center border-b border-white/[.05] shrink-0">
+      <header className="hidden md:flex h-14 bg-[var(--bg-card)] px-6 items-center border-b border-white/[.05] shrink-0">
         <h1 className="text-sm font-semibold tracking-tight">⏪ Route Playback</h1>
         {points.length > 0 && <span className="ml-auto text-xs text-slate-500">{points.length} GPS points loaded</span>}
       </header>
-      <div className="flex-1 relative">
-        <div ref={box} className="w-full h-full" />
+      <div className="flex-1 relative flex flex-col">
+        <div ref={box} className="flex-1 w-full h-full" />
 
         {/* Control Panel */}
-        <div className="absolute top-4 left-4 w-[300px] bg-[rgba(15,21,37,.95)] backdrop-blur-2xl rounded-xl border border-white/[.06] z-[1000] p-4 shadow-2xl">
+        <div className="absolute top-4 left-4 right-4 sm:right-auto sm:w-[300px] bg-[rgba(15,21,37,.95)] backdrop-blur-2xl rounded-xl border border-white/[.06] z-[1000] p-4 shadow-2xl">
           <div className="space-y-2 mb-3">
             <select value={imei} onChange={(e) => setImei(e.target.value)}
               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-[13px] text-white outline-none">

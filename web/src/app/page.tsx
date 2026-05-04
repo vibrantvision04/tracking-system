@@ -19,7 +19,7 @@ export default function HomePage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Topbar */}
-      <header className="h-14 bg-[var(--bg-card)] px-6 flex items-center justify-between border-b border-white/[.05] shrink-0">
+      <header className="hidden md:flex h-14 bg-[var(--bg-card)] px-6 items-center justify-between border-b border-white/[.05] shrink-0">
         <h1 className="text-sm font-semibold tracking-tight">Live Tracking</h1>
         <div className="flex gap-4 text-xs text-slate-500">
           <span>Vehicles <b className="text-white">{vehicles.length}</b></span>
