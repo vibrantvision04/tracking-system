@@ -149,7 +149,7 @@ func (s *Server) pushBatchToStream(data []decoder.AVLData) {
 
 	err = s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: "gps:stream",
-		MaxLen: 5000,
+		MaxLen: 1000, // Reduced from 5000 to save even more shared memory
 		Approx: true,
 		Values: map[string]interface{}{
 			"data": jsonData,
