@@ -9,5 +9,5 @@ healthcheckTimeout = 30
 # Tell Railway the HTTP server listens on 8080.
 # The GPS TCP server runs on 5027 via the TCP proxy separately.
 [[deploy.environmentVariables]]
-name = "HTTP_PORT"
+name = "PORT"
 value = "8080"
