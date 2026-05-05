@@ -37,6 +37,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 	imei := string(imeiBuf)
 	log.Info().Str("imei", imei).Msg("New device connected")
 
+	// Broadcast connection
+	s.publishStatus(context.Background(), imei, true)
+	defer s.publishStatus(context.Background(), imei, false)
+
 	// 2. Send acceptance (01)
 	conn.Write([]byte{0x01})
 
@@ -159,4 +163,28 @@ func (s *Server) pushBatchToStream(data []decoder.AVLData) {
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to add batch to Redis Stream")
 	}
+}
+
+func (s *Server) publishStatus(ctx context.Context, imei string, connected bool) {
+	status := "disconnected"
+	if connected {
+		status = "connected"
+	}
+
+	payload := map[string]interface{}{
+		"type": "device_status",
+		"imei": imei,
+		"status": status,
+		"timestamp": time.Now(),
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	
+	// 1. Update persistent status in Redis
+	s.rdb.Set(ctx, "gps:status:"+imei, status, 0)
+
+	// 2. Broadcast to live channel
+	s.rdb.Publish(ctx, "gps:live:"+imei, jsonData)
+	
+	log.Info().Str("imei", imei).Str("status", status).Msg("Device status broadcasted")
 }

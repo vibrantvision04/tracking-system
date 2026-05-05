@@ -15,6 +15,7 @@ export default function LiveMap({ vehicles }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [livePos, setLivePos] = useState<Record<string, LivePosition>>({});
+  const [statuses, setStatuses] = useState<Record<string, string>>({});
 
   // ─── Init Map ───
   useEffect(() => {
@@ -129,23 +130,28 @@ export default function LiveMap({ vehicles }: Props) {
               const imei = msg.imei;
               setLivePos((prev) => ({ ...prev, [imei]: msg }));
               
-              // If this is a new vehicle we haven't seen in our list, fetch its metadata
               const knownVehicles = vehiclesRef.current;
               if (!knownVehicles.find(v => v.gps_device?.imei === imei)) {
                 api<{ data: Vehicle }>(`/api/vehicles/imei/${imei}`).then(res => {
-                  if (res.data) {
-                    useStore.getState().addOrUpdateVehicle(res.data);
-                  }
+                  if (res.data) useStore.getState().addOrUpdateVehicle(res.data);
                 }).catch(() => {});
               }
               
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);
               upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "", true);
             }
-            if (msg.type === "snapshot" && Array.isArray(msg.data)) {
-              const map: Record<string, LivePosition> = {};
-              msg.data.forEach((p: LivePosition) => { map[p.imei] = p; });
-              setLivePos((prev) => ({ ...prev, ...map }));
+            if (msg.type === "device_status") {
+              setStatuses(prev => ({ ...prev, [msg.imei]: msg.status }));
+            }
+            if (msg.type === "snapshot") {
+              if (Array.isArray(msg.data)) {
+                const map: Record<string, LivePosition> = {};
+                msg.data.forEach((p: LivePosition) => { map[p.imei] = p; });
+                setLivePos((prev) => ({ ...prev, ...map }));
+              }
+              if (msg.statuses) {
+                setStatuses(prev => ({ ...prev, ...msg.statuses }));
+              }
             }
           } catch (err) {
             if (isMounted) console.error("WS Message Error:", err);
@@ -254,7 +260,12 @@ export default function LiveMap({ vehicles }: Props) {
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.realStatus === "running" ? `0 0 6px ${dotColor}` : "none" }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <div className="text-[13px] font-semibold text-slate-200 truncate">{v.registration_no}</div>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="text-[13px] font-semibold text-slate-200 truncate">{v.registration_no}</div>
+                      {statuses[imei] === "connected" && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded-full border border-green-500/20 font-medium">CONNECTED</span>
+                      )}
+                    </div>
                     {pos && (
                       <div className={`text-[9px] px-1.5 py-0.5 rounded border ${pos.ignition ? "text-green-400 border-green-400/30" : "text-red-400 border-red-400/30"}`}>
                         IGN {pos.ignition ? "ON" : "OFF"}

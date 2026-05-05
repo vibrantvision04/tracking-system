@@ -61,21 +61,38 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
+		// 1. Fetch latest locations
 		keys, err := h.rdb.Keys(ctx, "gps:latest:*").Result()
+		var snapshot []json.RawMessage
 		if err == nil && len(keys) > 0 {
 			vals, err := h.rdb.MGet(ctx, keys...).Result()
 			if err == nil {
-				var snapshot []json.RawMessage
 				for _, val := range vals {
 					if strVal, ok := val.(string); ok {
 						snapshot = append(snapshot, json.RawMessage(strVal))
 					}
 				}
+			}
+		}
+
+		// 2. Fetch device statuses
+		statusKeys, _ := h.rdb.Keys(ctx, "gps:status:*").Result()
+		statuses := make(map[string]string)
+		if len(statusKeys) > 0 {
+			sVals, _ := h.rdb.MGet(ctx, statusKeys...).Result()
+			for i, val := range sVals {
+				if strVal, ok := val.(string); ok {
+					imei := statusKeys[i][len("gps:status:"):]
+					statuses[imei] = strVal
+				}
+			}
+		}
 				
-				payload, _ := json.Marshal(map[string]interface{}{
-					"type": "snapshot",
-					"data": snapshot,
-				})
+		payload, _ := json.Marshal(map[string]interface{}{
+			"type": "snapshot",
+			"data": snapshot,
+			"statuses": statuses,
+		})
 				
 				// Safe send to avoid blocking or panicking
 				select {
@@ -83,8 +100,6 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				case <-time.After(1 * time.Second):
 					log.Warn().Msg("Timed out sending snapshot to client")
 				}
-			}
-		}
 	}(client)
 
 	go client.writePump()
