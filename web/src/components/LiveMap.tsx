@@ -40,12 +40,12 @@ export default function LiveMap({ vehicles }: Props) {
   }, []);
 
   // ─── Marker helper ───
-  const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string) => {
+  const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string, isLive: boolean, lastTime?: string | null) => {
     if (!mapRef.current) return;
-    const color = speed > 3 ? "#22c55e" : speed > 0 ? "#f59e0b" : "#ef4444";
+    const color = isLive ? (speed > 3 ? "#22c55e" : speed > 0 ? "#f59e0b" : "#ef4444") : "#64748b";
     const icon = L.divIcon({
       className: "",
-      html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);box-shadow:0 0 10px ${color}"></div>`,
+      html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);box-shadow:${isLive ? `0 0 10px ${color}` : "none"}"></div>`,
       iconSize: [14, 14], iconAnchor: [7, 7],
     });
     if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) return;
@@ -55,10 +55,16 @@ export default function LiveMap({ vehicles }: Props) {
     } else {
       markers.current[imei] = L.marker([lat, lng], { icon }).addTo(mapRef.current);
     }
+
+    const timeStr = isLive ? "Live Now" : (lastTime ? `Last seen: ${new Date(lastTime).toLocaleString()}` : "Offline");
+
     markers.current[imei].bindPopup(`
-      <div style="font-family:Inter,sans-serif;min-width:170px;font-size:12px;">
+      <div style="font-family:Inter,sans-serif;min-width:180px;font-size:12px;">
         <div style="font-weight:700;font-size:13px;margin-bottom:2px;">${regNo}</div>
         <div style="color:#888;margin-bottom:6px;">${typeName}</div>
+        <div style="margin-bottom:6px;">
+          <span style="padding:2px 6px;border-radius:4px;background:${isLive ? "rgba(34,197,94,.15)" : "rgba(100,116,139,.15)"};color:${isLive ? "#22c55e" : "#94a3b8"};font-weight:600;font-size:10px;">${timeStr}</span>
+        </div>
         <div style="display:flex;gap:10px;margin-bottom:4px;">
           <span>Speed: <b>${speed} km/h</b></span>
           <span style="color:${ignition ? "#22c55e" : "#ef4444"}">Ignition: <b>${ignition ? "ON" : "OFF"}</b></span>
@@ -79,14 +85,19 @@ export default function LiveMap({ vehicles }: Props) {
       if (!imei) return;
       const pos = livePos[imei];
       if (pos) {
-        upsertMarker(imei, pos.lat, pos.lng, pos.speed, !!pos.ignition, v.registration_no, v.vehicle_type?.name || "Vehicle");
+        upsertMarker(imei, pos.lat, pos.lng, pos.speed, !!pos.ignition, v.registration_no, v.vehicle_type?.name || "Vehicle", true);
         bounds.extend([pos.lat, pos.lng]);
+        hasMarkers = true;
+      } else if (v.last_lat && v.last_lng) {
+        // Fallback to last known location from DB
+        upsertMarker(imei, v.last_lat, v.last_lng, 0, false, v.registration_no, v.vehicle_type?.name || "Vehicle", false, v.last_time);
+        bounds.extend([v.last_lat, v.last_lng]);
         hasMarkers = true;
       }
     });
 
     // Auto-fit the map to show all vehicles when positions first load
-    if (hasMarkers && Object.keys(livePos).length > 0 && !selected) {
+    if (hasMarkers && (Object.keys(livePos).length > 0 || vehicles.some(v => v.last_lat)) && !selected) {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
     }
   }, [vehicles, livePos, upsertMarker, selected]);
@@ -129,7 +140,7 @@ export default function LiveMap({ vehicles }: Props) {
               }
               
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);
-              upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "");
+              upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "", true);
             }
             if (msg.type === "snapshot" && Array.isArray(msg.data)) {
               const map: Record<string, LivePosition> = {};

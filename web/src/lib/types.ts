@@ -28,6 +28,9 @@ export interface Vehicle {
   vehicle_type: VehicleType | null;
   gps_device: GpsDevice | null;
   status: "running" | "idle" | "stopped" | "offline";
+  last_lat: number;
+  last_lng: number;
+  last_time: string | null;
 }
 
 export interface LivePosition {

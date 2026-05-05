@@ -32,6 +32,9 @@ type Vehicle struct {
 	VehicleType    *VehicleType `json:"vehicle_type"`
 	GpsDevice      *GpsDevice   `json:"gps_device"`
 	Status         string       `json:"status"` // "running", "idle", "stopped", "offline"
+	LastLat        float64      `json:"last_lat"`
+	LastLng        float64      `json:"last_lng"`
+	LastTime       *time.Time   `json:"last_time"`
 }
 
 type VehicleRepository struct {
@@ -48,11 +51,17 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 		SELECT 
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
-			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false)
+			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
+			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.time
 		FROM vehicles v
 		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
+		LEFT JOIN (
+			SELECT DISTINCT ON (imei) imei, lat, lng, time 
+			FROM gps_data 
+			ORDER BY imei, time DESC
+		) lp ON d.imei = lp.imei
 	`
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -71,6 +80,7 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 			&vt.Name, &vt.IconColor,
 			&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
+			&v.LastLat, &v.LastLng, &v.LastTime,
 		)
 		if err == nil {
 			v.VehicleTypeID = vTypeId
@@ -90,11 +100,17 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 		SELECT 
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
-			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active
+			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active,
+			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.time
 		FROM vehicles v
 		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
 		JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		JOIN gps_devices d ON m.device_id = d.id
+		LEFT JOIN (
+			SELECT DISTINCT ON (imei) imei, lat, lng, time 
+			FROM gps_data 
+			ORDER BY imei, time DESC
+		) lp ON d.imei = lp.imei
 		WHERE d.imei = $1
 	`
 	var v Vehicle
@@ -106,6 +122,7 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 		&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 		&vt.Name, &vt.IconColor,
 		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
+		&v.LastLat, &v.LastLng, &v.LastTime,
 	)
 	if err != nil {
 		return nil, err
