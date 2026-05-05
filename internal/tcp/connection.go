@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"gps-tracking-system/internal/decoder"
+	"gps-tracking-system/internal/repository"
 	"io"
 	"net"
 	"time"
@@ -37,11 +38,39 @@ func (s *Server) handleConnection(conn net.Conn) {
 	imei := string(imeiBuf)
 	log.Info().Str("imei", imei).Msg("New device connected")
 
-	// Broadcast connection
+	// 2. Auto-register device in DB if it doesn't exist
+	// This ensures that even if you haven't manually added the IMEI in the UI, 
+	// the backend "claims" it so you can see it in the 'Devices' list.
+	go func(id string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		
+		// We'll use the repository to check/create
+		// Since we don't have a direct 'EnsureDevice' method, we'll try to find it first
+		devices, err := s.vRepo.GetDevices(ctx)
+		if err == nil {
+			exists := false
+			for _, d := range devices {
+				if d.IMEI == id {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				log.Info().Str("imei", id).Msg("Auto-registering new unrecognized device")
+				s.vRepo.CreateDevice(ctx, &repository.GpsDevice{
+					IMEI: id,
+					DeviceType: "Auto-Detected",
+				})
+			}
+		}
+	}(imei)
+
+	// 3. Broadcast connection
 	s.publishStatus(context.Background(), imei, true)
 	defer s.publishStatus(context.Background(), imei, false)
 
-	// 2. Send acceptance (01)
+	// 4. Send acceptance (01)
 	conn.Write([]byte{0x01})
 
 	// 3. Receive AVL packets (Infinite Loop)

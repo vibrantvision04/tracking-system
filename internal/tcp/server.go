@@ -3,6 +3,7 @@ package tcp
 import (
 	"fmt"
 	"gps-tracking-system/internal/config"
+	"gps-tracking-system/internal/repository"
 	"net"
 
 	"github.com/redis/go-redis/v9"
@@ -12,14 +13,16 @@ import (
 type Server struct {
 	cfg       *config.Config
 	rdb       *redis.Client
+	vRepo     *repository.VehicleRepository
 	port      string
 	semaphore chan struct{}
 }
 
-func NewServer(cfg *config.Config, rdb *redis.Client) *Server {
+func NewServer(cfg *config.Config, rdb *redis.Client, vRepo *repository.VehicleRepository) *Server {
 	return &Server{
 		cfg:       cfg,
 		rdb:       rdb,
+		vRepo:     vRepo,
 		port:      cfg.GPSTCPPort,
 		semaphore: make(chan struct{}, 50), // Limit to 50 concurrent connections
 	}

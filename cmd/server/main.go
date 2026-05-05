@@ -71,7 +71,7 @@ func main() {
 	go hub.StartSubscriber(context.Background())
 
 	// 9. Start TCP Server (GPS Ingestion)
-	tcpServer := tcp.NewServer(cfg, rdb)
+	tcpServer := tcp.NewServer(cfg, rdb, vRepo)
 	go func() {
 		if err := tcpServer.Start(); err != nil {
 			log.Fatal().Err(err).Msg("TCP Server failed")
