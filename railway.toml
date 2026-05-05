@@ -3,7 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-healthcheckPath = "/api/vehicles"
+healthcheckPath = "/health"
 healthcheckTimeout = 30
 
 # Tell Railway the HTTP server listens on 8080.

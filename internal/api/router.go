@@ -29,6 +29,11 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 	r.HandleFunc("/ws/track", hub.ServeHTTP)
 
 	// 3. API Routes (v1)
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/vehicles", h.GetVehicles)
 		r.Get("/vehicles/imei/{imei}", h.GetVehicleByIMEI)
