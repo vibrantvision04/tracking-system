@@ -32,10 +32,15 @@ func LoadConfig() *Config {
 		log.Warn().Msg("No .env file found, using system environment variables")
 	}
 
-	// Railway and other PaaS providers inject the PORT variable. 
-	// The HTTP server MUST listen on this port to be reachable via the public proxy.
-	httpPort := getEnv("PORT", "8080")
 	gpsTcpPort := getEnv("GPS_TCP_PORT", "5027")
+
+	// Railway injects PORT for HTTP routing. However, when a TCP proxy is also
+	// configured, Railway may set PORT to the TCP proxy port (e.g. 5027), which
+	// would collide with the GPS TCP server. In that case, fall back to HTTP_PORT.
+	httpPort := getEnv("PORT", "8080")
+	if httpPort == gpsTcpPort {
+		httpPort = getEnv("HTTP_PORT", "8080")
+	}
 
 	return &Config{
 		GPSTCPPort:        gpsTcpPort,
