@@ -34,10 +34,13 @@ func LoadConfig() *Config {
 
 	gpsTcpPort := getEnv("GPS_TCP_PORT", "5027")
 
-	// Railway expects the HTTP server to listen on the port defined by the PORT environment variable.
-	httpPort := getEnv("PORT", "8080")
+	// Restore the HTTP_PORT fallback to prevent collisions with the GPS TCP port.
+	// Railway injects PORT=5027 because of the TCP proxy, so we use HTTP_PORT
+	// as an override to bind the web server to 8080 instead.
+	httpPort := getEnv("HTTP_PORT", getEnv("PORT", "8080"))
 	if httpPort == gpsTcpPort {
-		log.Warn().Msgf("DANGER: Railway is asking the HTTP server to listen on %s, which is the TCP port! This will crash or break routing.", httpPort)
+		httpPort = "8080"
+		log.Warn().Msgf("Collision detected: PORT is %s (TCP port). Falling back to 8080 for HTTP.", gpsTcpPort)
 	}
 
 	return &Config{
