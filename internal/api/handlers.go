@@ -186,7 +186,19 @@ func (h *Handler) GetVehicleTypes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateVehicleType(w http.ResponseWriter, r *http.Request) {
-	sendJSON(w, http.StatusCreated, map[string]interface{}{"success": true})
+	var vt repository.VehicleType
+	if err := json.NewDecoder(r.Body).Decode(&vt); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+		return
+	}
+	
+	if err := h.vRepo.CreateType(r.Context(), &vt); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to save type: " + err.Error()})
+		return
+	}
+
+	h.publishMetadataUpdate(r.Context(), "type", vt.ID)
+	sendJSON(w, http.StatusCreated, map[string]interface{}{"success": true, "data": vt})
 }
 
 func (h *Handler) GetAlerts(w http.ResponseWriter, r *http.Request) {

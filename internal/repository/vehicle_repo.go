@@ -154,6 +154,18 @@ func (r *VehicleRepository) GetTypes(ctx context.Context) ([]VehicleType, error)
 	}
 	return types, nil
 }
+func (r *VehicleRepository) CreateType(ctx context.Context, vt *VehicleType) error {
+	query := `
+		INSERT INTO vehicle_types_iswm (vehicle_type_name, icon_color)
+		VALUES ($1, $2)
+		RETURNING id
+	`
+	if vt.IconColor == "" {
+		vt.IconColor = "#6366f1" // Default indigo
+	}
+	err := r.pool.QueryRow(ctx, query, vt.Name, vt.IconColor).Scan(&vt.ID)
+	return err
+}
 
 func (r *VehicleRepository) CreateVehicle(ctx context.Context, v *Vehicle) error {
 	query := `

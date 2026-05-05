@@ -4,7 +4,7 @@ import { api, post, del } from "@/lib/api";
 import { useStore } from "@/lib/store";
 
 export default function VehiclesPage() {
-  const { vehicles, types, loaded, loadAll } = useStore();
+  const { vehicles, types, loaded, loadAll, addOrUpdateVehicle, removeVehicle, addType: storeAddType } = useStore();
   const [reg, setReg] = useState("");
   const [chassis, setChassis] = useState("");
   const [typeId, setTypeId] = useState("");
@@ -14,26 +14,28 @@ export default function VehiclesPage() {
     if (!loaded) loadAll();
   }, [loaded, loadAll]);
 
-  const load = () => loadAll(); // Re-fetch on mutation
-
   const addVehicle = async () => {
     if (!reg) return;
-    await post("/api/vehicles", { registration_no: reg, chassis_no: chassis || null, vehicle_type_id: typeId ? Number(typeId) : null });
+    const res = await post<{ data: any }>("/api/vehicles", { 
+      registration_no: reg, 
+      chassis_no: chassis || null, 
+      vehicle_type_id: typeId ? Number(typeId) : null 
+    });
+    if (res.data) addOrUpdateVehicle(res.data);
     setReg(""); setChassis(""); setTypeId("");
-    load();
   };
 
   const addType = async () => {
     if (!newType) return;
-    await post("/api/vehicle-types", { name: newType });
+    const res = await post<{ data: any }>("/api/vehicle-types", { name: newType });
+    if (res.data) storeAddType(res.data);
     setNewType("");
-    load();
   };
 
   const deleteVehicle = async (id: number) => {
     if (!confirm("Are you sure you want to delete this vehicle? This will also unassign any GPS device.")) return;
     await del(`/api/vehicles/${id}`);
-    load();
+    removeVehicle(id);
   };
 
   return (

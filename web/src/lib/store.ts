@@ -13,8 +13,11 @@ interface AppState {
   loadAll: (force?: boolean) => Promise<void>;
 
   addOrUpdateVehicle: (vehicle: Vehicle) => void;
+  removeVehicle: (id: number) => void;
   updateVehicleStatus: (id: number, status: Vehicle["status"]) => void;
   updateDevice: (device: GpsDevice) => void;
+  removeDevice: (id: number) => void;
+  addType: (type: VehicleType) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -59,6 +62,11 @@ export const useStore = create<AppState>((set, get) => ({
       return { vehicles: [...state.vehicles, vehicle] };
     });
   },
+  removeVehicle: (id) => {
+    set((state) => ({
+      vehicles: state.vehicles.filter((v) => v.id !== id)
+    }));
+  },
   updateVehicleStatus: (id, status) => {
     set((state) => ({
       vehicles: state.vehicles.map((v) => v.id === id ? { ...v, status } : v)
@@ -72,5 +80,15 @@ export const useStore = create<AppState>((set, get) => ({
       }
       return { devices: [...state.devices, device] };
     });
+  },
+  removeDevice: (id) => {
+    set((state) => ({
+      devices: state.devices.filter((d) => d.id !== id)
+    }));
+  },
+  addType: (type) => {
+    set((state) => ({
+      types: [...state.types, type]
+    }));
   }
 }));

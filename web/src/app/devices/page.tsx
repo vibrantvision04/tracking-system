@@ -4,7 +4,7 @@ import { api, post, put, del } from "@/lib/api";
 import { useStore } from "@/lib/store";
 
 export default function DevicesPage() {
-  const { devices, vehicles, loaded, loadAll } = useStore();
+  const { devices, vehicles, loaded, loadAll, updateDevice, removeDevice, addOrUpdateVehicle } = useStore();
   const [imei, setImei] = useState("");
   const [serial, setSerial] = useState("");
   const [sim, setSim] = useState("");
@@ -15,13 +15,11 @@ export default function DevicesPage() {
     if (!loaded) loadAll();
   }, [loaded, loadAll]);
 
-  const load = () => loadAll(); // Re-fetch on mutation
-
   const addDevice = async () => {
     if (!imei) return;
-    await post("/api/devices", { imei, serial_no: serial, sim_no: sim });
+    const res = await post<{ data: any }>("/api/devices", { imei, serial_no: serial, sim_no: sim });
+    if (res.data) updateDevice(res.data);
     setImei(""); setSerial(""); setSim("");
-    load();
   };
 
   const assign = async () => {
@@ -29,7 +27,8 @@ export default function DevicesPage() {
     try {
       await post("/api/map-device", { gps_device_id: Number(mapDev), vehicle_id: Number(mapVeh) });
       setMapDev(""); setMapVeh("");
-      load();
+      // Assignment is complex, so we re-fetch to ensure mapping is correct
+      loadAll(true);
     } catch (e: any) {
       alert("Error: " + e.message + "\nMake sure the device or vehicle is not already assigned.");
     }
@@ -37,19 +36,20 @@ export default function DevicesPage() {
 
   const toggleStatus = async (id: number, currentStatus: boolean) => {
     await put("/api/devices/status", { id, is_active: !currentStatus });
-    load();
+    const dev = devices.find(d => d.id === id);
+    if (dev) updateDevice({ ...dev, is_active: !currentStatus });
   };
 
   const unmapDevice = async (id: number) => {
     if (!confirm("Are you sure you want to unassign this device from the vehicle?")) return;
     await post(`/api/unmap-device/${id}`, {});
-    load();
+    loadAll(true);
   };
 
   const deleteDevice = async (id: number) => {
     if (!confirm("Are you sure you want to completely delete this GPS device? This will also unassign it if it's assigned to a vehicle.")) return;
     await del(`/api/devices/${id}`);
-    load();
+    removeDevice(id);
   };
 
   return (
