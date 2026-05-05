@@ -123,7 +123,7 @@ func (h *Hub) Unregister(c *Client) {
 }
 
 func (h *Hub) StartSubscriber(ctx context.Context) {
-	pubsub := h.rdb.PSubscribe(ctx, "gps:live:*")
+	pubsub := h.rdb.PSubscribe(ctx, "gps:live:*", "metadata:*")
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()

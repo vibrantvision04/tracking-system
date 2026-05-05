@@ -9,20 +9,33 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 type Handler struct {
 	vRepo    *repository.VehicleRepository
 	gpsRepo  *repository.GPSRepository
 	rService *service.ReportService
+	rdb      *redis.Client
 }
 
-func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService) *Handler {
+func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client) *Handler {
 	return &Handler{
 		vRepo:    vRepo,
 		gpsRepo:  gpsRepo,
 		rService: rService,
+		rdb:      rdb,
 	}
+}
+
+func (h *Handler) publishMetadataUpdate(ctx context.Context, entity string, id interface{}) {
+	payload := map[string]interface{}{
+		"type":   "metadata_update",
+		"entity": entity,
+		"id":     id,
+	}
+	jsonData, _ := json.Marshal(payload)
+	h.rdb.Publish(ctx, "metadata:updates", jsonData)
 }
 
 // Helper to send JSON responses
@@ -78,6 +91,7 @@ func (h *Handler) CreateVehicle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishMetadataUpdate(r.Context(), "vehicle", v.ID)
 	sendJSON(w, http.StatusCreated, map[string]interface{}{"success": true, "data": v})
 }
 
@@ -102,6 +116,7 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishMetadataUpdate(r.Context(), "device", d.ID)
 	sendJSON(w, http.StatusCreated, map[string]interface{}{"success": true, "data": d})
 }
 
@@ -120,6 +135,7 @@ func (h *Handler) MapDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishMetadataUpdate(r.Context(), "mapping", m.VehicleID)
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 
@@ -191,6 +207,7 @@ func (h *Handler) UpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	h.publishMetadataUpdate(r.Context(), "device", payload.ID)
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 
@@ -203,6 +220,7 @@ func (h *Handler) UnmapDevice(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to unmap device: " + err.Error()})
 		return
 	}
+	h.publishMetadataUpdate(r.Context(), "mapping", deviceID)
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 
@@ -215,6 +233,7 @@ func (h *Handler) DeleteVehicle(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete vehicle: " + err.Error()})
 		return
 	}
+	h.publishMetadataUpdate(r.Context(), "vehicle", vehicleID)
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 
@@ -227,5 +246,6 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete device: " + err.Error()})
 		return
 	}
+	h.publishMetadataUpdate(r.Context(), "device", deviceID)
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }

@@ -10,7 +10,7 @@ interface AppState {
   lastLoaded: number;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  loadAll: () => Promise<void>;
+  loadAll: (force?: boolean) => Promise<void>;
 
   addOrUpdateVehicle: (vehicle: Vehicle) => void;
   updateVehicleStatus: (id: number, status: Vehicle["status"]) => void;
@@ -26,12 +26,12 @@ export const useStore = create<AppState>((set, get) => ({
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
-  loadAll: async () => {
+  loadAll: async (force = false) => {
     const now = Date.now();
     const { lastLoaded, loaded } = get();
     
-    // If loaded in the last 30 seconds, don't refetch everything
-    if (loaded && now - lastLoaded < 30000) return;
+    // If loaded in the last 30 seconds, don't refetch everything unless forced
+    if (!force && loaded && now - lastLoaded < 30000) return;
 
     try {
       const [vRes, dRes, tRes] = await Promise.all([

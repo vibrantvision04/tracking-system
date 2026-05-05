@@ -143,6 +143,10 @@ export default function LiveMap({ vehicles }: Props) {
             if (msg.type === "device_status") {
               setStatuses(prev => ({ ...prev, [msg.imei]: msg.status }));
             }
+            if (msg.type === "metadata_update") {
+              // Re-fetch all metadata when something changes
+              useStore.getState().loadAll(true);
+            }
             if (msg.type === "snapshot") {
               if (Array.isArray(msg.data)) {
                 const map: Record<string, LivePosition> = {};

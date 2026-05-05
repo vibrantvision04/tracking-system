@@ -85,7 +85,7 @@ func main() {
 	c.Start()
 
 	// 11. Start Servers
-	handler := api.NewHandler(vRepo, gpsRepo, rService)
+	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb)
 	router := api.SetupRouter(handler, hub)
 
 	// API Server (Handles both HTTP and WebSockets)
