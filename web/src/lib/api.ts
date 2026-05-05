@@ -1,7 +1,11 @@
 // ═══════════════════════════════════════
 // API Client — talks to Go backend
 // ═══════════════════════════════════════
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+let API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+// Ensure API has a protocol prefix
+if (API && !API.startsWith("http")) {
+  API = "https://" + API;
+}
 // Automatically infer WebSocket URL based on the API URL
 const WS = process.env.NEXT_PUBLIC_WS_URL || API.replace(/^http/, "ws") + "/ws/track";
 
