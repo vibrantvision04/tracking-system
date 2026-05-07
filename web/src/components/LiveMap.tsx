@@ -102,38 +102,49 @@ export default function LiveMap({ vehicles }: Props) {
     `);
   }, []);
 
-  // ─── Place initial markers & auto-fit bounds ───
+  // ─── Initial Marker Placement ───
   useEffect(() => {
     if (!mapRef.current) return;
-    const bounds = L.latLngBounds([]);
-    let hasMarkers = false;
-
-    // Always draw all vehicles from livePos regardless of whether they are in the 'vehicles' prop
-    Object.values(livePos).forEach((pos: LivePosition) => {
-      const imei = pos.imei;
-      const v = vehicles.find(vv => vv.gps_device?.imei === imei);
-      upsertMarker(imei, pos.lat, pos.lng, pos.speed, !!pos.ignition, v?.registration_no || imei, v?.vehicle_type?.name || "Vehicle", true, pos.time);
-      bounds.extend([pos.lat, pos.lng]);
-      hasMarkers = true;
-    });
-
-    // Fallback for vehicles that don't have a live position yet
+    
+    // This loop now ONLY runs for the initial markers (last known positions)
     vehicles.forEach((v) => {
       const imei = v.gps_device?.imei;
-      if (!imei || livePos[imei]) return;
+      if (!imei) return;
       if (v.last_lat && v.last_lng) {
         upsertMarker(imei, v.last_lat, v.last_lng, 0, false, v.registration_no, v.vehicle_type?.name || "Vehicle", false, v.last_time);
-        bounds.extend([v.last_lat, v.last_lng]);
-        hasMarkers = true;
       }
     });
+  }, [vehicles, upsertMarker]);
 
-    // Auto-fit the map to show all vehicles ONLY on the first load
-    if (hasMarkers && (Object.keys(livePos).length > 0 || vehicles.some(v => v.last_lat)) && !selected && !hasFitBounds.current) {
+  // ─── Initial Fit Bounds (Runs ONCE) ───
+  useEffect(() => {
+    if (!mapRef.current || hasFitBounds.current) return;
+    
+    const bounds = L.latLngBounds([]);
+    let count = 0;
+    
+    // Try to fit to live positions first
+    Object.values(livePos).forEach(p => {
+      bounds.extend([p.lat, p.lng]);
+      count++;
+    });
+    
+    // Fallback to vehicle last known positions
+    if (count === 0) {
+      vehicles.forEach(v => {
+        if (v.last_lat && v.last_lng) {
+          bounds.extend([v.last_lat, v.last_lng]);
+          count++;
+        }
+      });
+    }
+
+    if (count > 0) {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
       hasFitBounds.current = true;
     }
-  }, [vehicles, livePos, upsertMarker, selected]);
+  }, [vehicles, livePos]); // Keep livePos here so it fits as soon as the first snapshot/updates arrive
+
 
   const vehiclesRef = useRef(vehicles);
   useEffect(() => { vehiclesRef.current = vehicles; }, [vehicles]);
