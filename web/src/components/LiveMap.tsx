@@ -22,22 +22,46 @@ export default function LiveMap({ vehicles }: Props) {
     if (!box.current || mapRef.current) return;
     const m = L.map(box.current, { 
       zoomControl: true,
-      minZoom: 5, // Allow zooming out to see the whole country
-      maxBounds: [
-        [6.0, 68.0],  // South West bounds of India
-        [38.0, 98.0]  // North East bounds of India
-      ],
-      maxBoundsViscosity: 1.0 // Bounce back when panning out of bounds
+      minZoom: 5,
+      maxBounds: [[6.0, 68.0], [38.0, 98.0]],
+      maxBoundsViscosity: 1.0,
+      layers: [] // Default set below
     }).setView([26.9124, 75.7873], 13);
     
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "© CARTO © OSM", 
-      maxZoom: 19,
-      noWrap: true // Prevent horizontal repeating
-    }).addTo(m);
+    const darkLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "© CARTO © OSM", maxZoom: 19, noWrap: true
+    });
+
+    const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap", maxZoom: 19, noWrap: true
+    });
+
+    const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "© Esri", maxZoom: 19, noWrap: true
+    });
+
+    const satelliteHybrid = L.layerGroup([
+      satelliteLayer,
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", {
+        attribution: "Labels © CARTO", maxZoom: 19, noWrap: true
+      })
+    ]);
+
+    darkLayer.addTo(m); // Default layer
+
+    L.control.layers({
+      "Dark Map": darkLayer,
+      "Street Map": streetLayer,
+      "Satellite (No Labels)": satelliteLayer,
+      "Satellite + Labels": satelliteHybrid
+    }, {}, { position: 'topright' }).addTo(m);
     
     mapRef.current = m;
-    return () => { m.remove(); mapRef.current = null; };
+    return () => { 
+      m.remove(); 
+      mapRef.current = null; 
+      markers.current = {}; 
+    };
   }, []);
 
   // ─── Marker helper ───
@@ -49,7 +73,10 @@ export default function LiveMap({ vehicles }: Props) {
       html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);box-shadow:${isLive ? `0 0 10px ${color}` : "none"}"></div>`,
       iconSize: [14, 14], iconAnchor: [7, 7],
     });
-    if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) return;
+    if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) {
+      console.warn("Invalid lat/lng for", imei, lat, lng);
+      return;
+    }
 
     if (markers.current[imei]) {
       markers.current[imei].setLatLng([lat, lng]).setIcon(icon);
@@ -58,7 +85,6 @@ export default function LiveMap({ vehicles }: Props) {
     }
 
     const timeStr = isLive ? "Live Now" : (lastTime ? `Last seen: ${new Date(lastTime).toLocaleString()}` : "Offline");
-
     markers.current[imei].bindPopup(`
       <div style="font-family:Inter,sans-serif;min-width:180px;font-size:12px;">
         <div style="font-weight:700;font-size:13px;margin-bottom:2px;">${regNo}</div>
@@ -81,16 +107,20 @@ export default function LiveMap({ vehicles }: Props) {
     const bounds = L.latLngBounds([]);
     let hasMarkers = false;
 
+    // Always draw all vehicles from livePos regardless of whether they are in the 'vehicles' prop
+    Object.values(livePos).forEach((pos: LivePosition) => {
+      const imei = pos.imei;
+      const v = vehicles.find(vv => vv.gps_device?.imei === imei);
+      upsertMarker(imei, pos.lat, pos.lng, pos.speed, !!pos.ignition, v?.registration_no || imei, v?.vehicle_type?.name || "Vehicle", true, pos.time);
+      bounds.extend([pos.lat, pos.lng]);
+      hasMarkers = true;
+    });
+
+    // Fallback for vehicles that don't have a live position yet
     vehicles.forEach((v) => {
       const imei = v.gps_device?.imei;
-      if (!imei) return;
-      const pos = livePos[imei];
-      if (pos) {
-        upsertMarker(imei, pos.lat, pos.lng, pos.speed, !!pos.ignition, v.registration_no, v.vehicle_type?.name || "Vehicle", true);
-        bounds.extend([pos.lat, pos.lng]);
-        hasMarkers = true;
-      } else if (v.last_lat && v.last_lng) {
-        // Fallback to last known location from DB
+      if (!imei || livePos[imei]) return;
+      if (v.last_lat && v.last_lng) {
         upsertMarker(imei, v.last_lat, v.last_lng, 0, false, v.registration_no, v.vehicle_type?.name || "Vehicle", false, v.last_time);
         bounds.extend([v.last_lat, v.last_lng]);
         hasMarkers = true;
@@ -111,6 +141,7 @@ export default function LiveMap({ vehicles }: Props) {
     let ws: WebSocket | null = null;
     let reconnect: ReturnType<typeof setTimeout>;
     let isMounted = true;
+    const pendingFetches = new Set<string>();
     
     const connect = () => {
       if (!isMounted) return;
@@ -131,10 +162,13 @@ export default function LiveMap({ vehicles }: Props) {
               setLivePos((prev) => ({ ...prev, [imei]: msg }));
               
               const knownVehicles = vehiclesRef.current;
-              if (!knownVehicles.find(v => v.gps_device?.imei === imei)) {
+              if (!knownVehicles.find(v => v.gps_device?.imei === imei) && !pendingFetches.has(imei)) {
+                pendingFetches.add(imei);
                 api<{ data: Vehicle }>(`/api/vehicles/imei/${imei}`).then(res => {
                   if (res.data) useStore.getState().addOrUpdateVehicle(res.data);
-                }).catch(() => {});
+                }).catch(() => {
+                  // Keep it in pendingFetches so we don't retry failed ones
+                });
               }
               
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);

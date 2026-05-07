@@ -40,7 +40,7 @@ export interface LivePosition {
   speed: number;
   angle: number;
   ignition: boolean | null;
-  timestamp: string;
+  time: string;
 }
 
 export interface GpsDataPoint {

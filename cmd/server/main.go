@@ -113,6 +113,7 @@ func main() {
 					Lat:      v.LastLocation.Latitude,
 					Lng:      v.LastLocation.Longitude,
 					Ignition: v.Ignition,
+					Speed:    v.LastSpeed,
 				}
 
 				dataBytes, err := json.Marshal(data)

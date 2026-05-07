@@ -26,7 +26,42 @@ export default function PlaybackPage() {
     if (typeof window === "undefined" || !box.current || mapRef.current) return;
     const L = require("leaflet");
     mapRef.current = L.map(box.current).setView([26.9124, 75.7873], 13);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 19 }).addTo(mapRef.current);
+    
+    const darkLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "© CARTO © OSM", maxZoom: 19, noWrap: true
+    });
+
+    const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap", maxZoom: 19, noWrap: true
+    });
+
+    const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "© Esri", maxZoom: 19, noWrap: true
+    });
+
+    const satelliteHybrid = L.layerGroup([
+      satelliteLayer,
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", {
+        attribution: "Labels © CARTO", maxZoom: 19, noWrap: true
+      })
+    ]);
+
+    darkLayer.addTo(mapRef.current);
+
+    L.control.layers({
+      "Dark Map": darkLayer,
+      "Street Map": streetLayer,
+      "Satellite (No Labels)": satelliteLayer,
+      "Satellite + Labels": satelliteHybrid
+    }, {}, { position: 'topright' }).addTo(mapRef.current);
+    
+    // Add cleanup to clear references
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
   }, []);
 
   const loadRoute = useCallback(async () => {

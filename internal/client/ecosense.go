@@ -28,14 +28,24 @@ type Vehicle struct {
 	Battery       float64   `json:"battery"`
 	Ignition      bool      `json:"ignition"`
 	DeviceTime    time.Time `json:"deviceTime"`
+	LastSpeed     float64   `json:"lastSpeed"`
+	Motion        bool      `json:"motion"`
+	Active        bool      `json:"active"`
+	Idle          bool      `json:"idle"`
+	FuelType      string    `json:"fuelType"`
+	Capacity      string    `json:"capacity"`
+	Coverage      float64   `json:"coverage"`
 }
 
 // LoginResponse handles extracting the token or access token.
 type LoginResponse struct {
 	Code        int    `json:"code"`
 	Message     string `json:"message"`
-	Token       string `json:"token"`
-	AccessToken string `json:"accessToken"`
+	Data        struct {
+		Token       string `json:"token"`
+		AccessToken string `json:"accessToken"`
+		ProjectID   string `json:"projectId"`
+	} `json:"data"`
 }
 
 // VehiclesResponse is the response format for the fetch vehicles endpoint.
@@ -48,6 +58,7 @@ type VehiclesResponse struct {
 type EcoSenseClient struct {
 	httpClient *http.Client
 	token      string
+	projectID  string
 	mu         sync.RWMutex
 }
 
@@ -91,7 +102,7 @@ func (c *EcoSenseClient) Login() error {
 	url := "https://app.ecosense-enviro.com/api/users/login?accessControlListFormatted=true&accessControlListEncrypted=false"
 
 	payload := map[string]string{
-		"username": "urbanenviro",
+		"email":    "urbanenviro",
 		"password": "Urban@1223",
 	}
 
@@ -126,14 +137,18 @@ func (c *EcoSenseClient) Login() error {
 		return fmt.Errorf("failed to unmarshal login response: %w", err)
 	}
 
-	// Store the token using RW mutex protection
+	// Store the token and projectId using RW mutex protection
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if loginResp.Token != "" {
-		c.token = loginResp.Token
-	} else if loginResp.AccessToken != "" {
-		c.token = loginResp.AccessToken
+	if loginResp.Data.Token != "" {
+		c.token = loginResp.Data.Token
+	} else if loginResp.Data.AccessToken != "" {
+		c.token = loginResp.Data.AccessToken
+	}
+	
+	if loginResp.Data.ProjectID != "" {
+		c.projectID = loginResp.Data.ProjectID
 	}
 	// If it only relies on cookies, cookiejar handled it implicitly above.
 
@@ -141,7 +156,24 @@ func (c *EcoSenseClient) Login() error {
 }
 
 // FetchVehicles dynamically attaches Bearer token if found, and uses the cookie jar to get data.
+// If the token is expired (401/403), it will automatically re-login and retry exactly once.
 func (c *EcoSenseClient) FetchVehicles() ([]Vehicle, error) {
+	vehicles, err := c.doFetchVehicles()
+	
+	// If unauthorized, re-login and retry exactly once
+	if err != nil && (err.Error() == "unauthorized" || err.Error() == "forbidden") {
+		fmt.Println("Ecosense token expired or unauthorized, automatically re-authenticating...")
+		if loginErr := c.Login(); loginErr != nil {
+			return nil, fmt.Errorf("auto re-login failed: %w", loginErr)
+		}
+		// Retry fetch with the new token
+		return c.doFetchVehicles()
+	}
+
+	return vehicles, err
+}
+
+func (c *EcoSenseClient) doFetchVehicles() ([]Vehicle, error) {
 	url := "https://app.ecosense-enviro.com/api/vehicles?minifiedFor=monitoring"
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -151,11 +183,15 @@ func (c *EcoSenseClient) FetchVehicles() ([]Vehicle, error) {
 
 	c.mu.RLock()
 	token := c.token
+	projectID := c.projectID
 	c.mu.RUnlock()
 
 	// Append token dynamically if we found one
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if projectID != "" {
+		req.Header.Set("projectId", projectID)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -164,6 +200,12 @@ func (c *EcoSenseClient) FetchVehicles() ([]Vehicle, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	if resp.StatusCode == 403 {
+		return nil, fmt.Errorf("forbidden")
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("fetch vehicles failed with status code: %d", resp.StatusCode)
 	}

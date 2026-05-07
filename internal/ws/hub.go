@@ -58,6 +58,12 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Send initial snapshot of all known locations
 	go func(c *Client) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Debug().Msg("Recovered from panic: client disconnected during snapshot send")
+			}
+		}()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
