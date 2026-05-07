@@ -16,6 +16,7 @@ export default function LiveMap({ vehicles }: Props) {
   const [search, setSearch] = useState("");
   const [livePos, setLivePos] = useState<Record<string, LivePosition>>({});
   const [statuses, setStatuses] = useState<Record<string, string>>({});
+  const hasFitBounds = useRef(false);
 
   // ─── Init Map ───
   useEffect(() => {
@@ -127,9 +128,10 @@ export default function LiveMap({ vehicles }: Props) {
       }
     });
 
-    // Auto-fit the map to show all vehicles when positions first load
-    if (hasMarkers && (Object.keys(livePos).length > 0 || vehicles.some(v => v.last_lat)) && !selected) {
+    // Auto-fit the map to show all vehicles ONLY on the first load
+    if (hasMarkers && (Object.keys(livePos).length > 0 || vehicles.some(v => v.last_lat)) && !selected && !hasFitBounds.current) {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
+      hasFitBounds.current = true;
     }
   }, [vehicles, livePos, upsertMarker, selected]);
 
