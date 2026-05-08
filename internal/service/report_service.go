@@ -123,7 +123,7 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	return s.repo.Upsert(ctx, report)
 }
 
-func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time) ([]repository.MovementReport, error) {
+func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int) ([]repository.MovementReport, int, error) {
 	// Dynamically generate reports for the requested days to ensure real-time accuracy
 	vehicles, err := s.vRepo.GetAll(ctx)
 	if err == nil {
@@ -138,7 +138,7 @@ func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to 
 		}
 	}
 
-	return s.repo.Get(ctx, vehicleID, from, to)
+	return s.repo.Get(ctx, vehicleID, from, to, limit, offset)
 }
 
 func haversine(lat1, lon1, lat2, lon2 float64) float64 {

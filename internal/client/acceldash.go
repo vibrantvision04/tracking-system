@@ -34,10 +34,24 @@ type AcceldashGpsDevice struct {
 	GpsDatum []AcceldashGpsDatum `json:"gpsdatum"`
 }
 
+type AcceldashVehicleType struct {
+	ID              int    `json:"id"`
+	VehicleTypeName string `json:"vehicle_type_name"`
+}
+
+type AcceldashVehicleMake struct {
+	ID              int    `json:"id"`
+	VehicleMakeName string `json:"vehicle_make_name"`
+}
+
 type AcceldashVehicle struct {
 	ID             int                  `json:"id"`
 	RegistrationNo string               `json:"registration_no"`
+	ChassisNo      string               `json:"chassis_no"`
+	IsOwned        bool                 `json:"is_owned"`
 	GpsDevices     []AcceldashGpsDevice `json:"gps_devices"`
+	VehicleTypes   *AcceldashVehicleType `json:"vehicle_types"`
+	VehicleMakes   *AcceldashVehicleMake `json:"vehicle_makes"`
 }
 
 type AcceldashVehiclesResponse struct {

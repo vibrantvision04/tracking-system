@@ -47,6 +47,8 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 		r.Get("/gps-data/{imei}", h.GetGpsData)
 		r.Get("/reports", h.GetReports)
 		r.Get("/alerts", h.GetAlerts)
+		r.Get("/zones", h.GetZones)
+		r.Get("/wards", h.GetWards)
 	})
 
 	return r

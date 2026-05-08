@@ -16,7 +16,41 @@ export default function LiveMap({ vehicles }: Props) {
   const [search, setSearch] = useState("");
   const [livePos, setLivePos] = useState<Record<string, LivePosition>>({});
   const [statuses, setStatuses] = useState<Record<string, string>>({});
+  const [selectedZone, setSelectedZone] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("selectedZone");
+      return cached !== null ? cached : "177"; // Default to 177
+    }
+    return "177";
+  });
+  const [zones, setZones] = useState<any[]>([]);
   const hasFitBounds = useRef(false);
+
+  useEffect(() => {
+    api<{ data: any[] }>("/api/zones").then((res) => {
+      setZones(res.data || []);
+    });
+  }, []);
+
+
+
+  const livePosAccumulator = useRef<Record<string, LivePosition>>({});
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Object.keys(livePosAccumulator.current).length > 0) {
+        setLivePos((prev) => ({ ...prev, ...livePosAccumulator.current }));
+        livePosAccumulator.current = {};
+      }
+    }, 1000); // Flush every 1 second
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+
+  }, [selectedZone, vehicles]);
 
   // ─── Init Map ───
   useEffect(() => {
@@ -26,6 +60,7 @@ export default function LiveMap({ vehicles }: Props) {
       minZoom: 5,
       maxBounds: [[6.0, 68.0], [38.0, 98.0]],
       maxBoundsViscosity: 1.0,
+      preferCanvas: true,
       layers: [] // Default set below
     }).setView([26.9124, 75.7873], 13);
     
@@ -68,11 +103,24 @@ export default function LiveMap({ vehicles }: Props) {
   // ─── Marker helper ───
   const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string, isLive: boolean, lastTime?: string | null) => {
     if (!mapRef.current) return;
+    
+    const getVehicleEmoji = (type: string) => {
+      const t = type.toLowerCase();
+      if (t.includes("feeder") || t.includes("tipper")) return "🚛";
+      if (t.includes("compactor")) return "🗑️";
+      if (t.includes("tractor") || t.includes("ferguson")) return "🚜";
+      if (t.includes("ambulance")) return "🚑";
+      if (t.includes("tata") || t.includes("mahindra")) return "🚚";
+      return "🚗"; // Fallback
+    };
+
     const color = isLive ? (speed > 3 ? "#22c55e" : speed > 0 ? "#f59e0b" : "#ef4444") : "#64748b";
+    const emoji = getVehicleEmoji(typeName);
+    
     const icon = L.divIcon({
       className: "",
-      html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);box-shadow:${isLive ? `0 0 10px ${color}` : "none"}"></div>`,
-      iconSize: [14, 14], iconAnchor: [7, 7],
+      html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
+      iconSize: [24, 24], iconAnchor: [12, 12],
     });
     if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) {
       console.warn("Invalid lat/lng for", imei, lat, lng);
@@ -103,51 +151,70 @@ export default function LiveMap({ vehicles }: Props) {
   }, []);
 
   // ─── Initial Marker Placement ───
+  // ─── Marker Management (Filtered) ───
   useEffect(() => {
     if (!mapRef.current) return;
     
-    // This loop now ONLY runs for the initial markers (last known positions)
-    vehicles.forEach((v) => {
+    const filteredVehicles = vehicles.filter((v) => {
+      if (!selectedZone || selectedZone === "all") return true;
+      return (v as any).zone_id === parseInt(selectedZone);
+    });
+
+    const filteredImeis = new Set(filteredVehicles.map(v => v.gps_device?.imei).filter(Boolean));
+    
+    // Cleanup hidden markers
+    Object.keys(markers.current).forEach((imei) => {
+      if (!filteredImeis.has(imei)) {
+        markers.current[imei].remove();
+        delete markers.current[imei];
+      }
+    });
+
+    // Create/Update visible markers
+    filteredVehicles.forEach((v) => {
       const imei = v.gps_device?.imei;
       if (!imei) return;
       if (v.last_lat && v.last_lng) {
-        upsertMarker(imei, v.last_lat, v.last_lng, 0, false, v.registration_no, v.vehicle_type?.name || "Vehicle", false, v.last_time);
+        const isMoving = v.status === "running";
+        const isIdle = v.status === "idle";
+        const simulatedSpeed = isMoving ? 5 : (isIdle ? 2 : 0);
+        const simulatedIsLive = v.status !== "offline";
+        
+        upsertMarker(imei, v.last_lat, v.last_lng, simulatedSpeed, false, v.registration_no, v.vehicle_type?.name || "Vehicle", simulatedIsLive, v.last_time);
       }
     });
-  }, [vehicles, upsertMarker]);
+  }, [vehicles, selectedZone, upsertMarker]);
 
-  // ─── Initial Fit Bounds (Runs ONCE) ───
+  // ─── Fit Bounds on Zone Change or Load ───
+  const lastFittedZone = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
-    if (!mapRef.current || hasFitBounds.current) return;
+    if (!mapRef.current) return;
+    if (lastFittedZone.current === selectedZone) return; 
     
     const bounds = L.latLngBounds([]);
     let count = 0;
     
-    // Try to fit to live positions first
-    Object.values(livePos).forEach(p => {
-      bounds.extend([p.lat, p.lng]);
-      count++;
+    vehicles.forEach(v => {
+      const isVisible = !selectedZone || selectedZone === "all" || (v as any).zone_id === parseInt(selectedZone);
+      if (isVisible && v.last_lat && v.last_lng) {
+        bounds.extend([v.last_lat, v.last_lng]);
+        count++;
+      }
     });
     
-    // Fallback to vehicle last known positions
-    if (count === 0) {
-      vehicles.forEach(v => {
-        if (v.last_lat && v.last_lng) {
-          bounds.extend([v.last_lat, v.last_lng]);
-          count++;
-        }
-      });
-    }
-
     if (count > 0) {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
-      hasFitBounds.current = true;
+      lastFittedZone.current = selectedZone;
     }
-  }, [vehicles, livePos]); // Keep livePos here so it fits as soon as the first snapshot/updates arrive
+  }, [vehicles, selectedZone]); // Keep livePos here so it fits as soon as the first snapshot/updates arrive
 
 
   const vehiclesRef = useRef(vehicles);
   useEffect(() => { vehiclesRef.current = vehicles; }, [vehicles]);
+
+  const selectedZoneRef = useRef(selectedZone);
+  useEffect(() => { selectedZoneRef.current = selectedZone; }, [selectedZone]);
 
   // ─── WebSocket for real-time GPS ───
   useEffect(() => {
@@ -172,20 +239,20 @@ export default function LiveMap({ vehicles }: Props) {
             const msg = JSON.parse(e.data);
             if (msg.type === "gps_update") {
               const imei = msg.imei;
-              setLivePos((prev) => ({ ...prev, [imei]: msg }));
-              
-              const knownVehicles = vehiclesRef.current;
-              if (!knownVehicles.find(v => v.gps_device?.imei === imei) && !pendingFetches.has(imei)) {
-                pendingFetches.add(imei);
-                api<{ data: Vehicle }>(`/api/vehicles/imei/${imei}`).then(res => {
-                  if (res.data) useStore.getState().addOrUpdateVehicle(res.data);
-                }).catch(() => {
-                  // Keep it in pendingFetches so we don't retry failed ones
-                });
-              }
+              livePosAccumulator.current[imei] = msg;
               
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);
-              upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "", true);
+              const sz = selectedZoneRef.current;
+              const isVisible = !sz || sz === "all" || (v && (v as any).zone_id === parseInt(sz));
+              
+              if (isVisible) {
+                upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "", true);
+              } else {
+                if (markers.current[msg.imei]) {
+                  markers.current[msg.imei].remove();
+                  delete markers.current[msg.imei];
+                }
+              }
             }
             if (msg.type === "device_status") {
               setStatuses(prev => ({ ...prev, [msg.imei]: msg.status }));
@@ -252,16 +319,21 @@ export default function LiveMap({ vehicles }: Props) {
     realStatus: getStatus(v.gps_device?.imei || "")
   }));
 
-  const filtered = processedVehicles.filter((v) =>
+  const filteredByZone = processedVehicles.filter((v) => {
+    if (!selectedZone || selectedZone === "all") return true;
+    return (v as any).zone_id === parseInt(selectedZone);
+  });
+
+  const filtered = filteredByZone.filter((v) =>
     v.registration_no.toLowerCase().includes(search.toLowerCase()) ||
     (v.vehicle_type?.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const counts = {
-    running: processedVehicles.filter((v) => v.realStatus === "running").length,
-    idle: processedVehicles.filter((v) => v.realStatus === "idle").length,
-    stopped: processedVehicles.filter((v) => v.realStatus === "stopped").length,
-    offline: processedVehicles.filter((v) => v.realStatus === "offline").length,
+    running: filteredByZone.filter((v) => v.realStatus === "running").length,
+    idle: filteredByZone.filter((v) => v.realStatus === "idle").length,
+    stopped: filteredByZone.filter((v) => v.realStatus === "stopped").length,
+    offline: filteredByZone.filter((v) => v.realStatus === "offline").length,
   };
 
   return (
@@ -275,7 +347,25 @@ export default function LiveMap({ vehicles }: Props) {
           <span className="text-green-400">● {counts.running}</span>
           <span className="text-amber-400">● {counts.idle}</span>
           <span className="text-red-400">● {counts.stopped}</span>
-          <span className="text-slate-500 ml-auto">{vehicles.length} total</span>
+          <span className="text-slate-500 ml-auto">{filteredByZone.length} visible</span>
+        </div>
+
+        {/* Zone Selector */}
+        <div className="p-3 border-b border-white/[.05]">
+          <select
+            value={selectedZone || "all"}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedZone(val);
+              localStorage.setItem("selectedZone", val);
+            }}
+            className="w-full px-3 py-2 bg-black/25 border border-white/[.06] rounded-lg text-[13px] text-white placeholder:text-slate-600 outline-none focus:border-indigo-500/40 transition"
+          >
+            <option value="all">All Zones</option>
+            {zones.map((z) => (
+              <option key={z.id} value={z.id}>{z.region_name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Search */}

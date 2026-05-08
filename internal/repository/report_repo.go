@@ -97,10 +97,11 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 	return err
 }
 
-func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time.Time) ([]MovementReport, error) {
+func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int) ([]MovementReport, int, error) {
 	var query string
 	var rows pgx.Rows
 	var err error
+	var totalCount int
 
 	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, v.registration_no, vt.vehicle_type_name, r.report_date, r.average_speed, r.total_distance, r.start_point, r.end_point, 
 			  r.start_time, r.end_time, r.alert, r.total_active_duration, r.total_idle_duration, 
@@ -112,16 +113,28 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 			  JOIN vehicles v ON r.vehicle_id = v.id
 			  LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id `
 
+	countQuery := `SELECT COUNT(*) FROM movement_reports r `
+
 	if vehicleID > 0 {
-		query = baseQuery + `WHERE r.vehicle_id = $1 AND r.report_date BETWEEN $2 AND $3 ORDER BY r.report_date DESC`
-		rows, err = r.pool.Query(ctx, query, vehicleID, from, to)
+		query = baseQuery + `WHERE r.vehicle_id = $1 AND r.report_date BETWEEN $2 AND $3 ORDER BY r.report_date DESC LIMIT $4 OFFSET $5`
+		rows, err = r.pool.Query(ctx, query, vehicleID, from, to, limit, offset)
+		
+		err = r.pool.QueryRow(ctx, countQuery+`WHERE vehicle_id = $1 AND report_date BETWEEN $2 AND $3`, vehicleID, from, to).Scan(&totalCount)
+		if err != nil {
+			return nil, 0, err
+		}
 	} else {
-		query = baseQuery + `WHERE r.report_date BETWEEN $1 AND $2 ORDER BY r.report_date DESC`
-		rows, err = r.pool.Query(ctx, query, from, to)
+		query = baseQuery + `WHERE r.report_date BETWEEN $1 AND $2 ORDER BY r.report_date DESC LIMIT $3 OFFSET $4`
+		rows, err = r.pool.Query(ctx, query, from, to, limit, offset)
+
+		err = r.pool.QueryRow(ctx, countQuery+`WHERE report_date BETWEEN $1 AND $2`, from, to).Scan(&totalCount)
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 	
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -137,9 +150,9 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 			&rep.SpeedLimit, &rep.MaxSpeed, &rep.MinSpeed, &rep.OverspeedDistance, &rep.OverspeedCount, &rep.OverspeedTime,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		reports = append(reports, rep)
 	}
-	return reports, nil
+	return reports, totalCount, nil
 }

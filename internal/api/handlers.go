@@ -7,6 +7,9 @@ import (
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
 	"net/http"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,19 +17,117 @@ import (
 )
 
 type Handler struct {
-	vRepo    *repository.VehicleRepository
-	gpsRepo  *repository.GPSRepository
-	rService *service.ReportService
-	rdb      *redis.Client
+	vRepo             *repository.VehicleRepository
+	gpsRepo           *repository.GPSRepository
+	rService          *service.ReportService
+	rdb               *redis.Client
+	vehicleZones      map[string]int
+	vehicleWards      map[string]int
+	zoneVehiclesCache map[string][]map[string]interface{}
+	cacheMutex        sync.RWMutex
 }
 
 func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client) *Handler {
-	return &Handler{
-		vRepo:    vRepo,
-		gpsRepo:  gpsRepo,
-		rService: rService,
-		rdb:      rdb,
+	h := &Handler{
+		vRepo:             vRepo,
+		gpsRepo:           gpsRepo,
+		rService:          rService,
+		rdb:               rdb,
+		vehicleZones:      make(map[string]int),
+		vehicleWards:      make(map[string]int),
+		zoneVehiclesCache: make(map[string][]map[string]interface{}),
 	}
+	h.LoadMappings()
+	h.RebuildCache()
+	return h
+}
+
+func (h *Handler) LoadMappings() {
+	data, err := os.ReadFile("E:\\dataswim\\iswmmovement.json")
+	if err != nil {
+		fmt.Printf("Failed to read iswmmovement.json for mappings: %v\n", err)
+		return
+	}
+
+	var result struct {
+		Data []struct {
+			RegistrationNo string `json:"registration_no"`
+			Regions        []struct {
+				ID int `json:"id"`
+			} `json:"regions"`
+			SubRegions []struct {
+				ID int `json:"id"`
+			} `json:"sub_regions"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(data, &result); err != nil {
+		fmt.Printf("Failed to parse iswmmovement.json for mappings: %v\n", err)
+		return
+	}
+
+	for _, v := range result.Data {
+		if len(v.Regions) > 0 {
+			h.vehicleZones[v.RegistrationNo] = v.Regions[0].ID
+		}
+		if len(v.SubRegions) > 0 {
+			h.vehicleWards[v.RegistrationNo] = v.SubRegions[0].ID
+		}
+	}
+	fmt.Printf("Loaded %d vehicle-zone mappings and %d vehicle-ward mappings\n", len(h.vehicleZones), len(h.vehicleWards))
+}
+
+func (h *Handler) RebuildCache() {
+	ctx := context.Background()
+	vehicles, err := h.vRepo.GetAll(ctx)
+	if err != nil {
+		fmt.Printf("Failed to fetch vehicles for cache: %v\n", err)
+		return
+	}
+
+	newCache := make(map[string][]map[string]interface{})
+	var allVehicles []map[string]interface{}
+
+	for _, v := range vehicles {
+		m := map[string]interface{}{
+			"id":              v.ID,
+			"registration_no": v.RegistrationNo,
+			"chassis_no":      v.ChassisNo,
+			"is_owned":        v.IsOwned,
+			"vehicle_type_id": v.VehicleTypeID,
+			"is_active":       v.IsActive,
+			"vehicle_type":    v.VehicleType,
+			"gps_device":      v.GpsDevice,
+			"status":          v.Status,
+			"last_lat":        v.LastLat,
+			"last_lng":        v.LastLng,
+			"last_time":       v.LastTime,
+		}
+		
+		var zoneID int
+		if zid, ok := h.vehicleZones[v.RegistrationNo]; ok {
+			m["zone_id"] = zid
+			zoneID = zid
+		}
+		if wardID, ok := h.vehicleWards[v.RegistrationNo]; ok {
+			m["ward_id"] = wardID
+		}
+		
+		allVehicles = append(allVehicles, m)
+		
+		if zoneID > 0 {
+			zoneStr := strconv.Itoa(zoneID)
+			newCache[zoneStr] = append(newCache[zoneStr], m)
+		}
+	}
+
+	newCache["all"] = allVehicles
+
+	h.cacheMutex.Lock()
+	h.zoneVehiclesCache = newCache
+	h.cacheMutex.Unlock()
+
+	fmt.Printf("Rebuilt vehicle cache: %d zones cached\n", len(newCache))
 }
 
 func (h *Handler) publishMetadataUpdate(ctx context.Context, entity string, id interface{}) {
@@ -47,11 +148,20 @@ func sendJSON(w http.ResponseWriter, status int, payload interface{}) {
 }
 
 func (h *Handler) GetVehicles(w http.ResponseWriter, r *http.Request) {
-	vehicles, err := h.vRepo.GetAll(r.Context())
-	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	zoneIDStr := r.URL.Query().Get("zone_id")
+	if zoneIDStr == "" {
+		zoneIDStr = "all"
+	}
+
+	h.cacheMutex.RLock()
+	vehicles, ok := h.zoneVehiclesCache[zoneIDStr]
+	h.cacheMutex.RUnlock()
+
+	if !ok {
+		sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": []map[string]interface{}{}})
 		return
 	}
+
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": vehicles})
 }
 
@@ -66,18 +176,116 @@ func (h *Handler) GetVehicleByIMEI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
-	dateStr := r.URL.Query().Get("date")
-	date, err := time.Parse("2006-01-02", dateStr)
+	data, err := os.ReadFile("E:\\dataswim\\iswmmovement.json")
 	if err != nil {
-		date = time.Now()
-	}
-
-	reports, err := h.rService.GetReports(r.Context(), 0, date, date) // 0 means all vehicles
-	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to read movement data: " + err.Error()})
 		return
 	}
-	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": reports})
+	
+	var result struct {
+		Data []struct {
+			RegistrationNo string `json:"registration_no"`
+			VehicleTypes   struct {
+				VehicleTypeName string `json:"vehicle_type_name"`
+			} `json:"vehicle_types"`
+			MovementReports []struct {
+				ID                       int64   `json:"id"`
+				ReportDate               string  `json:"report_date"`
+				AverageSpeed             float64 `json:"average_speed"`
+				TotalDistance            float64 `json:"total_distance"`
+				StartTime                string  `json:"start_time"`
+				EndTime                  string  `json:"end_time"`
+				TotalActiveDuration      string  `json:"total_active_duration"`
+				TotalIdleDuration        string  `json:"total_idle_duration"`
+				TotalStoppageDuration    string  `json:"total_stoppage_duration"`
+				ActualIgnitionOnDuration string  `json:"actual_ignition_on_duration"`
+				TotalIgnitionOnDuration  string  `json:"total_ignition_on_duration"`
+				Alert                    int     `json:"alert"`
+				StartPoint               struct {
+					X float64 `json:"x"`
+					Y float64 `json:"y"`
+				} `json:"start_point"`
+				EndPoint struct {
+					X float64 `json:"x"`
+					Y float64 `json:"y"`
+				} `json:"end_point"`
+			} `json:"movement_reports"`
+		} `json:"data"`
+	}
+	
+	if err := json.Unmarshal(data, &result); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to parse movement data"})
+		return
+	}
+	
+	var flattened []map[string]interface{}
+	for _, v := range result.Data {
+		for _, rep := range v.MovementReports {
+			startPointJSON := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", rep.StartPoint.X, rep.StartPoint.Y)
+			endPointJSON := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", rep.EndPoint.X, rep.EndPoint.Y)
+			
+			flattened = append(flattened, map[string]interface{}{
+				"id":                           rep.ID,
+				"report_date":                  rep.ReportDate,
+				"registration_no":              v.RegistrationNo,
+				"vehicle_type":                 v.VehicleTypes.VehicleTypeName,
+				"start_point":                  startPointJSON,
+				"end_point":                    endPointJSON,
+				"start_time":                   rep.StartTime,
+				"end_time":                     rep.EndTime,
+				"total_active_duration":       rep.TotalActiveDuration,
+				"total_distance":              rep.TotalDistance,
+				"average_speed":               rep.AverageSpeed,
+				"actual_ignition_on_duration":  rep.ActualIgnitionOnDuration,
+				"total_ignition_on_duration":   rep.TotalIgnitionOnDuration,
+				"total_stoppage_duration":     rep.TotalStoppageDuration,
+				"total_idle_duration":         rep.TotalIdleDuration,
+				"alert":                        rep.Alert,
+				"zone_id":                      h.vehicleZones[v.RegistrationNo],
+				"ward_id":                      h.vehicleWards[v.RegistrationNo],
+			})
+		}
+	}
+	
+	// Pagination
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+	page := 1
+	limit := 10
+	if pageStr != "" {
+		fmt.Sscanf(pageStr, "%d", &page)
+	}
+	if limitStr != "" {
+		fmt.Sscanf(limitStr, "%d", &limit)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	
+	total := len(flattened)
+	offset := (page - 1) * limit
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	
+	pagedData := flattened[offset:end]
+	totalPages := (total + limit - 1) / limit
+	
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success":     true,
+		"data":        pagedData,
+		"total":       total,
+		"page":        page,
+		"limit":       limit,
+		"total_pages": totalPages,
+	})
 }
 
 func (h *Handler) CreateVehicle(w http.ResponseWriter, r *http.Request) {
@@ -261,4 +469,36 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishMetadataUpdate(r.Context(), "device", deviceID)
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+}
+
+func (h *Handler) GetZones(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile("E:\\dataswim\\iswm zone data.json")
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to read zone data: " + err.Error()})
+		return
+	}
+	
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to parse zone data"})
+		return
+	}
+	
+	sendJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) GetWards(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile("E:\\dataswim\\swimwarddata.json")
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to read ward data: " + err.Error()})
+		return
+	}
+	
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to parse ward data"})
+		return
+	}
+	
+	sendJSON(w, http.StatusOK, result)
 }

@@ -4,13 +4,14 @@ import type { Vehicle, GpsDevice, VehicleType } from "./types";
 
 interface AppState {
   vehicles: Vehicle[];
+  vehiclesByZone: Record<string, Vehicle[]>;
   devices: GpsDevice[];
   types: VehicleType[];
   loaded: boolean;
   lastLoaded: number;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  loadAll: (force?: boolean) => Promise<void>;
+  loadAll: (force?: boolean, zoneId?: string) => Promise<void>;
 
   addOrUpdateVehicle: (vehicle: Vehicle) => void;
   removeVehicle: (id: number) => void;
@@ -22,6 +23,7 @@ interface AppState {
 
 export const useStore = create<AppState>((set, get) => ({
   vehicles: [],
+  vehiclesByZone: {},
   devices: [],
   types: [],
   loaded: false,
@@ -42,8 +44,10 @@ export const useStore = create<AppState>((set, get) => ({
         api<{ data: GpsDevice[] }>("/api/devices"),
         api<{ data: VehicleType[] }>("/api/vehicle-types")
       ]);
+      
+      const newVehicles = vRes.data || [];
       set({ 
-        vehicles: vRes.data || [], 
+        vehicles: newVehicles,
         devices: dRes.data || [], 
         types: tRes.data || [], 
         loaded: true,
