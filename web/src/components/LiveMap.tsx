@@ -341,7 +341,7 @@ export default function LiveMap({ vehicles }: Props) {
       <div ref={box} className="flex-1 w-full" />
 
       {/* Overlay Panel */}
-      <div className="absolute top-4 left-4 w-[300px] max-h-[calc(100%-32px)] bg-[rgba(15,21,37,.92)] backdrop-blur-2xl rounded-xl border border-white/[.06] z-[1000] flex flex-col shadow-2xl shadow-black/40">
+      <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[300px] max-h-[calc(100%-32px)] bg-[rgba(15,21,37,.92)] backdrop-blur-2xl rounded-xl border border-white/[.06] z-[1000] flex flex-col shadow-2xl shadow-black/40">
         {/* Stats Row */}
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[.05] text-[11px] font-semibold">
           <span className="text-green-400">● {counts.running}</span>

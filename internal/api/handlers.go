@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
+	"hash/crc32"
 	"net/http"
 	"os"
 	"strconv"
@@ -49,7 +50,8 @@ func (h *Handler) LoadMappings() {
 		return
 	}
 
-	var result struct {
+	// Try parsing old structure
+	var resultOld struct {
 		Data []struct {
 			RegistrationNo string `json:"registration_no"`
 			Regions        []struct {
@@ -61,20 +63,62 @@ func (h *Handler) LoadMappings() {
 		} `json:"data"`
 	}
 
-	if err := json.Unmarshal(data, &result); err != nil {
-		fmt.Printf("Failed to parse iswmmovement.json for mappings: %v\n", err)
+	if err := json.Unmarshal(data, &resultOld); err == nil && len(resultOld.Data) > 0 && len(resultOld.Data[0].Regions) > 0 {
+		for _, v := range resultOld.Data {
+			if len(v.Regions) > 0 {
+				h.vehicleZones[v.RegistrationNo] = v.Regions[0].ID
+			}
+			if len(v.SubRegions) > 0 {
+				h.vehicleWards[v.RegistrationNo] = v.SubRegions[0].ID
+			}
+		}
+		fmt.Printf("Loaded %d vehicle-zone mappings and %d vehicle-ward mappings (Old Structure)\n", len(h.vehicleZones), len(h.vehicleWards))
 		return
 	}
 
-	for _, v := range result.Data {
-		if len(v.Regions) > 0 {
-			h.vehicleZones[v.RegistrationNo] = v.Regions[0].ID
-		}
-		if len(v.SubRegions) > 0 {
-			h.vehicleWards[v.RegistrationNo] = v.SubRegions[0].ID
-		}
+	// Try parsing new structure (assuming it's an array of vehicles)
+	var resultNew []struct {
+		Number string `json:"number"`
+		ZoneId struct {
+			ID   string `json:"_id"`
+			Name string `json:"name"`
+		} `json:"zoneId"`
 	}
-	fmt.Printf("Loaded %d vehicle-zone mappings and %d vehicle-ward mappings\n", len(h.vehicleZones), len(h.vehicleWards))
+
+	if err := json.Unmarshal(data, &resultNew); err == nil && len(resultNew) > 0 {
+		for _, v := range resultNew {
+			if v.ZoneId.ID != "" {
+				zoneID := int(crc32.ChecksumIEEE([]byte(v.ZoneId.ID)))
+				h.vehicleZones[v.Number] = zoneID
+			}
+		}
+		fmt.Printf("Loaded %d vehicle-zone mappings (New Structure)\n", len(h.vehicleZones))
+		return
+	}
+
+	// Try parsing new structure wrapped in a "data" field
+	var resultNewWrapped struct {
+		Data []struct {
+			Number string `json:"number"`
+			ZoneId struct {
+				ID   string `json:"_id"`
+				Name string `json:"name"`
+			} `json:"zoneId"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(data, &resultNewWrapped); err == nil && len(resultNewWrapped.Data) > 0 {
+		for _, v := range resultNewWrapped.Data {
+			if v.ZoneId.ID != "" {
+				zoneID := int(crc32.ChecksumIEEE([]byte(v.ZoneId.ID)))
+				h.vehicleZones[v.Number] = zoneID
+			}
+		}
+		fmt.Printf("Loaded %d vehicle-zone mappings (New Wrapped Structure)\n", len(h.vehicleZones))
+		return
+	}
+
+	fmt.Println("Failed to parse iswmmovement.json with any supported structure")
 }
 
 func (h *Handler) RebuildCache() {
@@ -482,6 +526,37 @@ func (h *Handler) GetZones(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to parse zone data"})
 		return
+	}
+	
+	// Check if it has the new structure and transform it if needed
+	if code, ok := result["code"].(float64); ok && code == 200 {
+		if dataArr, ok := result["data"].([]interface{}); ok {
+			var transformedData []map[string]interface{}
+			for _, item := range dataArr {
+				if m, ok := item.(map[string]interface{}); ok {
+					newItem := make(map[string]interface{})
+					for k, v := range m {
+						newItem[k] = v
+					}
+					
+					// Map _id to id (as int using CRC32) if _id exists and id does not
+					if idStr, ok := m["_id"].(string); ok {
+						if _, hasId := m["id"]; !hasId {
+							newItem["id"] = int(crc32.ChecksumIEEE([]byte(idStr)))
+						}
+					}
+					// Map name to region_name if name exists and region_name does not
+					if nameStr, ok := m["name"].(string); ok {
+						if _, hasRegionName := m["region_name"]; !hasRegionName {
+							newItem["region_name"] = nameStr
+						}
+					}
+					
+					transformedData = append(transformedData, newItem)
+				}
+			}
+			result["data"] = transformedData
+		}
 	}
 	
 	sendJSON(w, http.StatusOK, result)
