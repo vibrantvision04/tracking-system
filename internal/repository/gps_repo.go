@@ -25,30 +25,30 @@ func (r *GPSRepository) BulkInsert(ctx context.Context, data []decoder.AVLData) 
 	// Use pgx CopyFrom for fastest bulk inserts
 	rows := make([][]interface{}, len(data))
 	for i, d := range data {
+		ign := 0
+		if d.Ignition {
+			ign = 1
+		}
 		rows[i] = []interface{}{
 			d.IMEI,
 			d.Time,
 			d.Lat,
 			d.Lng,
-			d.Speed,
-			d.Heading,
-			d.Altitude,
-			d.Satellites,
-			d.Ignition,
-			d.IO,
-			d.HDOP,
-			d.PDOP,
+			int16(d.Speed),
+			int16(ign),
 			d.Odometer,
-			d.XAxis,
-			d.YAxis,
-			d.ZAxis,
+			float32(d.HDOP),
+			int16(d.Heading),
+			float32(d.Altitude),
+			int16(d.Satellites),
+			int16(0), // signal default 0
 		}
 	}
 
 	_, err := r.pool.CopyFrom(
 		ctx,
 		pgx.Identifier{"gps_data"},
-		[]string{"imei", "time", "lat", "lng", "speed", "heading", "altitude", "satellites", "ignition", "io", "hdop", "pdop", "odometer", "x_axis", "y_axis", "z_axis"},
+		[]string{"imei", "captured_at", "lat", "lng", "speed", "ignition", "odometer", "hdop", "direction", "altitude", "satellites", "signal"},
 		pgx.CopyFromRows(rows),
 	)
 
@@ -56,27 +56,33 @@ func (r *GPSRepository) BulkInsert(ctx context.Context, data []decoder.AVLData) 
 }
 
 func (r *GPSRepository) GetLatest(ctx context.Context, imei string) (*decoder.AVLData, error) {
-	query := `SELECT imei, time, lat, lng, speed, heading, altitude, satellites, ignition, io 
-			  FROM gps_data WHERE imei = $1 ORDER BY time DESC LIMIT 1`
+	query := `SELECT imei, captured_at, lat, lng, speed, direction, altitude, satellites, ignition 
+			  FROM gps_data WHERE imei = $1 ORDER BY captured_at DESC LIMIT 1`
 	
 	var d decoder.AVLData
+	var ign int16
+	var speed int16
+	var heading int16
 	err := r.pool.QueryRow(ctx, query, imei).Scan(
-		&d.IMEI, &d.Time, &d.Lat, &d.Lng, &d.Speed, &d.Heading, &d.Altitude, &d.Satellites, &d.Ignition, &d.IO,
+		&d.IMEI, &d.Time, &d.Lat, &d.Lng, &speed, &heading, &d.Altitude, &d.Satellites, &ign,
 	)
 	if err != nil {
 		return nil, err
 	}
+	d.Ignition = (ign == 1)
+	d.Speed = float64(speed)
+	d.Heading = int(heading)
 	return &d, nil
 }
 
 func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, end time.Time) ([]decoder.AVLData, error) {
 	query := `
-		SELECT g.imei, g.time, g.lat, g.lng, g.speed, g.heading, g.altitude, g.satellites, g.ignition, g.io
+		SELECT g.imei, g.captured_at, g.lat, g.lng, g.speed, g.direction, g.altitude, g.satellites, g.ignition
 		FROM gps_data g
 		JOIN gps_devices d ON g.imei = d.imei
 		JOIN vehicle_gps_map m ON d.id = m.device_id AND m.unassigned_at IS NULL
-		WHERE m.vehicle_id = $1 AND g.time >= $2 AND g.time < $3
-		ORDER BY g.time ASC
+		WHERE m.vehicle_id = $1 AND g.captured_at >= $2 AND g.captured_at < $3
+		ORDER BY g.captured_at ASC
 	`
 	rows, err := r.pool.Query(ctx, query, vehicleID, start, end)
 	if err != nil {
@@ -87,12 +93,18 @@ func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, 
 	var data []decoder.AVLData
 	for rows.Next() {
 		var d decoder.AVLData
+		var ign int16
+		var speed int16
+		var heading int16
 		err := rows.Scan(
-			&d.IMEI, &d.Time, &d.Lat, &d.Lng, &d.Speed, &d.Heading, &d.Altitude, &d.Satellites, &d.Ignition, &d.IO,
+			&d.IMEI, &d.Time, &d.Lat, &d.Lng, &speed, &heading, &d.Altitude, &d.Satellites, &ign,
 		)
 		if err != nil {
 			return nil, err
 		}
+		d.Ignition = (ign == 1)
+		d.Speed = float64(speed)
+		d.Heading = int(heading)
 		data = append(data, d)
 	}
 	return data, nil

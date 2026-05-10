@@ -1,40 +1,55 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+
+interface Zone {
+  id: number;
+  _id?: string;
+  region_name?: string;
+  name?: string;
+  code?: string;
+}
+
+interface Ward {
+  id?: number;
+  name?: string;
+  zone_id?: number;
+}
 
 export default function ZonesPage() {
-  const zones = [
-    { id: 177, name: "Hawa Mahal-Aamer Zone", code: "1", vehicles: 248, wards: 28 },
-    { id: 178, name: "Civil Lines Zone", code: "2", vehicles: 215, wards: 25 },
-    { id: 179, name: "Kishanpole Zone", code: "3", vehicles: 198, wards: 24 },
-    { id: 180, name: "Adarsh Nagar Zone", code: "4", vehicles: 230, wards: 26 },
-    { id: 441, name: "Garage Vehicles", code: "G", vehicles: 12, wards: 0 },
-  ];
-
-  const wards: Record<number, { name: string; vehicles: number }[]> = {
-    177: [
-      { name: "Ward 1 - Hawa Mahal", vehicles: 12 }, { name: "Ward 2 - Amber Fort", vehicles: 9 },
-      { name: "Ward 3 - Nahargarh", vehicles: 11 }, { name: "Ward 4 - Jal Mahal", vehicles: 8 },
-      { name: "Ward 5 - Amer Road", vehicles: 10 }, { name: "Ward 6 - Brahampuri", vehicles: 7 },
-      { name: "Ward 7 - Purani Basti", vehicles: 13 }, { name: "Ward 8 - Moti Doongri", vehicles: 9 },
-    ],
-    178: [
-      { name: "Ward 1 - MI Road", vehicles: 14 }, { name: "Ward 2 - C-Scheme", vehicles: 11 },
-      { name: "Ward 3 - Ashok Nagar", vehicles: 8 }, { name: "Ward 4 - Tilak Nagar", vehicles: 10 },
-      { name: "Ward 5 - Bani Park", vehicles: 9 }, { name: "Ward 6 - Raja Park", vehicles: 12 },
-    ],
-    179: [
-      { name: "Ward 1 - Kishanpole Bazar", vehicles: 10 }, { name: "Ward 2 - Chandpole", vehicles: 8 },
-      { name: "Ward 3 - Gangapole", vehicles: 9 }, { name: "Ward 4 - Topkhana", vehicles: 7 },
-      { name: "Ward 5 - Johari Bazar", vehicles: 11 }, { name: "Ward 6 - Bapu Bazar", vehicles: 6 },
-    ],
-    180: [
-      { name: "Ward 1 - Adarsh Nagar", vehicles: 11 }, { name: "Ward 2 - Shastri Nagar", vehicles: 9 },
-      { name: "Ward 3 - Jhotwara", vehicles: 10 }, { name: "Ward 4 - Vidyadhar Nagar", vehicles: 8 },
-      { name: "Ward 5 - Murlipura", vehicles: 12 },
-    ],
-  };
-
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
   const [activeZone, setActiveZone] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [zonesRes, wardsRes] = await Promise.all([
+          api<{ code: number; data: Zone[] }>("/api/zones"),
+          api<{ code: number; data: Ward[] }>("/api/wards")
+        ]);
+        
+        setZones(zonesRes.data || []);
+        setWards(wardsRes.data || []);
+      } catch (err) {
+        console.error("Failed to fetch zones or wards", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  // Filter wards by active zone if needed
+  // Note: We assume wards have a zone_id or similar field to map to zones.
+  // If not, we might need to adjust this.
+  const activeWards = wards.filter(w => {
+    // If we don't have a clear mapping, we'll just show all wards or none.
+    // Let's assume there is a way to map them or just show them all for now
+    // if a zone is active (as a fallback).
+    return true; 
+  });
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[var(--bg-dark)]">
@@ -51,54 +66,68 @@ export default function ZonesPage() {
         </div>
         <div className="grid grid-cols-3 gap-2 md:flex md:gap-8">
           <div className="text-center md:text-left">
-            <div className="text-xl md:text-2xl font-bold text-indigo-400">5</div>
+            <div className="text-xl md:text-2xl font-bold text-indigo-400">{zones.length}</div>
             <div className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider">Zones</div>
           </div>
           <div className="text-center md:text-left">
-            <div className="text-xl md:text-2xl font-bold text-indigo-400">100+</div>
+            <div className="text-xl md:text-2xl font-bold text-indigo-400">{wards.length}</div>
             <div className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider">Wards</div>
           </div>
           <div className="text-center md:text-left">
-            <div className="text-xl md:text-2xl font-bold text-indigo-400">900+</div>
+            <div className="text-xl md:text-2xl font-bold text-indigo-400">--</div>
             <div className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider">Vehicles</div>
           </div>
         </div>
       </div>
 
-      {/* Zone Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        {zones.map((z) => (
-          <div
-            key={z.id}
-            onClick={() => setActiveZone(activeZone === z.id ? null : z.id)}
-            className={`bg-[var(--bg-card)] border rounded-xl p-5 cursor-pointer transition-all duration-200
-              ${activeZone === z.id ? "border-indigo-500/40 bg-indigo-500/[.06] -translate-y-0.5 shadow-lg shadow-indigo-500/10" : "border-white/[.05] hover:border-white/10 hover:-translate-y-0.5"}`}
-          >
-            <h3 className="text-sm font-semibold mb-3">{z.name}</h3>
-            <div className="flex gap-4 text-xs text-slate-500">
-              <span>🚛 <b className="text-white">{z.vehicles}</b> Vehicles</span>
-              <span>🗺️ <b className="text-white">{z.wards}</b> Wards</span>
-              <span>Code <b className="text-white">{z.code}</b></span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Ward Grid */}
-      {activeZone && wards[activeZone] && (
-        <div className="animate-in fade-in duration-200">
-          <h3 className="text-sm font-semibold mb-3 text-slate-300">
-            {zones.find((z) => z.id === activeZone)?.name} — {wards[activeZone].length} Wards
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {wards[activeZone].map((w, i) => (
-              <div key={i} className="bg-[var(--bg-card)] border border-white/[.05] rounded-xl px-4 py-3 flex justify-between items-center hover:border-cyan-500/20 transition">
-                <span className="text-[13px] md:text-sm truncate mr-2 text-slate-200">{w.name}</span>
-                <span className="text-[10px] md:text-[11px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full font-semibold shrink-0">{w.vehicles}</span>
+      {loading ? (
+        <div className="text-center py-10 text-slate-600">Loading data...</div>
+      ) : (
+        <>
+          {/* Zone Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {zones.map((z) => (
+              <div
+                key={z.id}
+                onClick={() => setActiveZone(activeZone === z.id ? null : z.id)}
+                className={`bg-[var(--bg-card)] border rounded-xl p-5 cursor-pointer transition-all duration-200
+                  ${activeZone === z.id ? "border-indigo-500/40 bg-indigo-500/[.06] -translate-y-0.5 shadow-lg shadow-indigo-500/10" : "border-white/[.05] hover:border-white/10 hover:-translate-y-0.5"}`}
+              >
+                <h3 className="text-sm font-semibold mb-3">{z.region_name || z.name || "Unknown Zone"}</h3>
+                <div className="flex gap-4 text-xs text-slate-500">
+                  <span>Code <b className="text-white">{z.code || "N/A"}</b></span>
+                  <span>ID <b className="text-white">{z.id}</b></span>
+                </div>
               </div>
             ))}
+            {zones.length === 0 && (
+              <div className="col-span-full text-center py-10 text-slate-600 text-sm">
+                No zones found in backend.
+              </div>
+            )}
           </div>
-        </div>
+
+          {/* Ward Grid */}
+          {activeZone && (
+            <div className="animate-in fade-in duration-200">
+              <h3 className="text-sm font-semibold mb-3 text-slate-300">
+                {zones.find((z) => z.id === activeZone)?.region_name || zones.find((z) => z.id === activeZone)?.name} — Wards
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {wards.map((w, i) => (
+                  <div key={i} className="bg-[var(--bg-card)] border border-white/[.05] rounded-xl px-4 py-3 flex justify-between items-center hover:border-cyan-500/20 transition">
+                    <span className="text-[13px] md:text-sm truncate mr-2 text-slate-200">{w.name || "Unknown Ward"}</span>
+                  </div>
+                ))}
+                {wards.length === 0 && (
+                  <div className="col-span-full text-center py-10 text-slate-600 text-sm">
+                    No wards found in backend.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

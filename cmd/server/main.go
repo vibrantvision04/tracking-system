@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"gps-tracking-system/internal/api"
 	"gps-tracking-system/internal/cache"
-	"gps-tracking-system/internal/client"
 	"gps-tracking-system/internal/config"
 	"gps-tracking-system/internal/cron"
-	"gps-tracking-system/internal/decoder"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
 	"gps-tracking-system/internal/tcp"
@@ -20,7 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	cron_lib "github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -67,8 +63,11 @@ func main() {
 	// 7. Initialize Ingestion Pipeline
 	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond)
 	dispatcher := worker.NewDispatcher(rdb)
-	pipeline := worker.NewPipeline(cfg, rdb, batchWriter, locCache, dispatcher)
+	pipeline := worker.NewPipeline(cfg, rdb, locCache, dispatcher)
 	pipeline.Start()
+
+	gpsWriter := worker.NewGPSWriter(cfg, rdb, batchWriter)
+	gpsWriter.Start()
 
 	// 8. Initialize WebSockets
 	hub := ws.NewHub(rdb)
@@ -88,97 +87,8 @@ func main() {
 	c.AddFunc("30 23 * * *", reportJob.Run)
 	c.Start()
 
-	// 11. Start API Clients (EcoSense & Acceldash integration)
-	ecoClient := client.NewEcoSenseClient()
-	ecoClient.Start(context.Background())
+	// 11. Start API Clients (Removed as per blueprint optimization)
 
-	accelClient := client.NewAcceldashClient()
-	accelClient.Start(context.Background())
-
-	// Ecosense background sync
-	go func() {
-		log.Info().Msg("Starting background vehicle sync from EcoSense API...")
-		ticker := time.NewTicker(15 * time.Second)
-		for range ticker.C {
-			vehicles, err := ecoClient.FetchVehicles()
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to fetch vehicles from EcoSense API")
-				continue
-			}
-
-			for _, v := range vehicles {
-				if v.LastLocation.Latitude == 0 && v.LastLocation.Longitude == 0 {
-					continue
-				}
-
-				data := decoder.AVLData{
-					IMEI:     v.Number,
-					Time:     v.DeviceTime,
-					Lat:      v.LastLocation.Latitude,
-					Lng:      v.LastLocation.Longitude,
-					Ignition: v.Ignition,
-					Speed:    v.LastSpeed,
-				}
-
-				dataBytes, err := json.Marshal(data)
-				if err != nil {
-					continue
-				}
-
-				rdb.XAdd(context.Background(), &redis.XAddArgs{
-					Stream: "gps:stream",
-					Values: map[string]interface{}{
-						"data": string(dataBytes),
-					},
-				})
-			}
-		}
-	}()
-
-	// Acceldash background sync
-	go func() {
-		log.Info().Msg("Starting background vehicle sync from Acceldash API...")
-		ticker := time.NewTicker(15 * time.Second)
-		for range ticker.C {
-			vehicles, err := accelClient.FetchVehicles()
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to fetch vehicles from Acceldash API")
-				continue
-			}
-
-			for _, v := range vehicles {
-				if len(v.GpsDevices) == 0 || len(v.GpsDevices[0].GpsDatum) == 0 {
-					continue
-				}
-
-				datum := v.GpsDevices[0].GpsDatum[0]
-				if datum.Lat == 0 && datum.Lng == 0 {
-					continue
-				}
-
-				data := decoder.AVLData{
-					IMEI:     v.RegistrationNo, // Using Registration No as IMEI for frontend display
-					Time:     datum.Datetime,
-					Lat:      datum.Lat,
-					Lng:      datum.Lng,
-					Ignition: datum.IgnitionStatus == 1,
-					Speed:    datum.Speed,
-				}
-
-				dataBytes, err := json.Marshal(data)
-				if err != nil {
-					continue
-				}
-
-				rdb.XAdd(context.Background(), &redis.XAddArgs{
-					Stream: "gps:stream",
-					Values: map[string]interface{}{
-						"data": string(dataBytes),
-					},
-				})
-			}
-		}
-	}()
 
 	// 12. Start Servers
 	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb)

@@ -16,16 +16,14 @@ import (
 type Pipeline struct {
 	cfg         *config.Config
 	rdb         *redis.Client
-	batchWriter *BatchWriter
 	locCache    *cache.LocationCache
 	dispatcher  *Dispatcher
 }
 
-func NewPipeline(cfg *config.Config, rdb *redis.Client, bw *BatchWriter, lc *cache.LocationCache, d *Dispatcher) *Pipeline {
+func NewPipeline(cfg *config.Config, rdb *redis.Client, lc *cache.LocationCache, d *Dispatcher) *Pipeline {
 	return &Pipeline{
 		cfg:         cfg,
 		rdb:         rdb,
-		batchWriter: bw,
 		locCache:    lc,
 		dispatcher:  d,
 	}
@@ -98,10 +96,7 @@ func (p *Pipeline) processMessage(ctx context.Context, msg redis.XMessage) {
 			continue
 		}
 
-		// 1. Add to batch writer for DB insert
-		p.batchWriter.Add(data)
-
-		// 2. Update latest location cache
+		// 1. Update latest location cache
 		if err := p.locCache.SetLatest(ctx, data); err != nil {
 			log.Error().Err(err).Str("imei", data.IMEI).Msg("Failed to update location cache")
 		}

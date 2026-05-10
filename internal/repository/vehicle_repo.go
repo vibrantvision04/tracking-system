@@ -59,10 +59,10 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN LATERAL (
-			SELECT lat, lng, time 
+			SELECT lat, lng, captured_at as time 
 			FROM gps_data 
 			WHERE imei = d.imei
-			ORDER BY time DESC
+			ORDER BY captured_at DESC
 			LIMIT 1
 		) lp ON true
 	`
@@ -110,10 +110,10 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 		JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN LATERAL (
-			SELECT lat, lng, time 
+			SELECT lat, lng, captured_at as time 
 			FROM gps_data 
 			WHERE imei = d.imei
-			ORDER BY time DESC
+			ORDER BY captured_at DESC
 			LIMIT 1
 		) lp ON true
 		WHERE d.imei = $1
