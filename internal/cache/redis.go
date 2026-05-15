@@ -34,19 +34,20 @@ func InitRedis(cfg *config.Config) (*redis.Client, error) {
 
 	rdb := redis.NewClient(opts)
 
+	// Fix for Railway/Neon: Apply this BEFORE Ping, as the MISCONF error might block the Ping itself
+	log.Debug().Msg("Applying Redis MISCONF fix...")
+	_ = rdb.ConfigSet(context.Background(), "stop-writes-on-bgsave-error", "no").Err()
+	
+	// Memory optimization for 1GB RAM environment
+	_ = rdb.ConfigSet(context.Background(), "maxmemory", "256mb").Err()
+	_ = rdb.ConfigSet(context.Background(), "maxmemory-policy", "allkeys-lru").Err()
+
 	err = rdb.Ping(context.Background()).Err()
 	if err != nil {
-		log.Error().Err(err).Msg("Redis Ping failed")
+		log.Error().Err(err).Msg("Redis Ping failed after attempted fix")
 		return nil, err
 	}
 
-	// Fix for Railway/Neon: Allow writes even if RDB snapshotting fails
-	rdb.ConfigSet(context.Background(), "stop-writes-on-bgsave-error", "no")
-	
-	// Memory optimization for 1GB RAM environment
-	rdb.ConfigSet(context.Background(), "maxmemory", "256mb")
-	rdb.ConfigSet(context.Background(), "maxmemory-policy", "allkeys-lru")
-
-	log.Info().Msg("Successfully connected to Redis and applied memory optimizations")
+	log.Info().Msg("Successfully connected to Redis and applied optimizations")
 	return rdb, nil
 }
