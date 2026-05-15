@@ -37,6 +37,13 @@ func InitRedis(cfg *config.Config) (*redis.Client, error) {
 		return nil, err
 	}
 
-	log.Info().Msg("Successfully connected to Redis")
+	// Fix for Railway/Neon: Allow writes even if RDB snapshotting fails
+	rdb.ConfigSet(context.Background(), "stop-writes-on-bgsave-error", "no")
+	
+	// Memory optimization for 1GB RAM environment
+	rdb.ConfigSet(context.Background(), "maxmemory", "256mb")
+	rdb.ConfigSet(context.Background(), "maxmemory-policy", "allkeys-lru")
+
+	log.Info().Msg("Successfully connected to Redis and applied memory optimizations")
 	return rdb, nil
 }
