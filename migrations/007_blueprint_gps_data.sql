@@ -17,8 +17,6 @@ CREATE TABLE gps_data (
     PRIMARY KEY (imei, captured_at)
 );
 
--- Convert to hypertable
-SELECT create_hypertable('gps_data', 'captured_at', chunk_time_interval => INTERVAL '1 hour');
-
--- Index
+-- Using standard index instead of hypertable for Neon compatibility
 CREATE INDEX ON gps_data (imei, captured_at DESC);
+CREATE INDEX ON gps_data (captured_at DESC);

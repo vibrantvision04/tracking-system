@@ -5,14 +5,17 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-# Build the server binary
+# Build the binaries
 RUN CGO_ENABLED=0 GOOS=linux go build -o tracker-backend ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o migrate-db ./scripts/migrate_all.go
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
 COPY --from=builder /app/tracker-backend .
+COPY --from=builder /app/migrate-db .
+COPY --from=builder /app/migrations ./migrations
 
 # Expose HTTP port (Railway injects PORT automatically)
 ENV PORT=8080

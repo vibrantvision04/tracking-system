@@ -1,5 +1,5 @@
--- Enable TimescaleDB
-CREATE EXTENSION IF NOT EXISTS timescaledb;
+-- Standard PostgreSQL Setup for Neon Database
+-- Removed TimescaleDB extension and hypertable creation
 
 -- Raw GPS data table
 CREATE TABLE IF NOT EXISTS gps_data (
@@ -15,33 +15,6 @@ CREATE TABLE IF NOT EXISTS gps_data (
     io          JSONB
 );
 
--- Convert to hypertable (partitioned by week)
--- Using IF NOT EXISTS pattern is tricky with hypertables, but usually run once.
-DO $$ 
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = 'gps_data') THEN
-        PERFORM create_hypertable('gps_data', 'time', chunk_time_interval => INTERVAL '1 week');
-    END IF;
-END $$;
-
--- Compression (after 7 days)
-ALTER TABLE gps_data SET (
-    timescaledb.compress,
-    timescaledb.compress_orderby = 'time DESC',
-    timescaledb.compress_segmentby = 'imei'
-);
-
--- Only add policies if not already present (simplified here)
-DO $$ 
-BEGIN
-    PERFORM add_compression_policy('gps_data', INTERVAL '7 days');
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Compression policy might already exist';
-END $$;
-
-DO $$ 
-BEGIN
-    PERFORM add_retention_policy('gps_data', INTERVAL '90 days');
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Retention policy might already exist';
-END $$;
+-- Use standard indexes instead of timescale hypertable
+CREATE INDEX IF NOT EXISTS idx_gps_data_imei_time ON gps_data (imei, time DESC);
+CREATE INDEX IF NOT EXISTS idx_gps_data_time ON gps_data (time DESC);
