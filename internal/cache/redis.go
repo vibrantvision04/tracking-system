@@ -14,17 +14,19 @@ func InitRedis(cfg *config.Config) (*redis.Client, error) {
 	var err error
 
 	if cfg.RedisURL != "" {
+		log.Debug().Msg("Attempting to connect to Redis using REDIS_URL")
 		opts, err = redis.ParseURL(cfg.RedisURL)
 		if err != nil {
+			log.Error().Err(err).Msg("Failed to parse REDIS_URL")
 			return nil, err
 		}
 	} else {
+		log.Debug().Str("addr", cfg.RedisAddr).Msg("Attempting to connect to Redis using Addr")
 		opts = &redis.Options{
 			Addr:     cfg.RedisAddr,
 			Password: cfg.RedisPassword,
 			DB:       0,
 		}
-		// Fallback TLS for Upstash if needed
 		if cfg.RedisPassword != "" {
 			opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 		}
@@ -34,6 +36,7 @@ func InitRedis(cfg *config.Config) (*redis.Client, error) {
 
 	err = rdb.Ping(context.Background()).Err()
 	if err != nil {
+		log.Error().Err(err).Msg("Redis Ping failed")
 		return nil, err
 	}
 
