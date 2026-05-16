@@ -3,7 +3,7 @@ import { useStore } from "@/lib/store";
 import { usePathname } from "next/navigation";
 
 export default function MobileHeader() {
-  const { setSidebarOpen } = useStore();
+  const setSidebarOpen = useStore((state) => state.setSidebarOpen);
   const path = usePathname();
 
   const getTitle = () => {

@@ -228,7 +228,8 @@ const navData = [
 
 export default function Sidebar() {
   const path = usePathname();
-  const { sidebarOpen, setSidebarOpen } = useStore();
+  const sidebarOpen = useStore((state) => state.sidebarOpen);
+  const setSidebarOpen = useStore((state) => state.setSidebarOpen);
   
   // State to track active category for flyout
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -302,6 +303,7 @@ export default function Sidebar() {
                 {category.href ? (
                   <Link
                     href={category.href}
+                    prefetch={false}
                     onClick={() => {
                       setSidebarOpen(false);
                       setActiveCategory(null);
@@ -389,6 +391,7 @@ export default function Sidebar() {
                       {sub.href ? (
                         <Link
                           href={sub.href}
+                          prefetch={false}
                           onClick={() => {
                             setSidebarOpen(false);
                             setActiveCategory(null);
@@ -410,6 +413,7 @@ export default function Sidebar() {
                             <Link
                               key={item.label}
                               href={item.href}
+                              prefetch={false}
                               onClick={() => {
                                 setSidebarOpen(false);
                                 setActiveCategory(null);

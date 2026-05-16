@@ -6,7 +6,9 @@ import { useStore } from "@/lib/store";
 const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false });
 
 export default function HomePage() {
-  const { vehicles, loaded, loadAll } = useStore();
+  const vehicles = useStore((state) => state.vehicles);
+  const loaded = useStore((state) => state.loaded);
+  const loadAll = useStore((state) => state.loadAll);
 
   useEffect(() => {
     if (!loaded) loadAll();
