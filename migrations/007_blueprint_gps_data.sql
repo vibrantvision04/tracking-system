@@ -1,7 +1,5 @@
 -- Blueprint optimized gps_data table
-DROP TABLE IF EXISTS gps_data CASCADE;
-
-CREATE TABLE gps_data (
+CREATE TABLE IF NOT EXISTS gps_data (
     imei          VARCHAR(15)   NOT NULL,
     captured_at   TIMESTAMPTZ   NOT NULL,
     lat           FLOAT8        NOT NULL,

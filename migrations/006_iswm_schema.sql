@@ -49,8 +49,7 @@ ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS z_axis INT;
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS distance_delta FLOAT DEFAULT 0;
 
 -- 4. Movement Reports (Specific ISWM fields)
-DROP TABLE IF EXISTS movement_reports; -- Recreating with exact ISWM schema
-CREATE TABLE movement_reports (
+CREATE TABLE IF NOT EXISTS movement_reports (
     id                          BIGSERIAL PRIMARY KEY,
     imei                        TEXT NOT NULL,
     vehicle_id                  INT, -- Linked to vehicles
