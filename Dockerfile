@@ -21,4 +21,4 @@ COPY --from=builder /app/migrations ./migrations
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["./tracker-backend"]
+CMD ["sh", "-c", "./migrate-db && ./tracker-backend"]
