@@ -33,7 +33,13 @@ func (j *ReportJob) SetZoneWardMappings(zones, wards map[string]string) {
 }
 
 func (j *ReportJob) Run() {
-	log.Info().Msg("Starting nightly movement report generation")
+	// Default nightly run is for yesterday
+	yesterday := time.Now().AddDate(0, 0, -1)
+	j.RunForDate(yesterday)
+}
+
+func (j *ReportJob) RunForDate(date time.Time) {
+	log.Info().Str("date", date.Format("2006-01-02")).Msg("Starting movement report generation")
 	
 	ctx := context.Background()
 	vehicles, err := j.vRepo.GetAll(ctx)
@@ -42,9 +48,6 @@ func (j *ReportJob) Run() {
 		return
 	}
 
-	// Calculate for yesterday
-	yesterday := time.Now().AddDate(0, 0, -1)
-	
 	generated := 0
 	for _, v := range vehicles {
 		if v.GpsDevice == nil {
@@ -55,7 +58,7 @@ func (j *ReportJob) Run() {
 		ward := j.vehicleWards[v.RegistrationNo]
 
 		log.Debug().Int("vehicle_id", v.ID).Str("reg", v.RegistrationNo).Msg("Generating report for vehicle")
-		err := j.rService.GenerateDailyReport(ctx, v.ID, yesterday, zone, ward)
+		err := j.rService.GenerateDailyReport(ctx, v.ID, date, zone, ward)
 		if err != nil {
 			log.Error().Err(err).Int("vehicle_id", v.ID).Msg("Failed to generate report")
 		} else {
@@ -63,5 +66,5 @@ func (j *ReportJob) Run() {
 		}
 	}
 	
-	log.Info().Int("generated", generated).Int("total_vehicles", len(vehicles)).Msg("Nightly movement report generation completed")
+	log.Info().Int("generated", generated).Int("total_vehicles", len(vehicles)).Str("date", date.Format("2006-01-02")).Msg("Movement report generation completed")
 }

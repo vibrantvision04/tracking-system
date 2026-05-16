@@ -242,6 +242,25 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 		to = time.Now()
 	}
 
+	// Trigger real-time generation for "Today" if a specific vehicle is selected.
+	// This ensures the "Load" button provides absolute latest data.
+	today := time.Now().Truncate(24 * time.Hour)
+	if (from.Equal(today) || to.Equal(today) || (from.Before(today) && to.After(today))) && vehicleID > 0 {
+		v, err := h.vRepo.GetByID(r.Context(), vehicleID)
+		if err == nil {
+			zone := ""
+			ward := ""
+			if zid, ok := h.vehicleZones[v.RegistrationNo]; ok {
+				zone = strconv.Itoa(zid)
+			}
+			if wid, ok := h.vehicleWards[v.RegistrationNo]; ok {
+				ward = strconv.Itoa(wid)
+			}
+			// Update the movement_reports table with latest GPS stats for today
+			_ = h.rService.GenerateDailyReport(r.Context(), vehicleID, time.Now(), zone, ward)
+		}
+	}
+
 	reports, total, err := h.rService.GetReports(r.Context(), vehicleID, from, to, limit, offset)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

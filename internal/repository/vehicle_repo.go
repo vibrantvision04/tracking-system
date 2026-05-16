@@ -141,6 +141,51 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 	return &v, nil
 }
 
+func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, error) {
+	query := `
+		SELECT 
+			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
+			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
+			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
+			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.time
+		FROM vehicles v
+		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
+		LEFT JOIN gps_devices d ON m.device_id = d.id
+		LEFT JOIN LATERAL (
+			SELECT lat, lng, captured_at as time 
+			FROM gps_data 
+			WHERE imei = d.imei
+			ORDER BY captured_at DESC
+			LIMIT 1
+		) lp ON true
+		WHERE v.id = $1
+	`
+	var v Vehicle
+	var vt VehicleType
+	var d GpsDevice
+	var vTypeId *int
+	
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
+		&vt.Name, &vt.IconColor,
+		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
+		&v.LastLat, &v.LastLng, &v.LastTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	
+	v.VehicleTypeID = vTypeId
+	v.VehicleType = &vt
+	if d.ID > 0 {
+		v.GpsDevice = &d
+	}
+	v.Status = "offline"
+	
+	return &v, nil
+}
+
 func (r *VehicleRepository) GetTypes(ctx context.Context) ([]VehicleType, error) {
 	query := `SELECT id, vehicle_type_name, icon_color FROM vehicle_types_iswm`
 	rows, err := r.pool.Query(ctx, query)
