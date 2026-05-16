@@ -51,9 +51,64 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	var idleSec, stoppageSec, activeSec, ignitionOnSec int
 	var stoppagesCount int
 
+	// Pre-identify stoppage segments (speed < 5 at a fixed place for >= 60 seconds)
+	// Stationary GPS drift is tolerated up to 30 meters.
+	inStoppage := make([]bool, len(validData))
+	stoppagesCount = 0
+	
+	const minStoppageDuration = 60.0 // 60 seconds
+	const maxStoppageRadiusKm = 0.03 // 30 meters
+
+	stoppageStartIndex := -1
+	for i := 0; i < len(validData); i++ {
+		if validData[i].Speed < 5 {
+			if stoppageStartIndex == -1 {
+				stoppageStartIndex = i
+			} else {
+				// Check if current point is still within the stoppage radius from the start point
+				distFromStart := utils.Haversine(
+					validData[stoppageStartIndex].Lat, validData[stoppageStartIndex].Lng,
+					validData[i].Lat, validData[i].Lng,
+				)
+				if distFromStart > maxStoppageRadiusKm {
+					// Moved away from the fixed place. Evaluate previous segment.
+					dur := validData[i-1].Time.Sub(validData[stoppageStartIndex].Time).Seconds()
+					if dur >= minStoppageDuration {
+						stoppagesCount++
+						for k := stoppageStartIndex; k < i; k++ {
+							inStoppage[k] = true
+						}
+					}
+					// Start a new potential stoppage segment from this point
+					stoppageStartIndex = i
+				}
+			}
+		} else {
+			// Vehicle is moving
+			if stoppageStartIndex != -1 {
+				dur := validData[i-1].Time.Sub(validData[stoppageStartIndex].Time).Seconds()
+				if dur >= minStoppageDuration {
+					stoppagesCount++
+					for k := stoppageStartIndex; k < i; k++ {
+						inStoppage[k] = true
+					}
+				}
+				stoppageStartIndex = -1
+			}
+		}
+	}
+	if stoppageStartIndex != -1 {
+		dur := validData[len(validData)-1].Time.Sub(validData[stoppageStartIndex].Time).Seconds()
+		if dur >= minStoppageDuration {
+			stoppagesCount++
+			for k := stoppageStartIndex; k < len(validData); k++ {
+				inStoppage[k] = true
+			}
+		}
+	}
+
 	// State tracking
 	var lastPoint *decoder.AVLData
-	var stoppageStartTime *time.Time
 
 	for i, p := range validData {
 		if i > 0 {
@@ -71,29 +126,23 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 
 				if isIgnitionOn {
 					ignitionOnSec += int(duration)
-					if p.Speed > 5 {
-						activeSec += int(duration)
-					} else {
-						idleSec += int(duration)
-					}
-				} else {
-					stoppageSec += int(duration)
 				}
-			}
-		}
 
-		// Calculate Stoppage Count (stopped for more than 120 seconds)
-		if p.Speed < 5 {
-			if stoppageStartTime == nil {
-				stoppageStartTime = &validData[i].Time
-			}
-		} else {
-			if stoppageStartTime != nil {
-				dur := p.Time.Sub(*stoppageStartTime).Seconds()
-				if dur >= 120 {
-					stoppagesCount++
+				// If both endpoints of the interval are part of a stoppage segment,
+				// count this interval as stoppage duration.
+				if inStoppage[i] && inStoppage[i-1] {
+					stoppageSec += int(duration)
+				} else {
+					if isIgnitionOn {
+						if p.Speed > 5 {
+							activeSec += int(duration)
+						} else {
+							idleSec += int(duration)
+						}
+					} else {
+						stoppageSec += int(duration)
+					}
 				}
-				stoppageStartTime = nil
 			}
 		}
 
@@ -101,14 +150,6 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 			maxSpeed = p.Speed
 		}
 		lastPoint = &validData[i]
-	}
-
-	// Catch last stoppage if it was ongoing
-	if stoppageStartTime != nil {
-		dur := validData[len(validData)-1].Time.Sub(*stoppageStartTime).Seconds()
-		if dur >= 120 {
-			stoppagesCount++
-		}
 	}
 
 	// Average speed = total distance / active hours (not mean of speed readings)
