@@ -40,7 +40,7 @@ func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	return R * c
 }
 
-func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, date time.Time) error {
+func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, date time.Time, zone, ward string) error {
 	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	end := start.Add(24 * time.Hour)
 
@@ -66,19 +66,21 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	var maxSpeed float64
 	var sumSpeed float64
 	var idleSec, stoppageSec, activeSec, ignitionOnSec int
+	var stoppagesCount int
 	
 	// State tracking
 	var lastPoint *decoder.AVLData
+	var stoppageStartTime *time.Time
 	
 	for i, p := range validData {
 		if i > 0 {
 			dist := haversine(lastPoint.Lat, lastPoint.Lng, p.Lat, p.Lng)
 			totalDistance += dist
 			
-			// Ensure duration is reasonable (e.g. less than 1 hour between points to avoid huge jumps)
+			// Ensure duration is reasonable
 			duration := p.Time.Sub(lastPoint.Time).Seconds()
 			if duration > 0 && duration < 3600 {
-				isIgnitionOn := p.Ignition || p.Speed > 5 // Fallback to speed if ignition wire is disconnected
+				isIgnitionOn := p.Ignition || p.Speed > 5
 				
 				if isIgnitionOn {
 					ignitionOnSec += int(duration)
@@ -92,6 +94,21 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 				}
 			}
 		}
+
+		// Calculate Stoppage Count (stopped for more than 120 seconds)
+		if p.Speed < 5 {
+			if stoppageStartTime == nil {
+				stoppageStartTime = &validData[i].Time
+			}
+		} else {
+			if stoppageStartTime != nil {
+				dur := p.Time.Sub(*stoppageStartTime).Seconds()
+				if dur >= 120 {
+					stoppagesCount++
+				}
+				stoppageStartTime = nil
+			}
+		}
 		
 		if p.Speed > maxSpeed {
 			maxSpeed = p.Speed
@@ -100,12 +117,25 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		lastPoint = &validData[i]
 	}
 
-	avgSpeed := sumSpeed / float64(len(validData))
+	// Catch last stoppage if it was ongoing
+	if stoppageStartTime != nil {
+		dur := validData[len(validData)-1].Time.Sub(*stoppageStartTime).Seconds()
+		if dur >= 120 {
+			stoppagesCount++
+		}
+	}
+
+	avgSpeed := 0.0
+	if len(validData) > 0 {
+		avgSpeed = sumSpeed / float64(len(validData))
+	}
 
 	report := &repository.MovementReport{
 		VehicleID:                 vehicleID,
 		IMEI:                      validData[0].IMEI,
 		ReportDate:                start,
+		Zone:                      zone,
+		Ward:                      ward,
 		AverageSpeed:              avgSpeed,
 		TotalDistance:             totalDistance,
 		StartTime:                 validData[0].Time,
@@ -113,6 +143,7 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		TotalActiveDuration:       formatDuration(activeSec),
 		TotalIdleDuration:         formatDuration(idleSec),
 		TotalStoppageDuration:     formatDuration(stoppageSec),
+		StoppagesCount:            stoppagesCount,
 		ActualIgnitionOnDuration:  formatDuration(ignitionOnSec),
 		TotalIgnitionOnDuration:   formatDuration(ignitionOnSec),
 		MaxSpeed:                  maxSpeed,
@@ -123,16 +154,26 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	return s.repo.Upsert(ctx, report)
 }
 
-func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int) ([]repository.MovementReport, int, error) {
+func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int, zones, wards map[string]int) ([]repository.MovementReport, int, error) {
 	// Dynamically generate reports for the requested days to ensure real-time accuracy
 	vehicles, err := s.vRepo.GetAll(ctx)
 	if err == nil {
 		for _, v := range vehicles {
 			if v.GpsDevice != nil {
+				// Get zone/ward names if possible (we only have IDs in maps)
+				// For now, we'll just pass the IDs as strings
+				zone := ""
+				if zid, ok := zones[v.RegistrationNo]; ok {
+					zone = fmt.Sprintf("Zone %d", zid)
+				}
+				ward := ""
+				if wid, ok := wards[v.RegistrationNo]; ok {
+					ward = fmt.Sprintf("Ward %d", wid)
+				}
+
 				// Iterate through each day in the range
 				for d := from; !d.After(to); d = d.Add(24 * time.Hour) {
-					// We ignore errors here since some days/vehicles might legitimately have no data
-					s.GenerateDailyReport(ctx, v.ID, d)
+					s.GenerateDailyReport(ctx, v.ID, d, zone, ward)
 				}
 			}
 		}

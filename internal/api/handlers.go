@@ -220,111 +220,38 @@ func (h *Handler) GetVehicleByIMEI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile("E:\\dataswim\\iswmmovement.json")
-	if err != nil {
-		sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": []interface{}{}, "total": 0, "page": 1, "limit": 10, "total_pages": 0})
-		return
-	}
-	
-	var result struct {
-		Data []struct {
-			RegistrationNo string `json:"registration_no"`
-			VehicleTypes   struct {
-				VehicleTypeName string `json:"vehicle_type_name"`
-			} `json:"vehicle_types"`
-			MovementReports []struct {
-				ID                       int64   `json:"id"`
-				ReportDate               string  `json:"report_date"`
-				AverageSpeed             float64 `json:"average_speed"`
-				TotalDistance            float64 `json:"total_distance"`
-				StartTime                string  `json:"start_time"`
-				EndTime                  string  `json:"end_time"`
-				TotalActiveDuration      string  `json:"total_active_duration"`
-				TotalIdleDuration        string  `json:"total_idle_duration"`
-				TotalStoppageDuration    string  `json:"total_stoppage_duration"`
-				ActualIgnitionOnDuration string  `json:"actual_ignition_on_duration"`
-				TotalIgnitionOnDuration  string  `json:"total_ignition_on_duration"`
-				Alert                    int     `json:"alert"`
-				StartPoint               struct {
-					X float64 `json:"x"`
-					Y float64 `json:"y"`
-				} `json:"start_point"`
-				EndPoint struct {
-					X float64 `json:"x"`
-					Y float64 `json:"y"`
-				} `json:"end_point"`
-			} `json:"movement_reports"`
-		} `json:"data"`
-	}
-	
-	if err := json.Unmarshal(data, &result); err != nil {
-		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to parse movement data"})
-		return
-	}
-	
-	var flattened []map[string]interface{}
-	for _, v := range result.Data {
-		for _, rep := range v.MovementReports {
-			startPointJSON := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", rep.StartPoint.X, rep.StartPoint.Y)
-			endPointJSON := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", rep.EndPoint.X, rep.EndPoint.Y)
-			
-			flattened = append(flattened, map[string]interface{}{
-				"id":                           rep.ID,
-				"report_date":                  rep.ReportDate,
-				"registration_no":              v.RegistrationNo,
-				"vehicle_type":                 v.VehicleTypes.VehicleTypeName,
-				"start_point":                  startPointJSON,
-				"end_point":                    endPointJSON,
-				"start_time":                   rep.StartTime,
-				"end_time":                     rep.EndTime,
-				"total_active_duration":       rep.TotalActiveDuration,
-				"total_distance":              rep.TotalDistance,
-				"average_speed":               rep.AverageSpeed,
-				"actual_ignition_on_duration":  rep.ActualIgnitionOnDuration,
-				"total_ignition_on_duration":   rep.TotalIgnitionOnDuration,
-				"total_stoppage_duration":     rep.TotalStoppageDuration,
-				"total_idle_duration":         rep.TotalIdleDuration,
-				"alert":                        rep.Alert,
-				"zone_id":                      h.vehicleZones[v.RegistrationNo],
-				"ward_id":                      h.vehicleWards[v.RegistrationNo],
-			})
-		}
-	}
-	
-	// Pagination
+	vehicleIDStr := r.URL.Query().Get("vehicle_id")
+	fromStr := r.URL.Query().Get("from")
+	toStr := r.URL.Query().Get("to")
 	pageStr := r.URL.Query().Get("page")
 	limitStr := r.URL.Query().Get("limit")
-	page := 1
-	limit := 10
-	if pageStr != "" {
-		fmt.Sscanf(pageStr, "%d", &page)
-	}
-	if limitStr != "" {
-		fmt.Sscanf(limitStr, "%d", &limit)
-	}
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 10
-	}
-	
-	total := len(flattened)
+
+	vehicleID, _ := strconv.Atoi(vehicleIDStr)
+	page, _ := strconv.Atoi(pageStr)
+	limit, _ := strconv.Atoi(limitStr)
+	if page < 1 { page = 1 }
+	if limit < 1 { limit = 10 }
 	offset := (page - 1) * limit
-	if offset > total {
-		offset = total
+
+	from, err := time.Parse("2006-01-02", fromStr)
+	if err != nil {
+		from = time.Now().AddDate(0, 0, -7)
 	}
-	end := offset + limit
-	if end > total {
-		end = total
+	to, err := time.Parse("2006-01-02", toStr)
+	if err != nil {
+		to = time.Now()
 	}
-	
-	pagedData := flattened[offset:end]
+
+	reports, total, err := h.rService.GetReports(r.Context(), vehicleID, from, to, limit, offset, h.vehicleZones, h.vehicleWards)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
 	totalPages := (total + limit - 1) / limit
-	
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success":     true,
-		"data":        pagedData,
+		"data":        reports,
 		"total":       total,
 		"page":        page,
 		"limit":       limit,

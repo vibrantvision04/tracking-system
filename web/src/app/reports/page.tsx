@@ -7,6 +7,8 @@ interface MovementReport {
   report_date: string;
   registration_no: string;
   vehicle_type: string;
+  zone: string;
+  ward: string;
   start_point: string;
   end_point: string;
   start_time: string;
@@ -18,9 +20,7 @@ interface MovementReport {
   total_ignition_on_duration: string;
   total_stoppage_duration: string;
   total_idle_duration: string;
-  alert: number;
-  zone_id: number;
-  ward_id: number;
+  stoppages_count: number;
 }
 
 interface ReportsResponse {
@@ -44,7 +44,7 @@ export default function ReportsPage() {
 
   const load = (d: string, p: number) => {
     setLoading(true);
-    api<ReportsResponse>(`/api/reports?date=${d}&page=${p}&limit=${limit}`)
+    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}`)
       .then((r) => {
         setReports(r.data || []);
         setTotalPages(r.total_pages || 1);
@@ -84,16 +84,6 @@ export default function ReportsPage() {
     } catch (e) {
       return dateStr;
     }
-  };
-
-  const getZoneName = (id: number) => {
-    const zone = zones.find((z: any) => z.id === id);
-    return zone ? zone.region_name : "-";
-  };
-
-  const getWardName = (id: number) => {
-    const ward = wards.find((w: any) => w.id === id);
-    return ward ? ward.region_name : "-";
   };
 
   return (
@@ -155,27 +145,27 @@ export default function ReportsPage() {
         {/* Table */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+            <table className="w-full text-left text-[10px]">
+              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase tracking-tighter">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">S. NO.</th>
-                  <th className="px-4 py-3 font-semibold">DATE</th>
-                  <th className="px-4 py-3 font-semibold">VEHICLE(S) RTO</th>
-                  <th className="px-4 py-3 font-semibold">VEHICLE TYPE</th>
-                  <th className="px-4 py-3 font-semibold">ZONE</th>
-                  <th className="px-4 py-3 font-semibold">WARD</th>
-                  <th className="px-4 py-3 font-semibold">START POINT</th>
-                  <th className="px-4 py-3 font-semibold">END POINT</th>
-                  <th className="px-4 py-3 font-semibold">START TIME</th>
-                  <th className="px-4 py-3 font-semibold">END TIME</th>
-                  <th className="px-4 py-3 font-semibold">ACTIVE HOURS</th>
-                  <th className="px-4 py-3 font-semibold">TOTAL DISTANCE (KM)</th>
-                  <th className="px-4 py-3 font-semibold">AVERAGE SPEED (KM/H)</th>
-                  <th className="px-4 py-3 font-semibold">ACTUAL IGNITION ON</th>
-                  <th className="px-4 py-3 font-semibold">TOTAL IGNITION ON</th>
-                  <th className="px-4 py-3 font-semibold">STOPPAGE DURATION</th>
-                  <th className="px-4 py-3 font-semibold">IDLE DURATION</th>
-                  <th className="px-4 py-3 font-semibold">STOPPAGES</th>
+                  <th className="px-3 py-3 font-bold">S. NO.</th>
+                  <th className="px-3 py-3 font-bold">DATE</th>
+                  <th className="px-3 py-3 font-bold">VEHICLE(S) RTO</th>
+                  <th className="px-3 py-3 font-bold">VEHICLE TYPE</th>
+                  <th className="px-3 py-3 font-bold">ZONE</th>
+                  <th className="px-3 py-3 font-bold">WARD</th>
+                  <th className="px-3 py-3 font-bold">START POINT</th>
+                  <th className="px-3 py-3 font-bold">END POINT</th>
+                  <th className="px-3 py-3 font-bold">START TIME</th>
+                  <th className="px-3 py-3 font-bold">END TIME</th>
+                  <th className="px-3 py-3 font-bold">ACTIVE HOURS</th>
+                  <th className="px-3 py-3 font-bold text-center">TOTAL DISTANCE (KM)</th>
+                  <th className="px-3 py-3 font-bold text-center">AVERAGE SPEED (KM/H)</th>
+                  <th className="px-3 py-3 font-bold">ACTUAL IGNITION ON</th>
+                  <th className="px-3 py-3 font-bold">TOTAL IGNITION ON</th>
+                  <th className="px-3 py-3 font-bold">STOPPAGE DURATION</th>
+                  <th className="px-3 py-3 font-bold">IDLE DURATION</th>
+                  <th className="px-3 py-3 font-bold text-center">STOPPAGES</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -190,24 +180,24 @@ export default function ReportsPage() {
                 ) : (
                   reports.map((r, i) => (
                     <tr key={r.id} className="hover:bg-slate-50 transition">
-                      <td className="px-4 py-3">{(page - 1) * limit + i + 1}</td>
-                      <td className="px-4 py-3">{new Date(r.report_date).toLocaleDateString()}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{r.registration_no}</td>
-                      <td className="px-4 py-3">{r.vehicle_type || "Vehicle"}</td>
-                      <td className="px-4 py-3">{getZoneName(r.zone_id)}</td>
-                      <td className="px-4 py-3">{getWardName(r.ward_id)}</td>
-                      <td className="px-4 py-3 text-indigo-600 font-mono">{formatCoord(r.start_point)}</td>
-                      <td className="px-4 py-3 text-indigo-600 font-mono">{formatCoord(r.end_point)}</td>
-                      <td className="px-4 py-3">{formatTime(r.start_time)}</td>
-                      <td className="px-4 py-3">{formatTime(r.end_time)}</td>
-                      <td className="px-4 py-3 font-mono">{r.total_active_duration}</td>
-                      <td className="px-4 py-3 font-mono font-medium text-slate-900">{r.total_distance.toFixed(2)}</td>
-                      <td className="px-4 py-3 font-mono">{r.average_speed.toFixed(1)}</td>
-                      <td className="px-4 py-3 font-mono">{r.actual_ignition_on_duration}</td>
-                      <td className="px-4 py-3 font-mono">{r.total_ignition_on_duration}</td>
-                      <td className="px-4 py-3 font-mono">{r.total_stoppage_duration}</td>
-                      <td className="px-4 py-3 font-mono">{r.total_idle_duration}</td>
-                      <td className="px-4 py-3">{r.alert || 0}</td>
+                      <td className="px-3 py-3">{(page - 1) * limit + i + 1}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{new Date(r.report_date).toLocaleDateString()}</td>
+                      <td className="px-3 py-3 font-bold text-slate-900 whitespace-nowrap">{r.registration_no}</td>
+                      <td className="px-3 py-3">{r.vehicle_type || "Vehicle"}</td>
+                      <td className="px-3 py-3">{r.zone || "-"}</td>
+                      <td className="px-3 py-3">{r.ward || "-"}</td>
+                      <td className="px-3 py-3 text-indigo-600 font-mono whitespace-nowrap">{formatCoord(r.start_point)}</td>
+                      <td className="px-3 py-3 text-indigo-600 font-mono whitespace-nowrap">{formatCoord(r.end_point)}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{formatTime(r.start_time)}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{formatTime(r.end_time)}</td>
+                      <td className="px-3 py-3 font-mono">{r.total_active_duration}</td>
+                      <td className="px-3 py-3 font-mono font-bold text-slate-900 text-center">{r.total_distance.toFixed(2)}</td>
+                      <td className="px-3 py-3 font-mono text-center">{r.average_speed.toFixed(1)}</td>
+                      <td className="px-3 py-3 font-mono">{r.actual_ignition_on_duration}</td>
+                      <td className="px-3 py-3 font-mono">{r.total_ignition_on_duration}</td>
+                      <td className="px-3 py-3 font-mono">{r.total_stoppage_duration}</td>
+                      <td className="px-3 py-3 font-mono">{r.total_idle_duration}</td>
+                      <td className="px-3 py-3 font-bold text-center text-indigo-600">{r.stoppages_count}</td>
                     </tr>
                   ))
                 )}
