@@ -40,11 +40,14 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [zones, setZones] = useState<any[]>([]);
   const [wards, setWards] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [selectedVehicle, setSelectedVehicle] = useState<string>("");
   const limit = 10;
 
-  const load = (d: string, p: number) => {
+  const load = (d: string, p: number, vId: string) => {
     setLoading(true);
-    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}`)
+    const vParam = vId ? `&vehicle_id=${vId}` : "";
+    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}${vParam}`)
       .then((r) => {
         setReports(r.data || []);
         setTotalPages(r.total_pages || 1);
@@ -55,8 +58,8 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    load(date, page);
-  }, [date, page]);
+    load(date, page, selectedVehicle);
+  }, [date, page, selectedVehicle]);
 
   useEffect(() => {
     api<{success: boolean, data: any[]}>("/api/zones")
@@ -65,6 +68,10 @@ export default function ReportsPage() {
       
     api<{success: boolean, data: any[]}>("/api/wards")
       .then((r) => setWards(r.data || []))
+      .catch(() => {});
+
+    api<{success: boolean, data: any[]}>("/api/vehicles")
+      .then((r) => setVehicles(r.data || []))
       .catch(() => {});
   }, []);
 
@@ -114,8 +121,15 @@ export default function ReportsPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-2">Vehicle(s) RTO</label>
-              <select className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500">
-                <option>Select Vehicle</option>
+              <select 
+                value={selectedVehicle}
+                onChange={(e) => setSelectedVehicle(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"
+              >
+                <option value="">All Vehicles</option>
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>{v.registration_no}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -133,7 +147,7 @@ export default function ReportsPage() {
             </div>
             <div>
               <button 
-                onClick={() => load(date, 1)}
+                onClick={() => load(date, 1, selectedVehicle)}
                 className="px-6 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition shadow-sm shadow-green-600/20"
               >
                 Load
