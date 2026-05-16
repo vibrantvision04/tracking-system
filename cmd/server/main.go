@@ -17,7 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	cron_lib "github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -82,10 +81,7 @@ func main() {
 	}()
 
 	// 10. Start Cron Scheduler
-	reportJob := cron.NewReportJob(vRepo, rService)
-	c := cron_lib.New()
-	c.AddFunc("30 23 * * *", reportJob.Run)
-	c.Start()
+	cron.StartScheduler(cfg, rService, vRepo)
 
 	// 11. Start API Clients (Removed as per blueprint optimization)
 

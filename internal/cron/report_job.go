@@ -36,7 +36,7 @@ func (j *ReportJob) Run() {
 	
 	for _, v := range vehicles {
 		log.Debug().Int("vehicle_id", v.ID).Msg("Generating report for vehicle")
-		err := j.rService.GenerateDailyReport(ctx, v.ID, yesterday)
+		err := j.rService.GenerateDailyReport(ctx, v.ID, yesterday, "", "")
 		if err != nil {
 			log.Error().Err(err).Int("vehicle_id", v.ID).Msg("Failed to generate report")
 		}
