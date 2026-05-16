@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"gps-tracking-system/internal/decoder"
+	"gps-tracking-system/internal/service"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
 
 type Dispatcher struct {
-	rdb *redis.Client
-	// Add geofence engine here later
+	rdb         *redis.Client
+	tripService *service.TripService
 }
 
-func NewDispatcher(rdb *redis.Client) *Dispatcher {
-	return &Dispatcher{rdb: rdb}
+func NewDispatcher(rdb *redis.Client, ts *service.TripService) *Dispatcher {
+	return &Dispatcher{rdb: rdb, tripService: ts}
 }
 
 func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
@@ -39,6 +40,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
 	// 2. Geofence check (To be implemented in Phase 4)
 	// d.geofenceEngine.Check(data)
 	
-	// 3. Trip detection (To be implemented in Phase 4)
-	// d.tripService.Process(data)
+	// 3. Trip detection
+	d.tripService.Process(ctx, data)
 }

@@ -242,7 +242,7 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 		to = time.Now()
 	}
 
-	reports, total, err := h.rService.GetReports(r.Context(), vehicleID, from, to, limit, offset, h.vehicleZones, h.vehicleWards)
+	reports, total, err := h.rService.GetReports(r.Context(), vehicleID, from, to, limit, offset)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

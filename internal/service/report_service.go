@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"gps-tracking-system/internal/decoder"
 	"gps-tracking-system/internal/repository"
-	"math"
+	"gps-tracking-system/internal/utils"
 	"time"
 )
 
@@ -23,22 +23,6 @@ func NewReportService(repo *repository.ReportRepository, gRepo *repository.GPSRe
 	}
 }
 
-// Haversine calculates the distance between two points in meters.
-func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
-	const R = 6371000 // Earth radius in meters
-	
-	phi1 := lat1 * math.Pi / 180
-	phi2 := lat2 * math.Pi / 180
-	dphi := (lat2 - lat1) * math.Pi / 180
-	dlambda := (lon2 - lon1) * math.Pi / 180
-
-	a := math.Sin(dphi/2)*math.Sin(dphi/2) +
-		math.Cos(phi1)*math.Cos(phi2)*
-			math.Sin(dlambda/2)*math.Sin(dlambda/2)
-	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-
-	return R * c
-}
 
 func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, date time.Time, zone, ward string) error {
 	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
@@ -64,24 +48,27 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 
 	var totalDistance float64
 	var maxSpeed float64
-	var sumSpeed float64
 	var idleSec, stoppageSec, activeSec, ignitionOnSec int
 	var stoppagesCount int
-	
+
 	// State tracking
 	var lastPoint *decoder.AVLData
 	var stoppageStartTime *time.Time
-	
+
 	for i, p := range validData {
 		if i > 0 {
-			dist := haversine(lastPoint.Lat, lastPoint.Lng, p.Lat, p.Lng)
-			totalDistance += dist
-			
-			// Ensure duration is reasonable
 			duration := p.Time.Sub(lastPoint.Time).Seconds()
+
+			// Only accumulate distance if the transition passes validation
+			if utils.IsValidGPSTransition(*lastPoint, p) {
+				dist := utils.Haversine(lastPoint.Lat, lastPoint.Lng, p.Lat, p.Lng)
+				totalDistance += dist
+			}
+
+			// Ensure duration is reasonable for time-based calculations
 			if duration > 0 && duration < 3600 {
 				isIgnitionOn := p.Ignition || p.Speed > 5
-				
+
 				if isIgnitionOn {
 					ignitionOnSec += int(duration)
 					if p.Speed > 5 {
@@ -109,11 +96,10 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 				stoppageStartTime = nil
 			}
 		}
-		
+
 		if p.Speed > maxSpeed {
 			maxSpeed = p.Speed
 		}
-		sumSpeed += p.Speed
 		lastPoint = &validData[i]
 	}
 
@@ -125,9 +111,11 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		}
 	}
 
+	// Average speed = total distance / active hours (not mean of speed readings)
 	avgSpeed := 0.0
-	if len(validData) > 0 {
-		avgSpeed = sumSpeed / float64(len(validData))
+	if activeSec > 0 {
+		activeHours := float64(activeSec) / 3600.0
+		avgSpeed = totalDistance / activeHours
 	}
 
 	report := &repository.MovementReport{
@@ -137,7 +125,7 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		Zone:                      zone,
 		Ward:                      ward,
 		AverageSpeed:              avgSpeed,
-		TotalDistance:             totalDistance,
+		TotalDistance:              totalDistance,
 		StartTime:                 validData[0].Time,
 		EndTime:                   validData[len(validData)-1].Time,
 		TotalActiveDuration:       formatDuration(activeSec),
@@ -154,43 +142,11 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	return s.repo.Upsert(ctx, report)
 }
 
-func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int, zones, wards map[string]int) ([]repository.MovementReport, int, error) {
-	// Dynamically generate reports for the requested days to ensure real-time accuracy
-	vehicles, err := s.vRepo.GetAll(ctx)
-	if err == nil {
-		for _, v := range vehicles {
-			if v.GpsDevice != nil {
-				// Get zone/ward names if possible (we only have IDs in maps)
-				// For now, we'll just pass the IDs as strings
-				zone := ""
-				if zid, ok := zones[v.RegistrationNo]; ok {
-					zone = fmt.Sprintf("Zone %d", zid)
-				}
-				ward := ""
-				if wid, ok := wards[v.RegistrationNo]; ok {
-					ward = fmt.Sprintf("Ward %d", wid)
-				}
-
-				// Iterate through each day in the range
-				for d := from; !d.After(to); d = d.Add(24 * time.Hour) {
-					s.GenerateDailyReport(ctx, v.ID, d, zone, ward)
-				}
-			}
-		}
-	}
-
+// GetReports retrieves pre-computed reports from the movement_reports table.
+// Reports are generated exclusively by the nightly cron job, NOT on each API call.
+// This ensures consistent, fast responses regardless of GPS data volume.
+func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int) ([]repository.MovementReport, int, error) {
 	return s.repo.Get(ctx, vehicleID, from, to, limit, offset)
-}
-
-func haversine(lat1, lon1, lat2, lon2 float64) float64 {
-	const R = 6371 // km
-	dLat := (lat2 - lat1) * (math.Pi / 180)
-	dLon := (lon2 - lon1) * (math.Pi / 180)
-	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
-		math.Cos(lat1*(math.Pi/180))*math.Cos(lat2*(math.Pi/180))*
-			math.Sin(dLon/2)*math.Sin(dLon/2)
-	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-	return R * c
 }
 
 func formatDuration(seconds int) string {

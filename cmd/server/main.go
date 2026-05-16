@@ -52,16 +52,18 @@ func main() {
 	gpsRepo := repository.NewGPSRepository(db)
 	vRepo := repository.NewVehicleRepository(db)
 	rRepo := repository.NewReportRepository(db)
+	tRepo := repository.NewTripRepository(db)
 
 	// 5. Initialize Caches
 	locCache := cache.NewLocationCache(rdb)
 
 	// 6. Initialize Services
 	rService := service.NewReportService(rRepo, gpsRepo, vRepo)
+	tService := service.NewTripService(tRepo, vRepo, gpsRepo, rdb)
 
 	// 7. Initialize Ingestion Pipeline
 	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond)
-	dispatcher := worker.NewDispatcher(rdb)
+	dispatcher := worker.NewDispatcher(rdb, tService)
 	pipeline := worker.NewPipeline(cfg, rdb, locCache, dispatcher)
 	pipeline.Start()
 

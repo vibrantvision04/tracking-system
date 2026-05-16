@@ -10,15 +10,26 @@ import (
 )
 
 type ReportJob struct {
-	vRepo    *repository.VehicleRepository
-	rService *service.ReportService
+	vRepo        *repository.VehicleRepository
+	rService     *service.ReportService
+	vehicleZones map[string]string
+	vehicleWards map[string]string
 }
 
 func NewReportJob(vRepo *repository.VehicleRepository, rService *service.ReportService) *ReportJob {
 	return &ReportJob{
-		vRepo:    vRepo,
-		rService: rService,
+		vRepo:        vRepo,
+		rService:     rService,
+		vehicleZones: make(map[string]string),
+		vehicleWards: make(map[string]string),
 	}
+}
+
+// SetZoneWardMappings allows the caller to provide zone/ward name mappings
+// keyed by vehicle registration number.
+func (j *ReportJob) SetZoneWardMappings(zones, wards map[string]string) {
+	j.vehicleZones = zones
+	j.vehicleWards = wards
 }
 
 func (j *ReportJob) Run() {
@@ -34,13 +45,23 @@ func (j *ReportJob) Run() {
 	// Calculate for yesterday
 	yesterday := time.Now().AddDate(0, 0, -1)
 	
+	generated := 0
 	for _, v := range vehicles {
-		log.Debug().Int("vehicle_id", v.ID).Msg("Generating report for vehicle")
-		err := j.rService.GenerateDailyReport(ctx, v.ID, yesterday, "", "")
+		if v.GpsDevice == nil {
+			continue // Skip vehicles without GPS devices
+		}
+
+		zone := j.vehicleZones[v.RegistrationNo]
+		ward := j.vehicleWards[v.RegistrationNo]
+
+		log.Debug().Int("vehicle_id", v.ID).Str("reg", v.RegistrationNo).Msg("Generating report for vehicle")
+		err := j.rService.GenerateDailyReport(ctx, v.ID, yesterday, zone, ward)
 		if err != nil {
 			log.Error().Err(err).Int("vehicle_id", v.ID).Msg("Failed to generate report")
+		} else {
+			generated++
 		}
 	}
 	
-	log.Info().Msg("Nightly movement report generation completed")
+	log.Info().Int("generated", generated).Int("total_vehicles", len(vehicles)).Msg("Nightly movement report generation completed")
 }
