@@ -61,7 +61,7 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 
 	stoppageStartIndex := -1
 	for i := 0; i < len(validData); i++ {
-		if validData[i].Speed < 5 {
+		if validData[i].Speed == 0 {
 			if stoppageStartIndex == -1 {
 				stoppageStartIndex = i
 			} else {
@@ -122,7 +122,7 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 
 			// Ensure duration is reasonable for time-based calculations
 			if duration > 0 && duration < 3600 {
-				isIgnitionOn := p.Ignition || p.Speed > 5
+				isIgnitionOn := p.Ignition || p.Speed > 0
 
 				if isIgnitionOn {
 					ignitionOnSec += int(duration)
@@ -134,7 +134,7 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 					stoppageSec += int(duration)
 				} else {
 					if isIgnitionOn {
-						if p.Speed > 5 {
+						if p.Speed > 0 {
 							activeSec += int(duration)
 						} else {
 							idleSec += int(duration)
