@@ -20,4 +20,12 @@ CREATE TABLE IF NOT EXISTS geofence_events (
     lng DOUBLE PRECISION
 );
 
+-- Defensive fix for old schema in geofence_events
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='geofence_events' AND column_name='time') THEN
+        ALTER TABLE geofence_events RENAME COLUMN "time" TO "captured_at";
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_geofence_events_vehicle_captured_at ON geofence_events (vehicle_id, captured_at DESC);

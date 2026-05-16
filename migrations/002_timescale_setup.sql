@@ -15,6 +15,14 @@ CREATE TABLE IF NOT EXISTS gps_data (
     io            JSONB
 );
 
+-- Defensive fix for old schema in gps_data
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gps_data' AND column_name='time') THEN
+        ALTER TABLE gps_data RENAME COLUMN "time" TO "captured_at";
+    END IF;
+END $$;
+
 -- Use standard indexes instead of timescale hypertable
 CREATE INDEX IF NOT EXISTS idx_gps_data_imei_captured_at ON gps_data (imei, captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gps_data_captured_at ON gps_data (captured_at DESC);
