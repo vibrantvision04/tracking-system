@@ -19,9 +19,9 @@ export default function LiveMap({ vehicles }: Props) {
   const [selectedZone, setSelectedZone] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       const cached = localStorage.getItem("selectedZone");
-      return cached !== null ? cached : "177"; // Default to 177
+      return cached !== null ? cached : "all"; // Default to show everything
     }
-    return "177";
+    return "all";
   });
   const [zones, setZones] = useState<any[]>([]);
   const hasFitBounds = useRef(false);

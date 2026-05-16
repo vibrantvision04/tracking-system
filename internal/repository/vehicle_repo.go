@@ -172,6 +172,7 @@ func (r *VehicleRepository) CreateType(ctx context.Context, vt *VehicleType) err
 }
 
 func (r *VehicleRepository) CreateVehicle(ctx context.Context, v *Vehicle) error {
+	v.IsActive = true // Default to active
 	query := `
 		INSERT INTO vehicles (registration_no, chassis_no, is_owned, vehicle_type_id, is_active, name, plate_number)
 		VALUES ($1, $2, $3, $4, $5, $1, $1)
