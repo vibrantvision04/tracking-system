@@ -242,10 +242,9 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 		to = time.Now()
 	}
 
-	// Trigger real-time generation for "Today" if a specific vehicle is selected.
-	// This ensures the "Load" button provides absolute latest data.
-	today := time.Now().Truncate(24 * time.Hour)
-	if (from.Equal(today) || to.Equal(today) || (from.Before(today) && to.After(today))) && vehicleID > 0 {
+	// Trigger real-time generation for the requested date range if a specific vehicle is selected.
+	// This ensures the "Load" button always provides absolute latest and fresh data on demand.
+	if vehicleID > 0 {
 		v, err := h.vRepo.GetByID(r.Context(), vehicleID)
 		if err == nil {
 			zone := ""
@@ -256,8 +255,16 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 			if wid, ok := h.vehicleWards[v.RegistrationNo]; ok {
 				ward = strconv.Itoa(wid)
 			}
-			// Update the movement_reports table with latest GPS stats for today
-			_ = h.rService.GenerateDailyReport(r.Context(), vehicleID, time.Now(), zone, ward)
+
+			// Generate/Update reports for each day in the requested range
+			curr := from
+			daysCount := 0
+			// Limit to a maximum of 31 days to protect the server from timeout on massive ranges
+			for !curr.After(to) && daysCount < 31 {
+				_ = h.rService.GenerateDailyReport(r.Context(), vehicleID, curr, zone, ward)
+				curr = curr.AddDate(0, 0, 1)
+				daysCount++
+			}
 		}
 	}
 
