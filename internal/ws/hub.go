@@ -129,20 +129,34 @@ func (h *Hub) Unregister(c *Client) {
 }
 
 func (h *Hub) StartSubscriber(ctx context.Context) {
-	pubsub := h.rdb.PSubscribe(ctx, "gps:live:*", "metadata:*")
-	defer pubsub.Close()
-
-	ch := pubsub.Channel()
-	for msg := range ch {
-		h.mu.Lock()
-		for client := range h.clients {
-			// In ISWM, we broadcast all vehicles to all admins
-			select {
-			case client.send <- []byte(msg.Payload):
-			default:
-				log.Warn().Msg("Client send buffer full")
+	for {
+		log.Info().Msg("Starting Redis PubSub subscription...")
+		pubsub := h.rdb.PSubscribe(ctx, "gps:live:*", "metadata:*")
+		
+		ch := pubsub.Channel()
+		
+		// Loop through messages as long as the channel is open
+		for msg := range ch {
+			h.mu.Lock()
+			for client := range h.clients {
+				select {
+				case client.send <- []byte(msg.Payload):
+				default:
+					// Don't log this too much or it will flood logs
+				}
 			}
+			h.mu.Unlock()
 		}
-		h.mu.Unlock()
+
+		// If the channel is closed, it means the connection was lost
+		pubsub.Close()
+		log.Warn().Msg("Redis PubSub connection lost. Retrying in 5 seconds...")
+		
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+			continue
+		}
 	}
 }
