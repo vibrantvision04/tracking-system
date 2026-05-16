@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS geofence_events (
     vehicle_id INT REFERENCES vehicles(id),
     geofence_id INT REFERENCES geofences(id),
     event_type TEXT NOT NULL, -- enter / exit
-    time TIMESTAMPTZ NOT NULL,
+    captured_at TIMESTAMPTZ NOT NULL,
     lat DOUBLE PRECISION,
     lng DOUBLE PRECISION
 );
+
+CREATE INDEX IF NOT EXISTS idx_geofence_events_vehicle_captured_at ON geofence_events (vehicle_id, captured_at DESC);

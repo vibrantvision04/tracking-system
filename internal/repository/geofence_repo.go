@@ -55,7 +55,7 @@ func (r *GeofenceRepository) GetAll(ctx context.Context) ([]Geofence, error) {
 }
 
 func (r *GeofenceRepository) SaveEvent(ctx context.Context, e *GeofenceEvent) error {
-	query := `INSERT INTO geofence_events (vehicle_id, geofence_id, event_type, time, lat, lng)
+	query := `INSERT INTO geofence_events (vehicle_id, geofence_id, event_type, captured_at, lat, lng)
 			  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 	return r.pool.QueryRow(ctx, query, e.VehicleID, e.GeofenceID, e.EventType, e.Time, e.Lat, e.Lng).Scan(&e.ID)
 }
