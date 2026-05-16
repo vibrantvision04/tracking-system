@@ -22,14 +22,19 @@ func (r *GPSRepository) BulkInsert(ctx context.Context, data []decoder.AVLData) 
 		return nil
 	}
 
-	// Use pgx CopyFrom for fastest bulk inserts
-	rows := make([][]interface{}, len(data))
-	for i, d := range data {
+	// Filter out zero lat/lng and prepare rows for bulk insert
+	var rows [][]interface{}
+	for _, d := range data {
+		// Skip invalid coordinates (0,0)
+		if d.Lat == 0 && d.Lng == 0 {
+			continue
+		}
+
 		ign := 0
 		if d.Ignition {
 			ign = 1
 		}
-		rows[i] = []interface{}{
+		rows = append(rows, []interface{}{
 			d.IMEI,
 			d.Time,
 			d.Lat,
@@ -42,7 +47,11 @@ func (r *GPSRepository) BulkInsert(ctx context.Context, data []decoder.AVLData) 
 			float32(d.Altitude),
 			int16(d.Satellites),
 			int16(0), // signal default 0
-		}
+		})
+	}
+
+	if len(rows) == 0 {
+		return nil
 	}
 
 	_, err := r.pool.CopyFrom(
