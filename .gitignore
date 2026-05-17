@@ -1,58 +1,81 @@
-# ========================
-# Environment / Secrets
-# ========================
+# ==========================================
+# Environment / Secrets (CRITICAL)
+# ==========================================
 .env
 .env.*
 !.env.example
-web/.env
-web/.env.*
-!web/.env.example
+*.env
+**/.env
+**/.env.*
 
-# ========================
-# Go Backend
-# ========================
-# Binaries
+# ==========================================
+# Go Backend & Binaries
+# ==========================================
+# Root-level binaries
+/db_cleanup.exe
+/main.exe
+/register_ecosense.exe
+/save_to_local.exe
+/seed_all_data.exe
+/seed_regions.exe
+/server.exe
+/tmp_test
+/tracker-backend
+
+# General compiled files
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-/gps-tracking-system
-/server
-/bin/
-
-# Go build cache
-/vendor/
 *.test
 *.out
+/bin/
+/vendor/
+/tmp/
+go.work
 
-# Air (live reload)
-tmp/
-
-# ========================
-# Next.js Frontend
-# ========================
+# ==========================================
+# Node.js & Next.js Frontend
+# ==========================================
+node_modules/
+.next/
+out/
+build/
+.vercel/
+.cache/
+next-env.d.ts
+.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 web/node_modules/
 web/.next/
 web/out/
 web/build/
 web/.vercel/
-
-# Next.js cache
 web/.cache/
 
-# ========================
-# OS & Editor
-# ========================
+# ==========================================
+# IDE / Editors / OS
+# ==========================================
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 *.swp
 *.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.lsu
 
-# ========================
-# Logs
-# ========================
+# ==========================================
+# Logs & Temporary Files
+# ==========================================
 *.log
+backend.log
+server_local.log
 logs/
