@@ -47,8 +47,16 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 		r.Get("/gps-data/{imei}", h.GetGpsData)
 		r.Get("/reports", h.GetReports)
 		r.Get("/alerts", h.GetAlerts)
+		r.Post("/alerts/{id}/resolve", h.ResolveAlert)
 		r.Get("/zones", h.GetZones)
 		r.Get("/wards", h.GetWards)
+		r.Get("/d2d/dashboard", h.GetD2DDashboard)
+		r.Get("/routes", h.GetRoutes)
+		r.Post("/routes", h.CreateRoute)
+		r.Put("/routes/{id}", h.UpdateRoute)
+		r.Delete("/routes/{id}", h.DeleteRoute)
+		r.Get("/shifts", h.GetShifts)
+		r.Get("/route-types", h.GetRouteTypes)
 	})
 
 	return r

@@ -17,6 +17,10 @@ func NewGPSRepository(pool *pgxpool.Pool) *GPSRepository {
 	return &GPSRepository{pool: pool}
 }
 
+func (r *GPSRepository) Pool() *pgxpool.Pool {
+	return r.pool
+}
+
 func (r *GPSRepository) BulkInsert(ctx context.Context, data []decoder.AVLData) error {
 	if len(data) == 0 {
 		return nil
