@@ -439,10 +439,27 @@ export default function PlaybackPage() {
           const cpRes = await api<{ data: any[] }>(`/api/routes/${routeId}/checkpoints`);
           const cpData = cpRes.data || [];
           setCheckpoints(cpData);
+          
+          // Calculate hits locally based on loaded GPS trace
+          const hitCheckpoints = new Set<number>();
+          cpData.forEach(cp => {
+            const tolerance = Math.max(cp.radius_meters || 50, 50);
+            for (let i = 0; i < validPoints.length; i++) {
+              const dist = haversineDistance(validPoints[i].lat, validPoints[i].lng, cp.latitude, cp.longitude) * 1000;
+              if (dist <= tolerance) {
+                hitCheckpoints.add(cp.id);
+                break;
+              }
+            }
+          });
+
           cpData.forEach((cp, i) => {
+            const isHit = hitCheckpoints.has(cp.id);
+            const fillColor = isHit ? "#22c55e" : "#ef4444"; // Green for hit, Red for missed
+
             const cpMarker = L.circleMarker([cp.latitude, cp.longitude], {
               radius: 6,
-              fillColor: "#eab308",
+              fillColor: fillColor,
               fillOpacity: 0.9,
               color: "#fff",
               weight: 1.5,
@@ -451,7 +468,7 @@ export default function PlaybackPage() {
 
             const cpPopup = `
               <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; padding: 2px;">
-                <div style="font-weight: 700; border-bottom: 1px dashed #eab308; padding-bottom: 6px; margin-bottom: 8px; color: #ca8a04; font-size: 14px; display: flex; align-items: center; gap: 4px;">
+                <div style="font-weight: 700; border-bottom: 1px dashed ${fillColor}; padding-bottom: 6px; margin-bottom: 8px; color: ${fillColor}; font-size: 14px; display: flex; align-items: center; gap: 4px;">
                   📍 <span>Checkpoint ${cp.sequence_order > 0 ? '#' + cp.sequence_order : ''}</span>
                 </div>
                 <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
@@ -461,6 +478,10 @@ export default function PlaybackPage() {
                 <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
                   <span style="color: #64748b;">Radius:</span>
                   <span style="font-weight: 600; color: #1e293b;">${cp.radius_meters}m</span>
+                </div>
+                <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
+                  <span style="color: #64748b;">Status:</span>
+                  <span style="font-weight: 700; color: ${fillColor};">${isHit ? 'COVERED' : 'MISSED'}</span>
                 </div>
               </div>
             `;
