@@ -122,3 +122,40 @@ func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, 
 	}
 	return data, nil
 }
+
+func (r *GPSRepository) GetAllByTimeWindow(ctx context.Context, start, end time.Time) (map[int][]decoder.AVLData, error) {
+	query := `
+		SELECT m.vehicle_id, g.imei, g.captured_at, g.lat, g.lng, g.speed, g.direction, g.altitude, g.satellites, g.ignition
+		FROM gps_data g
+		JOIN gps_devices d ON g.imei = d.imei
+		JOIN vehicle_gps_map m ON d.id = m.device_id AND m.unassigned_at IS NULL
+		WHERE g.captured_at >= $1 AND g.captured_at < $2
+		ORDER BY m.vehicle_id, g.captured_at ASC
+	`
+	rows, err := r.pool.Query(ctx, query, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[int][]decoder.AVLData)
+	for rows.Next() {
+		var vID int
+		var d decoder.AVLData
+		var ign int16
+		var speed int16
+		var heading int16
+		err := rows.Scan(
+			&vID, &d.IMEI, &d.Time, &d.Lat, &d.Lng, &speed, &heading, &d.Altitude, &d.Satellites, &ign,
+		)
+		if err != nil {
+			return nil, err
+		}
+		d.Ignition = (ign == 1)
+		d.Speed = float64(speed)
+		d.Heading = int(heading)
+		result[vID] = append(result[vID], d)
+	}
+	return result, nil
+}
+

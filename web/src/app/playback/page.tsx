@@ -105,10 +105,9 @@ async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, nu
     }
 
     const coordsStr = chunk.map(p => `${p.lng},${p.lat}`).join(';');
-    const radiusesStr = chunk.map(() => '50').join(';'); // 50m search radius
 
     const p = fetch(
-      `https://router.project-osrm.org/match/v1/driving/${coordsStr}?radiuses=${radiusesStr}&geometries=geojson&overview=full`
+      `https://router.project-osrm.org/match/v1/driving/${coordsStr}?geometries=geojson&overview=full`
     )
     .then(res => {
       if (!res.ok) throw new Error("OSRM Error");
@@ -462,14 +461,14 @@ export default function PlaybackPage() {
           const cpData = cpRes.data || [];
           setCheckpoints(cpData);
 
-          // Calculate hits locally based on the purple map-matched line (matchedCoords)
-          // This ensures the visual green/red status perfectly matches the drawn line!
+          // Calculate hits locally based on the raw/smoothed GPS baseCoords
+          // This matches the backend logic and prevents road-snapping from pushing coordinates outside the 10m radius
           const hitCheckpoints = new Set<number>();
           cpData.forEach(cp => {
-            const tolerance = 10; // Force 10m tolerance for all checkpoints
-            for (let i = 0; i < matchedCoords.length; i++) {
-              // matchedCoords is an array of [lat, lng]
-              const dist = haversineDistance(matchedCoords[i][0], matchedCoords[i][1], cp.latitude, cp.longitude) * 1000;
+            const tolerance = 10; // Always 10 meters for all checkpoints
+            for (let i = 0; i < baseCoords.length; i++) {
+              // baseCoords is an array of [lat, lng]
+              const dist = haversineDistance(baseCoords[i][0], baseCoords[i][1], cp.latitude, cp.longitude) * 1000;
               if (dist <= tolerance) {
                 hitCheckpoints.add(cp.id);
                 break;

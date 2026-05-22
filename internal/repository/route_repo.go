@@ -108,13 +108,13 @@ func (r *RouteRepository) GetAssignedRoute(ctx context.Context, vehicleID int, d
 }
 
 // Coverage Logging
-func (r *RouteRepository) LogCheckpointHit(ctx context.Context, vehicleID, routeID, checkpointID int, date time.Time) error {
+func (r *RouteRepository) LogCheckpointHit(ctx context.Context, vehicleID, routeID, checkpointID int, hitTime time.Time) error {
 	query := `
 		INSERT INTO route_coverage_logs (vehicle_id, route_id, checkpoint_id, report_date, hit_time)
-		VALUES ($1, $2, $3, $4, NOW())
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO NOTHING
 	`
-	_, err := r.db.Exec(ctx, query, vehicleID, routeID, checkpointID, date.Format("2006-01-02"))
+	_, err := r.db.Exec(ctx, query, vehicleID, routeID, checkpointID, hitTime.Format("2006-01-02"), hitTime)
 	return err
 }
 
@@ -229,5 +229,96 @@ func (r *RouteRepository) GetCoverageHitLogs(ctx context.Context, vehicleID, rou
 		logs = append(logs, log)
 	}
 	return logs, nil
+}
+
+type DashboardCoverageData struct {
+	TotalCheckpoints  int
+	CoveredCheckpoints int
+	InOrderHits       int
+}
+
+// GetDashboardCoverageData returns a map of VehicleID -> DashboardCoverageData for a given date
+func (r *RouteRepository) GetDashboardCoverageData(ctx context.Context, date string) (map[int]DashboardCoverageData, error) {
+	// First get the active assignments and total checkpoints for each vehicle
+	queryAssignments := `
+		SELECT va.vehicle_id, r.id, COUNT(rc.id) as total_checkpoints
+		FROM vehicle_route_assignments va
+		JOIN routes r ON va.route_id = r.id
+		LEFT JOIN route_checkpoints rc ON r.id = rc.route_id
+		WHERE va.assigned_date = $1 AND va.is_active = true
+		GROUP BY va.vehicle_id, r.id
+	`
+	rows, err := r.db.Query(ctx, queryAssignments, date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	data := make(map[int]DashboardCoverageData)
+	vehicleRoutes := make(map[int]int)
+
+	for rows.Next() {
+		var vID, rID, total int
+		if err := rows.Scan(&vID, &rID, &total); err != nil {
+			continue
+		}
+		data[vID] = DashboardCoverageData{TotalCheckpoints: total}
+		vehicleRoutes[vID] = rID
+	}
+
+	// Then get all hit logs for the date
+	queryLogs := `
+		SELECT l.vehicle_id, l.checkpoint_id, c.sequence_order, l.hit_time
+		FROM route_coverage_logs l
+		JOIN route_checkpoints c ON l.checkpoint_id = c.id
+		WHERE l.report_date = $1
+		ORDER BY l.vehicle_id, l.hit_time ASC
+	`
+	logsRows, err := r.db.Query(ctx, queryLogs, date)
+	if err != nil {
+		return data, nil // Return what we have so far
+	}
+	defer logsRows.Close()
+
+	// vehicleID -> unique hits map
+	hits := make(map[int]map[int]bool)
+	// vehicleID -> in-order calculation state
+	lastSeq := make(map[int]int)
+	inOrder := make(map[int]int)
+
+	for logsRows.Next() {
+		var vID, cpID, seqOrder int
+		var hitTime time.Time
+		if err := logsRows.Scan(&vID, &cpID, &seqOrder, &hitTime); err != nil {
+			continue
+		}
+
+		if hits[vID] == nil {
+			hits[vID] = make(map[int]bool)
+			lastSeq[vID] = -1
+		}
+
+		hits[vID][cpID] = true
+		if seqOrder > lastSeq[vID] {
+			inOrder[vID]++
+			lastSeq[vID] = seqOrder
+		}
+	}
+
+	// Update data map with calculated percentages
+	for vID, d := range data {
+		covered := len(hits[vID])
+		inOrderHits := inOrder[vID]
+
+		if inOrderHits > d.TotalCheckpoints {
+			inOrderHits = d.TotalCheckpoints
+		}
+
+		d.CoveredCheckpoints = covered
+		d.InOrderHits = inOrderHits
+		data[vID] = d
+	}
+
+	return data, nil
 }
 

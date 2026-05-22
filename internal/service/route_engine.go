@@ -40,6 +40,13 @@ func NewRouteEngine(routeRepo *repository.RouteRepository, vehicleRepo *reposito
 
 // Process checks a new GPS point against assigned route checkpoints
 func (e *RouteEngine) Process(data decoder.AVLData) {
+	if data.Lat == 0.0 || data.Lng == 0.0 {
+		return // Ignore invalid coordinates
+	}
+	if data.Speed > 120.0 {
+		return // Ignore extreme outlier jumps
+	}
+
 	// Look up Vehicle ID first
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -110,8 +117,8 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 			minDist = distMeters
 		}
 
-		// Force exactly 10 meters radius tolerance
-		tolerance := 10.0
+		// Use the actual checkpoint radius
+		tolerance := 10.0 // Always 10 meters for all checkpoints
 		if distMeters <= tolerance {
 			anyHitNow = true
 			if !visitedMap[cp.ID] {
@@ -125,7 +132,7 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 					if err := e.routeRepo.LogCheckpointHit(ctx, vID, rID, cID, t); err != nil {
 						log.Error().Err(err).Msg("Failed to log checkpoint hit")
 					}
-				}(vehicleID, routeID, cp.ID, time.Now())
+				}(vehicleID, routeID, cp.ID, data.Time)
 
 				// Update in-memory
 				e.mu.Lock()

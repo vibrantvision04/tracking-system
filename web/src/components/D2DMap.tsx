@@ -145,6 +145,7 @@ export default function D2DMap() {
   // Form states inside table/details
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [snoozes, setSnoozes] = useState<Record<number, number>>({});
+  const [activeShift, setActiveShift] = useState<string>("");
 
   // ─── Fetch Dropdowns and Main Data ───
   const fetchData = useCallback(async () => {
@@ -156,6 +157,7 @@ export default function D2DMap() {
         unauthorized_vehicles: D2DAlert[];
         other_vehicles: OtherVehicle[];
         geofences: MapGeofence[];
+        active_shift: string;
       }>("/api/d2d/dashboard");
 
       if (dashboard.success) {
@@ -164,6 +166,7 @@ export default function D2DMap() {
         setUnauthorizedVehicles(dashboard.unauthorized_vehicles || []);
         setOtherVehicles(dashboard.other_vehicles || []);
         setGeofences(dashboard.geofences || []);
+        setActiveShift(dashboard.active_shift || "");
       }
 
       const zones = await api<{ success: boolean; data: Zone[] }>("/api/zones");
@@ -373,8 +376,15 @@ export default function D2DMap() {
 
       if (!isStoppageFilteredOut) {
         const rotationAngle = v.heading || 0;
-        const color = stopAlert ? (stopDur >= 15 ? "#ef4444" : stopDur >= 10 ? "#f97316" : "#eab308") : "#10b981";
-
+        
+        const isOffline = !activeShift || (new Date().getTime() - new Date(v.last_updated).getTime() > 15 * 60 * 1000);
+        let color = "#10b981"; // green
+        if (isOffline) {
+          color = "#64748b"; // grayish
+        } else if (stopAlert) {
+          color = stopDur >= 15 ? "#ef4444" : stopDur >= 10 ? "#f97316" : "#eab308";
+        }
+        
         // Create Marker Icon representing vehicle heading direction
         const icon = L.divIcon({
           className: "",
@@ -401,13 +411,16 @@ export default function D2DMap() {
           iconAnchor: [17, 17],
         });
 
+        const displayStatus = isOffline ? "Offline" : v.current_status;
+        const statusColor = isOffline ? "#64748b" : color;
+
         const mMarker = L.marker([v.lat, v.lng], { icon })
           .addTo(markersLayerRef.current!)
           .bindPopup(`
             <div style="font-family: Inter, sans-serif; min-width: 250px; font-size: 12px; padding: 4px; color: #fff;">
               <div style="font-weight: 700; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
                 <span>🚛 ${v.reg_no}</span>
-                <span style="color: ${color}; font-size: 11px;">● ${v.current_status}</span>
+                <span style="color: ${statusColor}; font-size: 11px;">● ${displayStatus}</span>
               </div>
               <div style="margin-bottom: 8px;">
                 <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.06); border: 1px solid ${color}; color: ${color}; font-weight: 600; font-size: 10px;">
@@ -590,9 +603,9 @@ export default function D2DMap() {
               <option value="D2D">D2D Hopper Tipper</option>
             </select>
           </div>
-
+          
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-850 rounded text-xs text-slate-300">
-            <span className="font-bold text-indigo-400">⏱️ Shift hours:</span> 06:30 AM To 03:30 PM
+            <span className="font-bold text-indigo-400">⏱️ Shift:</span> {activeShift || "N/A"}
           </div>
         </div>
       </header>

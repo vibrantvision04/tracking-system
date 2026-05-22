@@ -30,6 +30,7 @@ type Handler struct {
 	rService          *service.ReportService
 	rdb               *redis.Client
 	routeRepo         *repository.RouteRepository
+	routeEngine       *service.RouteEngine
 	zoneVehiclesCache map[string][]map[string]interface{}
 	cacheMutex        sync.RWMutex
 	alertsMutex       sync.Mutex
@@ -37,13 +38,14 @@ type Handler struct {
 	resolvedAlerts    map[int]ResolvedDetails
 }
 
-func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository) *Handler {
+func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine) *Handler {
 	h := &Handler{
 		vRepo:             vRepo,
 		gpsRepo:           gpsRepo,
 		rService:          rService,
 		rdb:               rdb,
 		routeRepo:         routeRepo,
+		routeEngine:       routeEngine,
 		zoneVehiclesCache: make(map[string][]map[string]interface{}),
 		resolvedAlerts:    make(map[int]ResolvedDetails),
 	}
@@ -850,31 +852,149 @@ func (h *Handler) triggerOverspeedAlert(alerts *[]D2DAlert, hasAlert *[]bool, st
 
 func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	// Determine currently active shift based on server time
+	var activeShiftID int
+	var activeShiftName string
+	var shiftStart, shiftEnd time.Time
+	now := time.Now()
+	shiftRows, err := h.gpsRepo.Pool().Query(ctx, `SELECT id, shift_name, start_time, end_time FROM shifts WHERE is_active = true`)
+	if err == nil {
+		defer shiftRows.Close()
+		for shiftRows.Next() {
+			var id int
+			var name string
+			var start, end time.Time
+			if err := shiftRows.Scan(&id, &name, &start, &end); err != nil {
+				continue
+			}
 
-	// Query all vehicles from DB with their details
-	query := `
-		SELECT 
-			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
-			COALESCE(vt.vehicle_type_name, 'Hopper Tipper'), COALESCE(vt.icon_color, '#10b981'),
-			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
-			COALESCE(v.zone_id, 0), COALESCE(z.region_name, 'Zone 1 - Hawa Mahal-Aamer Zone'),
-			COALESCE(v.ward_id, 0), COALESCE(w.region_name, '15 - Ward - 15'),
-			COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.time
-		FROM vehicles v
-		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
-		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
-		LEFT JOIN gps_devices d ON m.device_id = d.id
-		LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
-		LEFT JOIN regions w ON v.ward_id = w.id AND w.region_type_id = 3
-		LEFT JOIN LATERAL (
-			SELECT lat, lng, captured_at as time 
-			FROM gps_data 
-			WHERE imei = d.imei
-			ORDER BY captured_at DESC
-			LIMIT 1
-		) lp ON true
-	`
-	rows, err := h.gpsRepo.Pool().Query(ctx, query)
+			sh, sm, ss := start.Hour(), start.Minute(), start.Second()
+			eh, em, es := end.Hour(), end.Minute(), end.Second()
+
+			curMin := now.Hour()*60 + now.Minute()
+			stMin := sh*60 + sm
+			etMin := eh*60 + em
+
+			isWithinShift := false
+			var actualStart, actualEnd time.Time
+
+			if stMin < etMin {
+				// Shift is on the same day (e.g. 06:00 to 14:00)
+				if curMin >= stMin && curMin <= etMin {
+					isWithinShift = true
+					actualStart = time.Date(now.Year(), now.Month(), now.Day(), sh, sm, ss, 0, now.Location())
+					actualEnd = time.Date(now.Year(), now.Month(), now.Day(), eh, em, es, 0, now.Location())
+				}
+			} else {
+				// Shift crosses midnight (e.g. 22:00 to 06:00)
+				if curMin >= stMin || curMin <= etMin {
+					isWithinShift = true
+					if curMin >= stMin {
+						actualStart = time.Date(now.Year(), now.Month(), now.Day(), sh, sm, ss, 0, now.Location())
+						tomorrow := now.Add(24 * time.Hour)
+						actualEnd = time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), eh, em, es, 0, now.Location())
+					} else {
+						yesterday := now.Add(-24 * time.Hour)
+						actualStart = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), sh, sm, ss, 0, now.Location())
+						actualEnd = time.Date(now.Year(), now.Month(), now.Day(), eh, em, es, 0, now.Location())
+					}
+				}
+			}
+
+			if isWithinShift {
+				activeShiftID = id
+				activeShiftName = name
+				shiftStart = actualStart
+				shiftEnd = actualEnd
+				break
+			}
+		}
+	}
+
+	todayStr := time.Now().Format("2006-01-02")
+	
+	// Fetch coverage data for the specific active shift date or today
+	coverageDateStr := todayStr
+	if !shiftStart.IsZero() {
+		coverageDateStr = shiftStart.Format("2006-01-02")
+	}
+	coverageData, _ := h.routeRepo.GetDashboardCoverageData(ctx, coverageDateStr)
+
+	var allPoints map[int][]decoder.AVLData
+	if !shiftStart.IsZero() && !shiftEnd.IsZero() {
+		allPoints, _ = h.gpsRepo.GetAllByTimeWindow(ctx, shiftStart, shiftEnd)
+	} else {
+		now := time.Now()
+		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		allPoints, _ = h.gpsRepo.GetAllByTimeWindow(ctx, startOfDay, startOfDay.Add(24*time.Hour))
+	}
+
+	// Query vehicles from DB with their details, filtered by the active shift assignment
+	var rows interface {
+		Close()
+		Next() bool
+		Scan(dest ...any) error
+	}
+
+	if activeShiftID > 0 {
+		query := `
+			SELECT 
+				v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
+				COALESCE(vt.vehicle_type_name, 'Hopper Tipper'), COALESCE(vt.icon_color, '#10b981'),
+				COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
+				COALESCE(v.zone_id, 0), COALESCE(z.region_name, 'Zone 1 - Hawa Mahal-Aamer Zone'),
+				COALESCE(v.ward_id, 0), COALESCE(w.region_name, '15 - Ward - 15'),
+				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.time
+			FROM vehicles v
+			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
+			JOIN routes r ON va.route_id = r.id AND r.is_active = true
+			JOIN shifts s ON r.shift_id = s.id AND s.is_active = true
+			LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+			LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
+			LEFT JOIN gps_devices d ON m.device_id = d.id
+			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
+			LEFT JOIN regions w ON v.ward_id = w.id AND w.region_type_id = 3
+			LEFT JOIN LATERAL (
+				SELECT lat, lng, captured_at as time 
+				FROM gps_data 
+				WHERE imei = d.imei
+				ORDER BY captured_at DESC
+				LIMIT 1
+			) lp ON true
+			WHERE va.assigned_date = $1 AND s.id = $2
+		`
+		assignedDateStr := shiftStart.Format("2006-01-02")
+		rows, err = h.gpsRepo.Pool().Query(ctx, query, assignedDateStr, activeShiftID)
+	} else {
+		query := `
+			SELECT 
+				v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
+				COALESCE(vt.vehicle_type_name, 'Hopper Tipper'), COALESCE(vt.icon_color, '#10b981'),
+				COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
+				COALESCE(v.zone_id, 0), COALESCE(z.region_name, 'Zone 1 - Hawa Mahal-Aamer Zone'),
+				COALESCE(v.ward_id, 0), COALESCE(w.region_name, '15 - Ward - 15'),
+				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.time
+			FROM vehicles v
+			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
+			JOIN routes r ON va.route_id = r.id AND r.is_active = true
+			JOIN shifts s ON r.shift_id = s.id AND s.is_active = true
+			LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+			LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
+			LEFT JOIN gps_devices d ON m.device_id = d.id
+			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
+			LEFT JOIN regions w ON v.ward_id = w.id AND w.region_type_id = 3
+			LEFT JOIN LATERAL (
+				SELECT lat, lng, captured_at as time 
+				FROM gps_data 
+				WHERE imei = d.imei
+				ORDER BY captured_at DESC
+				LIMIT 1
+			) lp ON true
+			WHERE va.assigned_date = $1
+		`
+		rows, err = h.gpsRepo.Pool().Query(ctx, query, todayStr)
+	}
+
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query vehicles: " + err.Error()})
 		return
@@ -935,13 +1055,9 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Fetch all telemetry for this vehicle on that day
-		t := *lastTime
-		startOfDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-		endOfDay := startOfDay.Add(24 * time.Hour)
-
-		points, err := h.gpsRepo.GetByVehicle(ctx, vID, startOfDay, endOfDay)
-		if err != nil || len(points) == 0 {
+		// We already fetched points using the global windowStart/End in allPoints.
+		points := allPoints[vID]
+		if len(points) == 0 {
 			otherVehicles = append(otherVehicles, OtherVehicle{
 				ID:                     vID,
 				RegNo:                  regNo,
@@ -987,11 +1103,16 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		routeCoveredPercent := math.Min(100.0, (distCovered/12.0)*100.0)
-		inorderRoutePercent := math.Min(100.0, (distCovered/13.5)*100.0)
-		if routeCoveredPercent == 0 {
-			routeCoveredPercent = 50.0 // Default fallback for visual enrichment
-			inorderRoutePercent = 50.0
+		cov := coverageData[vID]
+		routeCoveredPercent := 0.0
+		inorderRoutePercent := 0.0
+		if cov.TotalCheckpoints > 0 {
+			routeCoveredPercent = math.Round((float64(cov.CoveredCheckpoints) / float64(cov.TotalCheckpoints)) * 100)
+			inorderRoutePercent = math.Round((float64(cov.InOrderHits) / float64(cov.TotalCheckpoints)) * 100)
+		} else if distCovered > 0 {
+			// Fallback if no checkpoints defined but moved
+			routeCoveredPercent = math.Min(100.0, (distCovered/12.0)*100.0)
+			inorderRoutePercent = math.Min(100.0, (distCovered/13.5)*100.0)
 		}
 
 		// Geofence checks
@@ -1274,6 +1395,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]interface{}{
 		"success":               true,
 		"status_code":           200,
+		"active_shift":          activeShiftName,
 		"alerts":                alerts,
 		"started_vehicles":      startedVehicles,
 		"unauthorized_vehicles": unauthorizedVehicles,

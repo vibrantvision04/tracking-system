@@ -32,6 +32,8 @@ func (h *Handler) AddRouteCheckpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.routeEngine.RefreshCache()
+
 	sendJSON(w, http.StatusCreated, map[string]interface{}{"success": true, "data": cp})
 }
 
@@ -87,6 +89,8 @@ func (h *Handler) AssignRouteToVehicle(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to assign route: " + err.Error()})
 		return
 	}
+
+	h.routeEngine.RefreshCache()
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
