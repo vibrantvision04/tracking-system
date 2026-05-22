@@ -25,6 +25,28 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+function distanceToSegment(pLat: number, pLng: number, aLat: number, aLng: number, bLat: number, bLng: number): number {
+  if (aLat === bLat && aLng === bLng) {
+    return haversineDistance(pLat, pLng, aLat, aLng) * 1000;
+  }
+  const latMid = ((aLat + bLat) / 2) * Math.PI / 180;
+  const kx = Math.cos(latMid);
+  const bx = (bLng - aLng) * kx;
+  const by = bLat - aLat;
+  const px = (pLng - aLng) * kx;
+  const py = pLat - aLat;
+  const segmentLenSq = bx * bx + by * by;
+  if (segmentLenSq === 0) {
+    return haversineDistance(pLat, pLng, aLat, aLng) * 1000;
+  }
+  let t = (px * bx + py * by) / segmentLenSq;
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+  const cLat = aLat + t * (bLat - aLat);
+  const cLng = aLng + t * (bLng - aLng);
+  return haversineDistance(pLat, pLng, cLat, cLng) * 1000;
+}
+
 function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
   if (points.length < 3) return points;
 
@@ -466,12 +488,35 @@ export default function PlaybackPage() {
           const hitCheckpoints = new Set<number>();
           cpData.forEach(cp => {
             const tolerance = 10; // Always 10 meters for all checkpoints
-            for (let i = 0; i < baseCoords.length; i++) {
-              // baseCoords is an array of [lat, lng]
-              const dist = haversineDistance(baseCoords[i][0], baseCoords[i][1], cp.latitude, cp.longitude) * 1000;
-              if (dist <= tolerance) {
+            
+            // Check the very first point
+            if (validPoints.length > 0) {
+              const firstDist = haversineDistance(validPoints[0].lat, validPoints[0].lng, cp.latitude, cp.longitude) * 1000;
+              if (firstDist <= tolerance) {
                 hitCheckpoints.add(cp.id);
-                break;
+                return;
+              }
+            }
+
+            // Check segments/points starting from i = 1
+            for (let i = 1; i < validPoints.length; i++) {
+              const prev = validPoints[i - 1];
+              const curr = validPoints[i];
+
+              const timeDiffSec = (new Date(curr.time).getTime() - new Date(prev.time).getTime()) / 1000;
+              const distBetweenPings = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng) * 1000;
+
+              let distMeters: number;
+              if (timeDiffSec > 60 || distBetweenPings > 200) {
+                // Fallback to point check only
+                distMeters = haversineDistance(curr.lat, curr.lng, cp.latitude, cp.longitude) * 1000;
+              } else {
+                distMeters = distanceToSegment(cp.latitude, cp.longitude, prev.lat, prev.lng, curr.lat, curr.lng);
+              }
+
+              if (distMeters <= tolerance) {
+                hitCheckpoints.add(cp.id);
+                break; // Hit found, move to next checkpoint
               }
             }
           });

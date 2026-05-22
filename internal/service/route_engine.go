@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ type RouteEngine struct {
 	routeCheckpoints map[int][]repository.RouteCheckpoint // routeID -> checkpoints
 	visited          map[int]map[int]bool                 // vehicleID -> checkpointID -> visited today
 	onRoute          map[int]bool                         // vehicleID -> is currently actively on route
+	lastPositions    map[int]decoder.AVLData              // vehicleID -> last processed coordinate
 
 	lastRefresh time.Time
 }
@@ -34,6 +36,7 @@ func NewRouteEngine(routeRepo *repository.RouteRepository, vehicleRepo *reposito
 		routeCheckpoints: make(map[int][]repository.RouteCheckpoint),
 		visited:          make(map[int]map[int]bool),
 		onRoute:          make(map[int]bool),
+		lastPositions:    make(map[int]decoder.AVLData),
 		lastRefresh:      time.Now(),
 	}
 }
@@ -96,22 +99,35 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 	}
 
 	e.mu.RLock()
-	checkpoints := e.routeCheckpoints[routeID]
+	routeCheckpoints := e.routeCheckpoints[routeID]
 	visitedMap := e.visited[vehicleID]
 	isActive := e.onRoute[vehicleID]
+	lastPos, hasLastPos := e.lastPositions[vehicleID]
 	e.mu.RUnlock()
 
-	if len(checkpoints) == 0 {
+	if len(routeCheckpoints) == 0 {
 		return
 	}
 
 	minDist := 9999999.0
 	anyHitNow := false
 
-	for _, cp := range checkpoints {
+	for _, cp := range routeCheckpoints {
 		// Haversine returns distance in km, convert to meters
 		distKm := utils.Haversine(data.Lat, data.Lng, cp.Latitude, cp.Longitude)
-		distMeters := distKm * 1000.0
+		distMetersPoint := distKm * 1000.0
+
+		// Segment based matching if we have a previous ping from today
+		distMeters := distMetersPoint
+		if hasLastPos {
+			timeDiffSec := data.Time.Sub(lastPos.Time).Seconds()
+			distBetweenPings := utils.Haversine(lastPos.Lat, lastPos.Lng, data.Lat, data.Lng) * 1000.0
+
+			// Only check segment if pings are close in time (60s) and space (200m) to avoid ghost jumps
+			if timeDiffSec <= 60.0 && distBetweenPings <= 200.0 {
+				distMeters = distanceToSegment(cp.Latitude, cp.Longitude, lastPos.Lat, lastPos.Lng, data.Lat, data.Lng)
+			}
+		}
 
 		if distMeters < minDist {
 			minDist = distMeters
@@ -164,6 +180,11 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		log.Warn().Int("vehicle_id", vehicleID).Float64("speed", data.Speed).Msg("Route Speed Limit Exceeded ( > 3 km/h)")
 		// TODO: Trigger actual alert in DB or PubSub here if needed, but logging for now
 	}
+
+	// Update last position processed
+	e.mu.Lock()
+	e.lastPositions[vehicleID] = data
+	e.mu.Unlock()
 }
 
 // RefreshCache can be called via API when an assignment changes
@@ -173,4 +194,36 @@ func (e *RouteEngine) RefreshCache() {
 	e.assignments = make(map[int]int)
 	e.visited = make(map[int]map[int]bool)
 	e.onRoute = make(map[int]bool)
+	e.lastPositions = make(map[int]decoder.AVLData)
+}
+
+func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {
+	if aLat == bLat && aLng == bLng {
+		return utils.Haversine(pLat, pLng, aLat, aLng) * 1000.0
+	}
+
+	latMid := ((aLat + bLat) / 2.0) * math.Pi / 180.0
+	kx := math.Cos(latMid)
+
+	bx := (bLng - aLng) * kx
+	by := bLat - aLat
+	px := (pLng - aLng) * kx
+	py := pLat - aLat
+
+	segmentLenSq := bx*bx + by*by
+	if segmentLenSq == 0 {
+		return utils.Haversine(pLat, pLng, aLat, aLng) * 1000.0
+	}
+
+	t := (px*bx + py*by) / segmentLenSq
+	if t < 0.0 {
+		t = 0.0
+	} else if t > 1.0 {
+		t = 1.0
+	}
+
+	cLat := aLat + t*(bLat-aLat)
+	cLng := aLng + t*(bLng-aLng)
+
+	return utils.Haversine(pLat, pLng, cLat, cLng) * 1000.0
 }

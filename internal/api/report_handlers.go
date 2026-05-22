@@ -242,6 +242,37 @@ func smoothGpsData(points []decoder.AVLData) []decoder.AVLData {
 	return smoothed
 }
 
+func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {
+	if aLat == bLat && aLng == bLng {
+		return utils.Haversine(pLat, pLng, aLat, aLng) * 1000.0
+	}
+
+	latMid := ((aLat + bLat) / 2.0) * math.Pi / 180.0
+	kx := math.Cos(latMid)
+
+	bx := (bLng - aLng) * kx
+	by := bLat - aLat
+	px := (pLng - aLng) * kx
+	py := pLat - aLat
+
+	segmentLenSq := bx*bx + by*by
+	if segmentLenSq == 0 {
+		return utils.Haversine(pLat, pLng, aLat, aLng) * 1000.0
+	}
+
+	t := (px*bx + py*by) / segmentLenSq
+	if t < 0.0 {
+		t = 0.0
+	} else if t > 1.0 {
+		t = 1.0
+	}
+
+	cLat := aLat + t*(bLat-aLat)
+	cLng := aLng + t*(bLng-aLng)
+
+	return utils.Haversine(pLat, pLng, cLat, cLng) * 1000.0
+}
+
 func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository, routeRepo *repository.RouteRepository, vehicleID int, routeID int, dateStr string) {
 	// Parse date
 	dayStart, err := time.Parse("2006-01-02", dateStr)
@@ -271,16 +302,38 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		return
 	}
 
-	// Calculate which checkpoints were actually hit and at what time
+	// Calculate which checkpoints were actually hit and at what time using line segments
 	physicalHits := make(map[int]time.Time)
 	for _, cp := range checkpoints {
-		for _, pt := range gpsData {
-			distKm := utils.Haversine(pt.Lat, pt.Lng, cp.Latitude, cp.Longitude)
-			distMeters := distKm * 1000.0
-			tolerance := 10.0 // Always 10 meters for all checkpoints
-			if distMeters <= tolerance {
-				physicalHits[cp.ID] = pt.Time
-				break // Found first chronological hit, move to next checkpoint
+		// First check the very first point
+		if len(gpsData) > 0 {
+			dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
+			if dist <= 10.0 {
+				physicalHits[cp.ID] = gpsData[0].Time
+				continue
+			}
+		}
+
+		// Now check segments between consecutive points
+		for i := 1; i < len(gpsData); i++ {
+			prev := gpsData[i-1]
+			curr := gpsData[i]
+
+			// Only do segment matching if the pings are close in time and space to avoid teleport ghost hits
+			timeDiffSec := curr.Time.Sub(prev.Time).Seconds()
+			distBetweenPings := utils.Haversine(prev.Lat, prev.Lng, curr.Lat, curr.Lng) * 1000.0
+
+			var distMeters float64
+			if timeDiffSec > 60.0 || distBetweenPings > 200.0 {
+				// Fallback to point check only
+				distMeters = utils.Haversine(curr.Lat, curr.Lng, cp.Latitude, cp.Longitude) * 1000.0
+			} else {
+				distMeters = distanceToSegment(cp.Latitude, cp.Longitude, prev.Lat, prev.Lng, curr.Lat, curr.Lng)
+			}
+
+			if distMeters <= 10.0 {
+				physicalHits[cp.ID] = curr.Time
+				break // Hit found, move to next checkpoint
 			}
 		}
 	}
