@@ -420,7 +420,7 @@ func syncRouteCheckpoints(ctx context.Context, h *Handler, routeID int, routeNam
 		_, err = db.Exec(ctx, `
 			INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_Start", lane.StartLat, lane.StartLng, 50.0, seq)
+		`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_Start", lane.StartLat, lane.StartLng, 10.0, seq)
 		if err != nil {
 			fmt.Println("syncRouteCheckpoints INSERT start error:", err)
 		}
@@ -433,7 +433,7 @@ func syncRouteCheckpoints(ctx context.Context, h *Handler, routeID int, routeNam
 			_, err = db.Exec(ctx, `
 				INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
 				VALUES ($1, $2, $3, $4, $5, $6)
-			`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_End", lane.EndLat, lane.EndLng, 50.0, seq)
+			`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_End", lane.EndLat, lane.EndLng, 10.0, seq)
 			if err != nil {
 				fmt.Println("syncRouteCheckpoints INSERT end error:", err)
 			}

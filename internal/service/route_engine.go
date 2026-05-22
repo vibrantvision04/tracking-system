@@ -15,14 +15,14 @@ import (
 type RouteEngine struct {
 	routeRepo   *repository.RouteRepository
 	vehicleRepo *repository.VehicleRepository
-	
+
 	// In-memory cache for fast geofence lookups to avoid DB hit per GPS ping
-	mu              sync.RWMutex
-	assignments     map[int]int // vehicleID -> routeID
+	mu               sync.RWMutex
+	assignments      map[int]int                          // vehicleID -> routeID
 	routeCheckpoints map[int][]repository.RouteCheckpoint // routeID -> checkpoints
-	visited         map[int]map[int]bool // vehicleID -> checkpointID -> visited today
-	onRoute         map[int]bool         // vehicleID -> is currently actively on route
-	
+	visited          map[int]map[int]bool                 // vehicleID -> checkpointID -> visited today
+	onRoute          map[int]bool                         // vehicleID -> is currently actively on route
+
 	lastRefresh time.Time
 }
 
@@ -43,17 +43,17 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 	// Look up Vehicle ID first
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	vehicle, err := e.vehicleRepo.GetByIMEI(ctx, data.IMEI)
 	if err != nil || vehicle == nil {
 		return // Unknown vehicle
 	}
 	vehicleID := vehicle.ID
-	
-	// If the cache is old, this might be a new day or missed an assignment, 
-	// ideally we reload the cache periodically or via pub/sub. 
+
+	// If the cache is old, this might be a new day or missed an assignment,
+	// ideally we reload the cache periodically or via pub/sub.
 	// For simplicity, let's do a basic time-based eviction or just fetch on demand if missing.
-	
+
 	e.mu.RLock()
 	routeID, hasAssignedRoute := e.assignments[vehicleID]
 	e.mu.RUnlock()
@@ -62,25 +62,25 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		// Try fetching from DB once if missing
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		
+
 		today := time.Now().Truncate(24 * time.Hour)
 		assignment, err := e.routeRepo.GetAssignedRoute(ctx, vehicleID, today)
 		if err != nil || assignment == nil {
 			return // No route assigned today
 		}
-		
+
 		routeID = assignment.RouteID
-		
+
 		// Load checkpoints
 		checkpoints, _ := e.routeRepo.GetCheckpointsByRoute(ctx, routeID)
-		
+
 		// Load visited
 		visitedIDs, _ := e.routeRepo.GetVisitedCheckpoints(ctx, vehicleID, routeID, today)
 		visitedMap := make(map[int]bool)
 		for _, vid := range visitedIDs {
 			visitedMap[vid] = true
 		}
-		
+
 		e.mu.Lock()
 		e.assignments[vehicleID] = routeID
 		e.routeCheckpoints[routeID] = checkpoints
@@ -110,13 +110,14 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 			minDist = distMeters
 		}
 
-		// Hit radius is enforced at 20 meters
-		if distMeters <= 20.0 {
+		// Force exactly 10 meters radius tolerance
+		tolerance := 10.0
+		if distMeters <= tolerance {
 			anyHitNow = true
 			if !visitedMap[cp.ID] {
 				// Hit!
 				log.Info().Int("vehicle_id", vehicleID).Int("checkpoint_id", cp.ID).Msg("Checkpoint hit!")
-				
+
 				// Save to DB asynchronously
 				go func(vID, rID, cID int, t time.Time) {
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -125,7 +126,7 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 						log.Error().Err(err).Msg("Failed to log checkpoint hit")
 					}
 				}(vehicleID, routeID, cp.ID, time.Now())
-				
+
 				// Update in-memory
 				e.mu.Lock()
 				if e.visited[vehicleID] == nil {

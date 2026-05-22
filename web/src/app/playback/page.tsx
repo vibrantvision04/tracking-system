@@ -17,26 +17,26 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   const R = 6371; // Earth radius in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
 function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
   if (points.length < 3) return points;
-  
+
   // 1. Outlier Filtering (Remove impossible jumps > 120 km/h)
   const filtered: GpsDataPoint[] = [points[0]];
   for (let i = 1; i < points.length; i++) {
     const prev = filtered[filtered.length - 1];
     const curr = points[i];
-    
+
     const distKm = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng);
     const timeDiffHrs = (new Date(curr.time).getTime() - new Date(prev.time).getTime()) / (1000 * 60 * 60);
-    
+
     if (timeDiffHrs > 0) {
       const speedKmh = distKm / timeDiffHrs;
       // If speed is > 120km/h and distance is > 0.05km, it's likely a GPS jump
@@ -53,73 +53,95 @@ function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
   for (let i = 0; i < filtered.length; i++) {
     const start = Math.max(0, i - windowSize);
     const end = Math.min(filtered.length - 1, i + windowSize);
-    
+
     let sumLat = 0;
     let sumLng = 0;
     let count = 0;
-    
+
     for (let j = start; j <= end; j++) {
       sumLat += filtered[j].lat;
       sumLng += filtered[j].lng;
       count++;
     }
-    
+
     smoothed.push({
       ...filtered[i],
       lat: sumLat / count,
       lng: sumLng / count
     });
   }
-  
+
   return smoothed;
 }
 
-async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, number][]> {
-  const CHUNK_SIZE = 90; // OSRM has a limit of 100 coordinates
-  const matchedCoordinates: [number, number][] = [];
+function downsampleForOsrm(points: GpsDataPoint[]): GpsDataPoint[] {
+  if (points.length < 2) return points;
+  const result: GpsDataPoint[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const prev = result[result.length - 1];
+    const curr = points[i];
+    const dist = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng) * 1000;
+    // Keep points if they are > 30 meters apart to drastically reduce payload
+    if (dist > 30) {
+      result.push(curr);
+    }
+  }
+  if (result[result.length - 1] !== points[points.length - 1]) {
+    result.push(points[points.length - 1]);
+  }
+  return result;
+}
 
-  for (let i = 0; i < points.length; i += CHUNK_SIZE) {
-    const chunk = points.slice(i, i + CHUNK_SIZE);
+async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, number][]> {
+  const downsampled = downsampleForOsrm(points);
+  const CHUNK_SIZE = 90; // OSRM has a limit of 100 coordinates
+  const fetchPromises: Promise<[number, number][]>[] = [];
+
+  for (let i = 0; i < downsampled.length; i += CHUNK_SIZE) {
+    const chunk = downsampled.slice(i, i + CHUNK_SIZE);
     if (chunk.length < 2) {
-      if (chunk.length === 1) matchedCoordinates.push([chunk[0].lat, chunk[0].lng]);
+      if (chunk.length === 1) fetchPromises.push(Promise.resolve([[chunk[0].lat, chunk[0].lng]]));
       continue;
     }
 
     const coordsStr = chunk.map(p => `${p.lng},${p.lat}`).join(';');
     const radiusesStr = chunk.map(() => '50').join(';'); // 50m search radius
-    
-    try {
-      const res = await fetch(
-        `https://router.project-osrm.org/match/v1/driving/${coordsStr}?radiuses=${radiusesStr}&geometries=geojson&overview=full`
-      );
-      
-      if (!res.ok) {
-        // Fallback to raw points if match fails
-        chunk.forEach(p => matchedCoordinates.push([p.lat, p.lng]));
-        continue;
-      }
-      
-      const data = await res.json();
+
+    const p = fetch(
+      `https://router.project-osrm.org/match/v1/driving/${coordsStr}?radiuses=${radiusesStr}&geometries=geojson&overview=full`
+    )
+    .then(res => {
+      if (!res.ok) throw new Error("OSRM Error");
+      return res.json();
+    })
+    .then(data => {
+      const matchedCoords: [number, number][] = [];
       if (data.code === 'Ok' && data.matchings && data.matchings.length > 0) {
         data.matchings.forEach((m: any) => {
           if (m.geometry && m.geometry.coordinates) {
             m.geometry.coordinates.forEach((coord: [number, number]) => {
               // OSRM returns [lng, lat], Leaflet wants [lat, lng]
-              matchedCoordinates.push([coord[1], coord[0]]);
+              matchedCoords.push([coord[1], coord[0]]);
             });
           }
         });
       } else {
-        // Fallback
-        chunk.forEach(p => matchedCoordinates.push([p.lat, p.lng]));
+        chunk.forEach(p => matchedCoords.push([p.lat, p.lng]));
       }
-    } catch (err) {
+      return matchedCoords;
+    })
+    .catch(err => {
       console.error("OSRM Match failed:", err);
       // Fallback
-      chunk.forEach(p => matchedCoordinates.push([p.lat, p.lng]));
-    }
+      return chunk.map(p => [p.lat, p.lng] as [number, number]);
+    });
+
+    fetchPromises.push(p);
   }
 
+  const results = await Promise.all(fetchPromises);
+  const matchedCoordinates: [number, number][] = [];
+  results.forEach(res => matchedCoordinates.push(...res));
   return matchedCoordinates;
 }
 
@@ -300,7 +322,7 @@ export default function PlaybackPage() {
     if (typeof window === "undefined" || !box.current || mapRef.current) return;
     const L = require("leaflet");
     mapRef.current = L.map(box.current).setView([26.9124, 75.7873], 13);
-    
+
     const googleMapLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
       attribution: "© Google Maps", maxZoom: 20, noWrap: true
     });
@@ -320,7 +342,7 @@ export default function PlaybackPage() {
       "Google Satellite + Labels": googleHybridLayer,
       "Dark Map": darkLayer
     }, {}, { position: 'topright' }).addTo(mapRef.current);
-    
+
     // Add cleanup to clear references
     return () => {
       if (mapRef.current) {
@@ -334,7 +356,7 @@ export default function PlaybackPage() {
     if (!imei || !date) return;
     const from = `${date}T00:00:00.000Z`;
     const to = `${date}T23:59:59.999Z`;
-    
+
     try {
       const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${imei}?from=${from}&to=${to}`);
       const data = r.data || [];
@@ -370,16 +392,16 @@ export default function PlaybackPage() {
 
       // 1. Get raw/smoothed coordinates to associate with playback index
       const baseCoords = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
-      
+
       // 2. Fetch Map Matched Polyline for beautiful tracing on the road
       const matchedCoords = await fetchMapMatchedRoute(validPoints);
-      
+
       // Draw the beautiful map-matched polyline
       lineRef.current = L.polyline(matchedCoords, { color: "#8b5cf6", weight: 4, opacity: 0.8 }).addTo(map);
 
       // Fit map to bounds
       map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
-      
+
       mkRef.current = L.circleMarker(baseCoords[0], { radius: 8, fillColor: "#22c55e", fillOpacity: 1, color: "#fff", weight: 2 })
         .bindPopup(getPopupContent(validPoints[0]))
         .addTo(map);
@@ -439,13 +461,15 @@ export default function PlaybackPage() {
           const cpRes = await api<{ data: any[] }>(`/api/routes/${routeId}/checkpoints`);
           const cpData = cpRes.data || [];
           setCheckpoints(cpData);
-          
-          // Calculate hits locally based on loaded GPS trace
+
+          // Calculate hits locally based on the purple map-matched line (matchedCoords)
+          // This ensures the visual green/red status perfectly matches the drawn line!
           const hitCheckpoints = new Set<number>();
           cpData.forEach(cp => {
-            const tolerance = Math.max(cp.radius_meters || 50, 50);
-            for (let i = 0; i < validPoints.length; i++) {
-              const dist = haversineDistance(validPoints[i].lat, validPoints[i].lng, cp.latitude, cp.longitude) * 1000;
+            const tolerance = 10; // Force 10m tolerance for all checkpoints
+            for (let i = 0; i < matchedCoords.length; i++) {
+              // matchedCoords is an array of [lat, lng]
+              const dist = haversineDistance(matchedCoords[i][0], matchedCoords[i][1], cp.latitude, cp.longitude) * 1000;
               if (dist <= tolerance) {
                 hitCheckpoints.add(cp.id);
                 break;
@@ -477,7 +501,7 @@ export default function PlaybackPage() {
                 </div>
                 <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
                   <span style="color: #64748b;">Radius:</span>
-                  <span style="font-weight: 600; color: #1e293b;">${cp.radius_meters}m</span>
+                  <span style="font-weight: 600; color: #1e293b;">10m</span>
                 </div>
                 <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
                   <span style="color: #64748b;">Status:</span>
@@ -514,9 +538,9 @@ export default function PlaybackPage() {
                 if (lane.endLat && lane.endLng) pts.push([lane.endLat, lane.endLng]);
               });
               if (pts.length > 0) {
-                assignedRouteLayerRef.current = L.polyline(pts, { 
-                  color: "#eab308", 
-                  weight: 4, 
+                assignedRouteLayerRef.current = L.polyline(pts, {
+                  color: "#eab308",
+                  weight: 4,
                   opacity: 0.8,
                   dashArray: "8, 8"
                 }).addTo(map);
@@ -637,7 +661,7 @@ export default function PlaybackPage() {
                     className="w-full text-left px-2 py-1.5 bg-[var(--bg-surface)] hover:bg-red-500/10 border border-white/[.05] hover:border-red-500/30 rounded-lg text-xs transition flex items-center justify-between"
                   >
                     <div>
-                      <span className="font-semibold text-red-400">Stop #{i+1}</span>
+                      <span className="font-semibold text-red-400">Stop #{i + 1}</span>
                       <span className="text-[10px] text-slate-400 ml-2">
                         {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>

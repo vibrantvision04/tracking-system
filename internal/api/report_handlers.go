@@ -5,10 +5,12 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/utils"
+
 	"github.com/rs/zerolog/log"
 )
 
@@ -42,6 +44,8 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 	filterRouteID, _ := strconv.Atoi(r.URL.Query().Get("route_id"))
 
 	var filtered []interface{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
 	for _, a := range assignments {
 		// Apply filters
@@ -61,55 +65,96 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 
-		// Calculate Coverage
-		cps, err := h.routeRepo.GetCheckpointsByRoute(ctx, a.RouteID)
-		if err != nil {
-			continue
-		}
-		
-		a.TotalCheckpoints = len(cps)
-		if a.TotalCheckpoints == 0 {
-			a.CoveredPercentage = 0
-			a.InOrderPercentage = 0
-			filtered = append(filtered, a)
-			continue
-		}
+		wg.Add(1)
+		go func(a repository.CoverageReportRow) {
+			defer wg.Done()
 
-		// --- Retroactively calculate missing coverage before fetching logs ---
-		recalculateCoverage(ctx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date)
-		// -------------------------------------------------------------------
-
-		logs, err := h.routeRepo.GetCoverageHitLogs(ctx, a.VehicleID, a.RouteID, a.Date)
-		if err != nil {
-			continue
-		}
-
-		uniqueHits := make(map[int]bool)
-		for _, log := range logs {
-			uniqueHits[log.CheckpointID] = true
-		}
-		a.CoveredPercentage = math.Round((float64(len(uniqueHits)) / float64(a.TotalCheckpoints)) * 100)
-
-		// Calculate In-Order coverage
-		inOrderHits := 0
-		lastSeq := -1
-		
-		// To properly calculate in-order, we need to iterate over hits chronologically
-		// GetCoverageHitLogs already orders by hit_time ASC.
-		for _, log := range logs {
-			if log.SequenceOrder > lastSeq {
-				inOrderHits++
-				lastSeq = log.SequenceOrder
+			// Calculate Coverage
+			cps, err := h.routeRepo.GetCheckpointsByRoute(ctx, a.RouteID)
+			if err != nil {
+				return
 			}
-		}
 
-		if inOrderHits > a.TotalCheckpoints {
-			inOrderHits = a.TotalCheckpoints // Just in case of edge cases
-		}
+			a.TotalCheckpoints = len(cps)
+			if a.TotalCheckpoints == 0 {
+				a.CoveredPercentage = 0
+				a.InOrderPercentage = 0
+				mu.Lock()
+				filtered = append(filtered, a)
+				mu.Unlock()
+				return
+			}
 
-		a.InOrderPercentage = math.Round((float64(inOrderHits) / float64(a.TotalCheckpoints)) * 100)
-		filtered = append(filtered, a)
+			// Check existing logs first
+			logs, err := h.routeRepo.GetCoverageHitLogs(ctx, a.VehicleID, a.RouteID, a.Date)
+			if err == nil {
+				uniqueHits := make(map[int]bool)
+				for _, log := range logs {
+					uniqueHits[log.CheckpointID] = true
+				}
+				
+				// If we already have 100% coverage, completely skip the heavy recalculation step!
+				if len(uniqueHits) == a.TotalCheckpoints {
+					a.CoveredPercentage = 100
+					inOrderHits := 0
+					lastSeq := -1
+					for _, log := range logs {
+						if log.SequenceOrder > lastSeq {
+							inOrderHits++
+							lastSeq = log.SequenceOrder
+						}
+					}
+					if inOrderHits > a.TotalCheckpoints {
+						inOrderHits = a.TotalCheckpoints
+					}
+					a.InOrderPercentage = math.Round((float64(inOrderHits) / float64(a.TotalCheckpoints)) * 100)
+					
+					mu.Lock()
+					filtered = append(filtered, a)
+					mu.Unlock()
+					return
+				}
+			}
+
+			// --- Retroactively calculate missing coverage if not 100% ---
+			recalculateCoverage(ctx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date)
+			// -------------------------------------------------------------------
+
+			logs, err = h.routeRepo.GetCoverageHitLogs(ctx, a.VehicleID, a.RouteID, a.Date)
+			if err != nil {
+				return
+			}
+
+			uniqueHits := make(map[int]bool)
+			for _, log := range logs {
+				uniqueHits[log.CheckpointID] = true
+			}
+			a.CoveredPercentage = math.Round((float64(len(uniqueHits)) / float64(a.TotalCheckpoints)) * 100)
+
+			// Calculate In-Order coverage
+			inOrderHits := 0
+			lastSeq := -1
+
+			for _, log := range logs {
+				if log.SequenceOrder > lastSeq {
+					inOrderHits++
+					lastSeq = log.SequenceOrder
+				}
+			}
+
+			if inOrderHits > a.TotalCheckpoints {
+				inOrderHits = a.TotalCheckpoints
+			}
+
+			a.InOrderPercentage = math.Round((float64(inOrderHits) / float64(a.TotalCheckpoints)) * 100)
+			
+			mu.Lock()
+			filtered = append(filtered, a)
+			mu.Unlock()
+		}(a)
 	}
+
+	wg.Wait()
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -154,10 +199,9 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 
 			distKm := utils.Haversine(pt.Lat, pt.Lng, cp.Latitude, cp.Longitude)
 			distMeters := distKm * 1000.0
-			
-			// Use the checkpoint's defined radius, with a minimum tolerance of 50 meters
-			// to account for typical GPS drift in urban environments.
-			tolerance := math.Max(cp.RadiusMeters, 50.0)
+
+			// Force exactly 10 meters radius tolerance
+			tolerance := 10.0
 			if distMeters <= tolerance {
 				visited[cp.ID] = true
 				err := routeRepo.LogCheckpointHit(ctx, vehicleID, routeID, cp.ID, pt.Time)
@@ -168,4 +212,3 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 	}
 }
-
