@@ -197,10 +197,10 @@ export default function D2DMap() {
     }).setView([26.9239, 75.8267], 13);
 
     L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
       {
-        attribution: "© CARTO © OSM",
-        maxZoom: 19,
+        attribution: "© Google Maps",
+        maxZoom: 20,
       }
     ).addTo(m);
 

@@ -8,10 +8,9 @@ services:
       - "8080:8080"
       - "8081:8081"
     environment:
-      - DB_DSN=postgres://gps:password@db:5432/gpsdb
+      - DB_DSN=${DB_DSN}
       - REDIS_ADDR=redis:6379
     depends_on:
-      - db
       - redis
 
   db:

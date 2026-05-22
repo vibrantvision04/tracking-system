@@ -25,6 +25,104 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
+  if (points.length < 3) return points;
+  
+  // 1. Outlier Filtering (Remove impossible jumps > 120 km/h)
+  const filtered: GpsDataPoint[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const prev = filtered[filtered.length - 1];
+    const curr = points[i];
+    
+    const distKm = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng);
+    const timeDiffHrs = (new Date(curr.time).getTime() - new Date(prev.time).getTime()) / (1000 * 60 * 60);
+    
+    if (timeDiffHrs > 0) {
+      const speedKmh = distKm / timeDiffHrs;
+      // If speed is > 120km/h and distance is > 0.05km, it's likely a GPS jump
+      if (speedKmh > 120 && distKm > 0.05) {
+        continue; // Skip outlier
+      }
+    }
+    filtered.push(curr);
+  }
+
+  // 2. Moving Average Smoothing (Window size = 5)
+  const smoothed: GpsDataPoint[] = [];
+  const windowSize = 2; // 2 before, 2 after = 5 total
+  for (let i = 0; i < filtered.length; i++) {
+    const start = Math.max(0, i - windowSize);
+    const end = Math.min(filtered.length - 1, i + windowSize);
+    
+    let sumLat = 0;
+    let sumLng = 0;
+    let count = 0;
+    
+    for (let j = start; j <= end; j++) {
+      sumLat += filtered[j].lat;
+      sumLng += filtered[j].lng;
+      count++;
+    }
+    
+    smoothed.push({
+      ...filtered[i],
+      lat: sumLat / count,
+      lng: sumLng / count
+    });
+  }
+  
+  return smoothed;
+}
+
+async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, number][]> {
+  const CHUNK_SIZE = 90; // OSRM has a limit of 100 coordinates
+  const matchedCoordinates: [number, number][] = [];
+
+  for (let i = 0; i < points.length; i += CHUNK_SIZE) {
+    const chunk = points.slice(i, i + CHUNK_SIZE);
+    if (chunk.length < 2) {
+      if (chunk.length === 1) matchedCoordinates.push([chunk[0].lat, chunk[0].lng]);
+      continue;
+    }
+
+    const coordsStr = chunk.map(p => `${p.lng},${p.lat}`).join(';');
+    const radiusesStr = chunk.map(() => '50').join(';'); // 50m search radius
+    
+    try {
+      const res = await fetch(
+        `https://router.project-osrm.org/match/v1/driving/${coordsStr}?radiuses=${radiusesStr}&geometries=geojson&overview=full`
+      );
+      
+      if (!res.ok) {
+        // Fallback to raw points if match fails
+        chunk.forEach(p => matchedCoordinates.push([p.lat, p.lng]));
+        continue;
+      }
+      
+      const data = await res.json();
+      if (data.code === 'Ok' && data.matchings && data.matchings.length > 0) {
+        data.matchings.forEach((m: any) => {
+          if (m.geometry && m.geometry.coordinates) {
+            m.geometry.coordinates.forEach((coord: [number, number]) => {
+              // OSRM returns [lng, lat], Leaflet wants [lat, lng]
+              matchedCoordinates.push([coord[1], coord[0]]);
+            });
+          }
+        });
+      } else {
+        // Fallback
+        chunk.forEach(p => matchedCoordinates.push([p.lat, p.lng]));
+      }
+    } catch (err) {
+      console.error("OSRM Match failed:", err);
+      // Fallback
+      chunk.forEach(p => matchedCoordinates.push([p.lat, p.lng]));
+    }
+  }
+
+  return matchedCoordinates;
+}
+
 function detectStoppages(points: GpsDataPoint[]): StoppagePoint[] {
   const stoppages: StoppagePoint[] = [];
   const minStoppageDuration = 60; // 60 seconds
@@ -138,16 +236,20 @@ export default function PlaybackPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [imei, setImei] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [routeId, setRouteId] = useState("");
   const [points, setPoints] = useState<GpsDataPoint[]>([]);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [stoppages, setStoppages] = useState<StoppagePoint[]>([]);
+  const [checkpoints, setCheckpoints] = useState<any[]>([]);
 
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const lineRef = useRef<any>(null);
   const mkRef = useRef<any>(null);
   const stoppageMarkersRef = useRef<any[]>([]);
+  const checkpointMarkersRef = useRef<any[]>([]);
+  const assignedRouteLayerRef = useRef<any>(null);
   const intervalRef = useRef<any>(null);
 
   const jumpToKeyframe = useCallback((index: number) => {
@@ -180,6 +282,17 @@ export default function PlaybackPage() {
 
   useEffect(() => {
     api<{ data: Vehicle[] }>("/api/vehicles").then((r) => setVehicles(r.data || [])).catch(() => { });
+
+    // Auto-load from URL parameters if present
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlImei = params.get("imei");
+      const urlDate = params.get("date");
+      const urlRouteId = params.get("route_id");
+      if (urlImei) setImei(urlImei);
+      if (urlDate) setDate(urlDate);
+      if (urlRouteId) setRouteId(urlRouteId);
+    }
   }, []);
 
   // Init map
@@ -188,32 +301,24 @@ export default function PlaybackPage() {
     const L = require("leaflet");
     mapRef.current = L.map(box.current).setView([26.9124, 75.7873], 13);
     
+    const googleMapLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+      attribution: "© Google Maps", maxZoom: 20, noWrap: true
+    });
+
+    const googleHybridLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+      attribution: "© Google Maps Satellite", maxZoom: 20, noWrap: true
+    });
+
     const darkLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "© CARTO © OSM", maxZoom: 19, noWrap: true
+      attribution: "© CARTO", maxZoom: 19, noWrap: true
     });
 
-    const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap", maxZoom: 19, noWrap: true
-    });
-
-    const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-      attribution: "© Esri", maxZoom: 19, noWrap: true
-    });
-
-    const satelliteHybrid = L.layerGroup([
-      satelliteLayer,
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", {
-        attribution: "Labels © CARTO", maxZoom: 19, noWrap: true
-      })
-    ]);
-
-    darkLayer.addTo(mapRef.current);
+    googleMapLayer.addTo(mapRef.current);
 
     L.control.layers({
-      "Dark Map": darkLayer,
-      "Street Map": streetLayer,
-      "Satellite (No Labels)": satelliteLayer,
-      "Satellite + Labels": satelliteHybrid
+      "Google Maps (Default)": googleMapLayer,
+      "Google Satellite + Labels": googleHybridLayer,
+      "Dark Map": darkLayer
     }, {}, { position: 'topright' }).addTo(mapRef.current);
     
     // Add cleanup to clear references
@@ -233,7 +338,8 @@ export default function PlaybackPage() {
     try {
       const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${imei}?from=${from}&to=${to}`);
       const data = r.data || [];
-      const validPoints = data.filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number' && p.lat !== 0);
+      const validPointsRaw = data.filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number' && p.lat !== 0);
+      const validPoints = smoothGpsTrace(validPointsRaw);
       setPoints(validPoints);
       setIdx(0);
       setPlaying(false);
@@ -244,24 +350,37 @@ export default function PlaybackPage() {
       if (lineRef.current) map.removeLayer(lineRef.current);
       if (mkRef.current) map.removeLayer(mkRef.current);
 
-      // Clear previous stoppage markers
+      // Clear previous stoppage and checkpoint markers
       if (stoppageMarkersRef.current) {
         stoppageMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
         stoppageMarkersRef.current = [];
       }
+      if (checkpointMarkersRef.current) {
+        checkpointMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
+        checkpointMarkersRef.current = [];
+      }
+      if (assignedRouteLayerRef.current) {
+        map.removeLayer(assignedRouteLayerRef.current);
+        assignedRouteLayerRef.current = null;
+      }
       setStoppages([]);
+      setCheckpoints([]);
 
       if (validPoints.length === 0) return;
 
-      const ll = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
-      lineRef.current = L.polyline(ll, { color: "#6366f1", weight: 3, opacity: .7 }).addTo(map);
+      // 1. Get raw/smoothed coordinates to associate with playback index
+      const baseCoords = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
       
-      const bounds = lineRef.current.getBounds();
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [40, 40] });
-      }
+      // 2. Fetch Map Matched Polyline for beautiful tracing on the road
+      const matchedCoords = await fetchMapMatchedRoute(validPoints);
       
-      mkRef.current = L.circleMarker(ll[0], { radius: 8, fillColor: "#22c55e", fillOpacity: 1, color: "#fff", weight: 2 })
+      // Draw the beautiful map-matched polyline
+      lineRef.current = L.polyline(matchedCoords, { color: "#8b5cf6", weight: 4, opacity: 0.8 }).addTo(map);
+
+      // Fit map to bounds
+      map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
+      
+      mkRef.current = L.circleMarker(baseCoords[0], { radius: 8, fillColor: "#22c55e", fillOpacity: 1, color: "#fff", weight: 2 })
         .bindPopup(getPopupContent(validPoints[0]))
         .addTo(map);
 
@@ -312,23 +431,113 @@ export default function PlaybackPage() {
         marker.bindPopup(stopPopupContent);
         stoppageMarkersRef.current.push(marker);
       });
+
+      // Fetch and plot assigned route and checkpoints
+      if (routeId && routeId !== "undefined" && routeId !== "null" && routeId !== "0") {
+        try {
+          // 1. Fetch checkpoints
+          const cpRes = await api<{ data: any[] }>(`/api/routes/${routeId}/checkpoints`);
+          const cpData = cpRes.data || [];
+          setCheckpoints(cpData);
+          cpData.forEach((cp, i) => {
+            const cpMarker = L.circleMarker([cp.latitude, cp.longitude], {
+              radius: 6,
+              fillColor: "#eab308",
+              fillOpacity: 0.9,
+              color: "#fff",
+              weight: 1.5,
+              dashArray: "2,2"
+            }).addTo(map);
+
+            const cpPopup = `
+              <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; padding: 2px;">
+                <div style="font-weight: 700; border-bottom: 1px dashed #eab308; padding-bottom: 6px; margin-bottom: 8px; color: #ca8a04; font-size: 14px; display: flex; align-items: center; gap: 4px;">
+                  📍 <span>Checkpoint ${cp.sequence_order > 0 ? '#' + cp.sequence_order : ''}</span>
+                </div>
+                <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
+                  <span style="color: #64748b;">Name:</span>
+                  <span style="font-weight: 600; color: #1e293b;">${cp.checkpoint_name}</span>
+                </div>
+                <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
+                  <span style="color: #64748b;">Radius:</span>
+                  <span style="font-weight: 600; color: #1e293b;">${cp.radius_meters}m</span>
+                </div>
+              </div>
+            `;
+            cpMarker.bindPopup(cpPopup);
+            checkpointMarkersRef.current.push(cpMarker);
+          });
+
+          // 2. Fetch route geometry
+          const routesRes = await api<{ data: any[] }>("/api/routes");
+          const assignedRoute = (routesRes.data || []).find((r: any) => r.id === parseInt(routeId));
+          if (assignedRoute) {
+            if (assignedRoute.geojson) {
+              try {
+                const geoData = JSON.parse(assignedRoute.geojson);
+                assignedRouteLayerRef.current = L.geoJSON(geoData, {
+                  style: {
+                    color: "#3b82f6", // Blue for planned route
+                    weight: 5,
+                    opacity: 0.6
+                  }
+                }).addTo(map);
+              } catch (e) {
+                console.error("Failed to parse route geojson", e);
+              }
+            } else if (assignedRoute.lanes && Array.isArray(assignedRoute.lanes)) {
+              // Fallback to dotted line if no geojson is present
+              const pts: [number, number][] = [];
+              assignedRoute.lanes.forEach((lane: any) => {
+                if (lane.startLat && lane.startLng) pts.push([lane.startLat, lane.startLng]);
+                if (lane.endLat && lane.endLng) pts.push([lane.endLat, lane.endLng]);
+              });
+              if (pts.length > 0) {
+                assignedRouteLayerRef.current = L.polyline(pts, { 
+                  color: "#eab308", 
+                  weight: 4, 
+                  opacity: 0.8,
+                  dashArray: "8, 8"
+                }).addTo(map);
+              }
+            }
+          }
+
+        } catch (err) {
+          console.error("Failed to load checkpoints or route", err);
+        }
+      }
+
     } catch (err) {
       console.error("Playback load error:", err);
     }
-  }, [imei, date]);
+  }, [imei, date, routeId]);
+
+  // Auto-load route if imei and date were set from URL parameters
+  const hasAutoLoaded = useRef(false);
+  useEffect(() => {
+    if (imei && date && mapRef.current && !hasAutoLoaded.current) {
+      if (typeof window !== "undefined" && window.location.search.includes(imei)) {
+        hasAutoLoaded.current = true;
+        loadRoute();
+      }
+    }
+  }, [imei, date, loadRoute]);
 
   // Playback animation
   useEffect(() => {
-    if (!playing || points.length === 0) return;
+    if (!playing || idx >= points.length - 1 || !mapRef.current || !mkRef.current) return;
+
     intervalRef.current = setInterval(() => {
       setIdx((prev) => {
-        if (prev >= points.length - 1) { setPlaying(false); return prev; }
         const next = prev + 1;
-        const p = points[next];
-        if (mkRef.current) {
-          mkRef.current.setLatLng([p.lat, p.lng]);
-          mkRef.current.setPopupContent(getPopupContent(p));
+        if (next >= points.length) {
+          setPlaying(false);
+          return prev;
         }
+        const p = points[next];
+        mkRef.current.setLatLng([p.lat, p.lng]);
+        mkRef.current.setPopupContent(getPopupContent(p));
         return next;
       });
     }, 150);
@@ -366,6 +575,8 @@ export default function PlaybackPage() {
               ))}
             </select>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-[13px] text-white outline-none" />
+            <input type="text" placeholder="Route ID (optional)" value={routeId} onChange={(e) => setRouteId(e.target.value)}
               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-[13px] text-white outline-none" />
             <button onClick={loadRoute} className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium transition">▶ Load Route</button>
           </div>

@@ -13,10 +13,11 @@ import (
 type Dispatcher struct {
 	rdb         *redis.Client
 	tripService *service.TripService
+	routeEngine *service.RouteEngine
 }
 
-func NewDispatcher(rdb *redis.Client, ts *service.TripService) *Dispatcher {
-	return &Dispatcher{rdb: rdb, tripService: ts}
+func NewDispatcher(rdb *redis.Client, ts *service.TripService, re *service.RouteEngine) *Dispatcher {
+	return &Dispatcher{rdb: rdb, tripService: ts, routeEngine: re}
 }
 
 func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
@@ -37,8 +38,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
 		log.Error().Err(err).Str("imei", data.IMEI).Msg("Failed to publish to Redis PubSub")
 	}
 
-	// 2. Geofence check (To be implemented in Phase 4)
-	// d.geofenceEngine.Check(data)
+	// 2. Geofence check / Route Engine Checkpoints
+	d.routeEngine.Process(data)
 	
 	// 3. Trip detection
 	d.tripService.Process(ctx, data)

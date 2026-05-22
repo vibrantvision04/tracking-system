@@ -64,32 +64,24 @@ export default function LiveMap({ vehicles }: Props) {
       layers: [] // Default set below
     }).setView([26.9124, 75.7873], 13);
     
+    const googleMapLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+      attribution: "© Google Maps", maxZoom: 20, noWrap: true
+    });
+
+    const googleHybridLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+      attribution: "© Google Maps", maxZoom: 20, noWrap: true
+    });
+
     const darkLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "© CARTO © OSM", maxZoom: 19, noWrap: true
+      attribution: "© CARTO", maxZoom: 19, noWrap: true
     });
 
-    const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap", maxZoom: 19, noWrap: true
-    });
-
-    const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-      attribution: "© Esri", maxZoom: 19, noWrap: true
-    });
-
-    const satelliteHybrid = L.layerGroup([
-      satelliteLayer,
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", {
-        attribution: "Labels © CARTO", maxZoom: 19, noWrap: true
-      })
-    ]);
-
-    darkLayer.addTo(m); // Default layer
+    googleMapLayer.addTo(m); // Default layer
 
     L.control.layers({
-      "Dark Map": darkLayer,
-      "Street Map": streetLayer,
-      "Satellite (No Labels)": satelliteLayer,
-      "Satellite + Labels": satelliteHybrid
+      "Google Maps (Default)": googleMapLayer,
+      "Google Satellite + Labels": googleHybridLayer,
+      "Dark Map": darkLayer
     }, {}, { position: 'topright' }).addTo(m);
     
     mapRef.current = m;

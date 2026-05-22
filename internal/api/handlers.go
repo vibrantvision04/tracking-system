@@ -10,7 +10,6 @@ import (
 	"hash/crc32"
 	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,8 +29,7 @@ type Handler struct {
 	gpsRepo           *repository.GPSRepository
 	rService          *service.ReportService
 	rdb               *redis.Client
-	vehicleZones      map[string]int
-	vehicleWards      map[string]int
+	routeRepo         *repository.RouteRepository
 	zoneVehiclesCache map[string][]map[string]interface{}
 	cacheMutex        sync.RWMutex
 	alertsMutex       sync.Mutex
@@ -39,99 +37,19 @@ type Handler struct {
 	resolvedAlerts    map[int]ResolvedDetails
 }
 
-func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client) *Handler {
+func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository) *Handler {
 	h := &Handler{
 		vRepo:             vRepo,
 		gpsRepo:           gpsRepo,
 		rService:          rService,
 		rdb:               rdb,
-		vehicleZones:      make(map[string]int),
-		vehicleWards:      make(map[string]int),
+		routeRepo:         routeRepo,
 		zoneVehiclesCache: make(map[string][]map[string]interface{}),
 		resolvedAlerts:    make(map[int]ResolvedDetails),
 	}
-	h.LoadMappings()
 	h.RebuildCache()
 	h.LoadAlerts()
 	return h
-}
-
-func (h *Handler) LoadMappings() {
-	data, err := os.ReadFile("E:\\dataswim\\iswmmovement.json")
-	if err != nil {
-		fmt.Printf("Failed to read iswmmovement.json for mappings: %v\n", err)
-		return
-	}
-
-	// Try parsing old structure
-	var resultOld struct {
-		Data []struct {
-			RegistrationNo string `json:"registration_no"`
-			Regions        []struct {
-				ID int `json:"id"`
-			} `json:"regions"`
-			SubRegions []struct {
-				ID int `json:"id"`
-			} `json:"sub_regions"`
-		} `json:"data"`
-	}
-
-	if err := json.Unmarshal(data, &resultOld); err == nil && len(resultOld.Data) > 0 && len(resultOld.Data[0].Regions) > 0 {
-		for _, v := range resultOld.Data {
-			if len(v.Regions) > 0 {
-				h.vehicleZones[v.RegistrationNo] = v.Regions[0].ID
-			}
-			if len(v.SubRegions) > 0 {
-				h.vehicleWards[v.RegistrationNo] = v.SubRegions[0].ID
-			}
-		}
-		fmt.Printf("Loaded %d vehicle-zone mappings and %d vehicle-ward mappings (Old Structure)\n", len(h.vehicleZones), len(h.vehicleWards))
-		return
-	}
-
-	// Try parsing new structure (assuming it's an array of vehicles)
-	var resultNew []struct {
-		Number string `json:"number"`
-		ZoneId struct {
-			ID   string `json:"_id"`
-			Name string `json:"name"`
-		} `json:"zoneId"`
-	}
-
-	if err := json.Unmarshal(data, &resultNew); err == nil && len(resultNew) > 0 {
-		for _, v := range resultNew {
-			if v.ZoneId.ID != "" {
-				zoneID := int(crc32.ChecksumIEEE([]byte(v.ZoneId.ID)))
-				h.vehicleZones[v.Number] = zoneID
-			}
-		}
-		fmt.Printf("Loaded %d vehicle-zone mappings (New Structure)\n", len(h.vehicleZones))
-		return
-	}
-
-	// Try parsing new structure wrapped in a "data" field
-	var resultNewWrapped struct {
-		Data []struct {
-			Number string `json:"number"`
-			ZoneId struct {
-				ID   string `json:"_id"`
-				Name string `json:"name"`
-			} `json:"zoneId"`
-		} `json:"data"`
-	}
-
-	if err := json.Unmarshal(data, &resultNewWrapped); err == nil && len(resultNewWrapped.Data) > 0 {
-		for _, v := range resultNewWrapped.Data {
-			if v.ZoneId.ID != "" {
-				zoneID := int(crc32.ChecksumIEEE([]byte(v.ZoneId.ID)))
-				h.vehicleZones[v.Number] = zoneID
-			}
-		}
-		fmt.Printf("Loaded %d vehicle-zone mappings (New Wrapped Structure)\n", len(h.vehicleZones))
-		return
-	}
-
-	fmt.Println("Failed to parse iswmmovement.json with any supported structure")
 }
 
 func (h *Handler) RebuildCache() {
@@ -161,21 +79,8 @@ func (h *Handler) RebuildCache() {
 			"last_time":       v.LastTime,
 		}
 		
-		var zoneID int
-		if zid, ok := h.vehicleZones[v.RegistrationNo]; ok {
-			m["zone_id"] = zid
-			zoneID = zid
-		}
-		if wardID, ok := h.vehicleWards[v.RegistrationNo]; ok {
-			m["ward_id"] = wardID
-		}
 		
 		allVehicles = append(allVehicles, m)
-		
-		if zoneID > 0 {
-			zoneStr := strconv.Itoa(zoneID)
-			newCache[zoneStr] = append(newCache[zoneStr], m)
-		}
 	}
 
 	newCache["all"] = allVehicles
@@ -258,16 +163,10 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 	// Trigger real-time generation for the requested date range if a specific vehicle is selected.
 	// This ensures the "Load" button always provides absolute latest and fresh data on demand.
 	if vehicleID > 0 {
-		v, err := h.vRepo.GetByID(r.Context(), vehicleID)
+		_, err := h.vRepo.GetByID(r.Context(), vehicleID)
 		if err == nil {
 			zone := ""
 			ward := ""
-			if zid, ok := h.vehicleZones[v.RegistrationNo]; ok {
-				zone = strconv.Itoa(zid)
-			}
-			if wid, ok := h.vehicleWards[v.RegistrationNo]; ok {
-				ward = strconv.Itoa(wid)
-			}
 
 			// Generate/Update reports for each day in the requested range
 			curr := from

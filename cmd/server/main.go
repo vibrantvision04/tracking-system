@@ -53,6 +53,7 @@ func main() {
 	vRepo := repository.NewVehicleRepository(db)
 	rRepo := repository.NewReportRepository(db)
 	tRepo := repository.NewTripRepository(db)
+	routeRepo := repository.NewRouteRepository(db)
 
 	// 5. Initialize Caches
 	locCache := cache.NewLocationCache(rdb)
@@ -60,10 +61,11 @@ func main() {
 	// 6. Initialize Services
 	rService := service.NewReportService(rRepo, gpsRepo, vRepo)
 	tService := service.NewTripService(tRepo, vRepo, gpsRepo, rdb)
+	routeEngine := service.NewRouteEngine(routeRepo, vRepo)
 
 	// 7. Initialize Ingestion Pipeline
 	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond)
-	dispatcher := worker.NewDispatcher(rdb, tService)
+	dispatcher := worker.NewDispatcher(rdb, tService, routeEngine)
 	pipeline := worker.NewPipeline(cfg, rdb, locCache, dispatcher)
 	pipeline.Start()
 
@@ -89,7 +91,7 @@ func main() {
 
 
 	// 12. Start Servers
-	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb)
+	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo)
 	router := api.SetupRouter(handler, hub)
 
 	// API Server (Handles both HTTP and WebSockets)

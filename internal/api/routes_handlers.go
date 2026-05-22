@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -91,6 +92,57 @@ func (h *Handler) GetShifts(w http.ResponseWriter, r *http.Request) {
 		"success":     true,
 		"status_code": 200,
 		"data":        shifts,
+	})
+}
+
+func (h *Handler) CreateShift(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req struct {
+		ShiftName    string `json:"shift_name"`
+		StartTime    string `json:"start_time"` // "HH:MM:SS"
+		EndTime      string `json:"end_time"`   // "HH:MM:SS"
+		TimeDuration int    `json:"time_duration"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+
+	var shiftID int
+	err := h.gpsRepo.Pool().QueryRow(ctx, `
+		INSERT INTO shifts (shift_name, start_time, end_time, time_duration)
+		VALUES ($1, $2::time, $3::time, $4)
+		RETURNING id
+	`, req.ShiftName, req.StartTime, req.EndTime, req.TimeDuration).Scan(&shiftID)
+
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create shift: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusCreated, map[string]interface{}{
+		"success": true,
+		"id":      shiftID,
+	})
+}
+
+func (h *Handler) DeleteShift(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	idStr := chi.URLParam(r, "id")
+	shiftID, err := strconv.Atoi(idStr)
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid shift ID"})
+		return
+	}
+
+	_, err = h.gpsRepo.Pool().Exec(ctx, "DELETE FROM shifts WHERE id = $1", shiftID)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete shift: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
 	})
 }
 
@@ -205,6 +257,11 @@ func (h *Handler) CreateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sync lanes to route_checkpoints
+	if len(req.Lanes) > 0 {
+		syncRouteCheckpoints(ctx, h, routeID, req.RouteName, req.Lanes)
+	}
+
 	sendJSON(w, http.StatusCreated, map[string]interface{}{
 		"success": true,
 		"id":      routeID,
@@ -285,6 +342,14 @@ func (h *Handler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sync lanes to route_checkpoints
+	if len(req.Lanes) > 0 {
+		syncRouteCheckpoints(ctx, h, routeID, req.RouteName, req.Lanes)
+	} else {
+		// Clear checkpoints if lanes are empty
+		h.gpsRepo.Pool().Exec(ctx, "DELETE FROM route_checkpoints WHERE route_id = $1", routeID)
+	}
+
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 	})
@@ -318,4 +383,62 @@ func (h *Handler) DeleteRoute(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 	})
+}
+
+// Helper to automatically convert Lanes into Checkpoints for coverage calculations
+func syncRouteCheckpoints(ctx context.Context, h *Handler, routeID int, routeName string, lanesJSON []byte) {
+	type Lane struct {
+		LaneOrder int     `json:"laneOrder"`
+		StartLat  float64 `json:"startLat"`
+		StartLng  float64 `json:"startLng"`
+		EndLat    float64 `json:"endLat"`
+		EndLng    float64 `json:"endLng"`
+	}
+
+	var lanes []Lane
+	if err := json.Unmarshal(lanesJSON, &lanes); err != nil {
+		fmt.Println("syncRouteCheckpoints json.Unmarshal error:", err)
+		return
+	}
+	fmt.Printf("syncRouteCheckpoints: parsed %d lanes for route %d\n", len(lanes), routeID)
+
+	db := h.gpsRepo.Pool()
+
+	// 1. Clear old checkpoints for this route
+	_, err := db.Exec(ctx, "DELETE FROM route_checkpoints WHERE route_id = $1", routeID)
+	if err != nil {
+		fmt.Println("syncRouteCheckpoints DELETE error:", err)
+	}
+
+	// 2. Insert new checkpoints
+	// For each lane, we insert the start point and the end point
+	// (or just start point if they are the same to avoid duplicates)
+	seq := 1
+	for _, lane := range lanes {
+		fmt.Printf("syncRouteCheckpoints: inserting Start checkpoint for lane %d\n", lane.LaneOrder)
+		// Start Point
+		_, err = db.Exec(ctx, `
+			INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_Start", lane.StartLat, lane.StartLng, 50.0, seq)
+		if err != nil {
+			fmt.Println("syncRouteCheckpoints INSERT start error:", err)
+		}
+		seq++
+
+		// End Point
+		// Check if end is significantly different from start to avoid duplicate pins
+		if lane.StartLat != lane.EndLat || lane.StartLng != lane.EndLng {
+			fmt.Printf("syncRouteCheckpoints: inserting End checkpoint for lane %d\n", lane.LaneOrder)
+			_, err = db.Exec(ctx, `
+				INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
+				VALUES ($1, $2, $3, $4, $5, $6)
+			`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_End", lane.EndLat, lane.EndLng, 50.0, seq)
+			if err != nil {
+				fmt.Println("syncRouteCheckpoints INSERT end error:", err)
+			}
+			seq++
+		}
+	}
+	fmt.Println("syncRouteCheckpoints: done syncing")
 }

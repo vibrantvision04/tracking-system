@@ -52,11 +52,23 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 		r.Get("/wards", h.GetWards)
 		r.Get("/d2d/dashboard", h.GetD2DDashboard)
 		r.Get("/routes", h.GetRoutes)
+		r.Get("/routes/{id}/checkpoints", h.GetRouteCheckpoints)
 		r.Post("/routes", h.CreateRoute)
 		r.Put("/routes/{id}", h.UpdateRoute)
 		r.Delete("/routes/{id}", h.DeleteRoute)
 		r.Get("/shifts", h.GetShifts)
+		r.Post("/shifts", h.CreateShift)
+		r.Delete("/shifts/{id}", h.DeleteShift)
 		r.Get("/route-types", h.GetRouteTypes)
+
+		// Reports
+		r.Get("/reports/d2d-coverage", h.GetD2DRouteCoverageReport)
+
+		// New Route Coverage endpoints
+		r.Post("/routes/{id}/checkpoints", h.AddRouteCheckpoint)
+		r.Get("/routes/{id}/checkpoints", h.GetRouteCheckpoints)
+		r.Post("/vehicles/{id}/assign-route", h.AssignRouteToVehicle)
+		r.Get("/vehicles/{id}/route-coverage", h.GetVehicleRouteCoverage)
 	})
 
 	return r

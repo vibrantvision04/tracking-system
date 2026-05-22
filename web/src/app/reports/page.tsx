@@ -142,8 +142,8 @@ export default function ReportsPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-2">To Date</label>
-              <input type="date" value={date}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500" />
+              <input type="date" value={date} readOnly
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 bg-slate-100 cursor-not-allowed" />
             </div>
             <div>
               <button 
