@@ -60,6 +60,14 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 		r.Post("/shifts", h.CreateShift)
 		r.Delete("/shifts/{id}", h.DeleteShift)
 		r.Get("/route-types", h.GetRouteTypes)
+		r.Get("/region-types", h.GetRegionTypes)
+		r.Post("/region-types", h.CreateRegionType)
+		r.Put("/region-types/{id}", h.UpdateRegionType)
+		r.Delete("/region-types/{id}", h.DeleteRegionType)
+		r.Get("/regions", h.GetRegions)
+		r.Post("/regions", h.CreateRegion)
+		r.Put("/regions/{id}", h.UpdateRegion)
+		r.Delete("/regions/{id}", h.DeleteRegion)
 
 		// Reports
 		r.Get("/reports/d2d-coverage", h.GetD2DRouteCoverageReport)

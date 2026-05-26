@@ -2,6 +2,9 @@ import { create } from "zustand";
 import { api } from "./api";
 import type { Vehicle, GpsDevice, VehicleType } from "./types";
 
+// Central Feature Toggle: Set this to true to enable, or false to disable all fuel-related menus, options, and fields in the program.
+export const ENABLE_FUEL_FEATURES = false;
+
 interface AppState {
   vehicles: Vehicle[];
   vehiclesByZone: Record<string, Vehicle[]>;
@@ -11,6 +14,8 @@ interface AppState {
   lastLoaded: number;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   loadAll: (force?: boolean, zoneId?: string) => Promise<void>;
 
   addOrUpdateVehicle: (vehicle: Vehicle) => void;
@@ -30,6 +35,13 @@ export const useStore = create<AppState>((set, get) => ({
   lastLoaded: 0,
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  sidebarCollapsed: typeof window !== "undefined" ? localStorage.getItem("sidebarCollapsed") === "true" : false,
+  setSidebarCollapsed: (collapsed) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sidebarCollapsed", String(collapsed));
+    }
+    set({ sidebarCollapsed: collapsed });
+  },
 
   loadAll: async (force = false) => {
     const now = Date.now();

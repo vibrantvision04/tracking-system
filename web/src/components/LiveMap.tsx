@@ -46,10 +46,24 @@ export default function LiveMap({ vehicles }: Props) {
     return () => clearInterval(interval);
   }, []);
 
+  const sidebarCollapsed = useStore((state) => state.sidebarCollapsed);
+
   useEffect(() => {
     if (!mapRef.current) return;
-    
+    const tid1 = setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 100);
+    const tid2 = setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 320);
+    return () => {
+      clearTimeout(tid1);
+      clearTimeout(tid2);
+    };
+  }, [sidebarCollapsed]);
 
+  useEffect(() => {
+    if (!mapRef.current) return;
   }, [selectedZone, vehicles]);
 
   // ─── Init Map ───

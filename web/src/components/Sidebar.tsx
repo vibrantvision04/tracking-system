@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useStore } from "@/lib/store";
+import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { useState, useRef, useEffect } from "react";
 
 const navData = [
@@ -226,10 +226,33 @@ const navData = [
   },
 ];
 
+// Helper to recursively filter out fuel-related menus if feature toggle is disabled
+const filterFuelItems = (items: any[]): any[] => {
+  if (ENABLE_FUEL_FEATURES) return items;
+  return items
+    .filter(item => {
+      const isFuel = item.label.toLowerCase().includes("fuel") || (item.href && item.href.toLowerCase().includes("fuel"));
+      return !isFuel;
+    })
+    .map(item => {
+      if (item.children) {
+        return {
+          ...item,
+          children: filterFuelItems(item.children)
+        };
+      }
+      return item;
+    });
+};
+
+const filteredNavData = filterFuelItems(navData);
+
 export default function Sidebar() {
   const path = usePathname();
   const sidebarOpen = useStore((state) => state.sidebarOpen);
   const setSidebarOpen = useStore((state) => state.setSidebarOpen);
+  const sidebarCollapsed = useStore((state) => state.sidebarCollapsed);
+  const setSidebarCollapsed = useStore((state) => state.setSidebarCollapsed);
   
   // State to track active category for flyout
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -254,7 +277,7 @@ export default function Sidebar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const currentCategoryData = navData.find(cat => cat.label === (activeCategory || renderedCategory));
+  const currentCategoryData = filteredNavData.find(cat => cat.label === (activeCategory || renderedCategory));
 
   return (
     <>
@@ -266,34 +289,45 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Main Sidebar (160px) - Premium dark aesthetic */}
+      {/* Main Sidebar - Premium dark aesthetic */}
       <aside className={`
-        fixed inset-y-0 left-0 z-[1002] w-[160px] flex flex-col bg-[#0b0f1a] border-r border-white/[.03]
-        transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0
+        fixed inset-y-0 left-0 z-[1002] flex flex-col bg-[#0b0f1a] border-r border-white/[.03]
+        transition-all duration-300 ease-in-out lg:relative lg:translate-x-0
+        ${sidebarCollapsed ? "w-[64px]" : "w-[160px]"}
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
       `}>
         {/* Brand with subtle glow */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-white/[.03]">
+        <div className={`flex items-center justify-between px-4 py-4 border-b border-white/[.03] ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-[11px] shadow-lg shadow-indigo-500/30">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-[11px] shadow-lg shadow-indigo-500/30 shrink-0">
               IS
             </div>
-            <div>
-              <div className="text-[11px] font-bold text-white tracking-tight leading-none mb-0.5">ISWM Jaipur</div>
-              <div className="text-[7px] text-slate-500 uppercase tracking-[.15em]">Heritage</div>
+            <div className={`transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
+              <div className="text-[11px] font-bold text-white tracking-tight leading-none mb-0.5 whitespace-nowrap">ISWM Jaipur</div>
+              <div className="text-[7px] text-slate-500 uppercase tracking-[.15em] whitespace-nowrap">Heritage</div>
             </div>
           </div>
-          <button 
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden text-slate-500 hover:text-white transition-colors"
-          >
-            ✕
-          </button>
+          {!sidebarCollapsed && (
+            <button 
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden text-slate-500 hover:text-white transition-colors animate-fade-in"
+            >
+              ✕
+            </button>
+          )}
+          {sidebarCollapsed && (
+            <button 
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden text-slate-500 hover:text-white transition-colors"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Navigation with micro-interactions */}
-        <nav className="flex-1 py-3 space-y-0.5 text-[11px]">
-          {navData.map((category) => {
+        <nav className="flex-1 py-3 space-y-0.5 text-[11px] overflow-y-auto custom-scrollbar">
+          {filteredNavData.map((category) => {
             const hasChildren = category.children && category.children.length > 0;
             const isActive = activeCategory === category.label;
             const isCurrentPath = category.href && path === category.href;
@@ -309,29 +343,34 @@ export default function Sidebar() {
                       setActiveCategory(null);
                     }}
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200 group
+                      ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isCurrentPath
                         ? "bg-gradient-to-r from-indigo-500/[.15] to-transparent text-indigo-400 font-medium"
                         : "text-slate-400 hover:text-slate-200 hover:bg-white/[.02]"
                       }`}
                   >
-                    <span className="w-4 flex justify-center text-[13px] group-hover:scale-110 transition-transform">{category.icon}</span>
-                    <span className="truncate">{category.label}</span>
+                    <span className="w-4 flex justify-center text-[13px] group-hover:scale-110 transition-transform shrink-0">{category.icon}</span>
+                    <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                   </Link>
                 ) : (
                   <button
                     onClick={() => setActiveCategory(isActive ? null : category.label)}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg transition-all duration-200 group
+                      ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isActive 
                         ? "bg-gradient-to-r from-indigo-500/[.15] to-transparent text-indigo-400 font-medium" 
                         : "text-slate-400 hover:text-slate-200 hover:bg-white/[.02]"
                       }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-4 flex justify-center text-[13px] group-hover:scale-110 transition-transform">{category.icon}</span>
-                      <span className="truncate">{category.label}</span>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-4 flex justify-center text-[13px] group-hover:scale-110 transition-transform shrink-0">{category.icon}</span>
+                      <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                     </div>
-                    {hasChildren && (
-                      <span className={`text-[7px] transition-transform duration-200 ${isActive ? "rotate-90 text-indigo-400" : "text-slate-600"}`}>▶</span>
+                    {hasChildren && !sidebarCollapsed && (
+                      <span className={`text-[7px] transition-transform duration-200 lg:block hidden ${isActive ? "rotate-90 text-indigo-400" : "text-slate-600"}`}>▶</span>
+                    )}
+                    {hasChildren && sidebarCollapsed && (
+                      <span className={`text-[7px] transition-transform duration-200 lg:hidden block ${isActive ? "rotate-90 text-indigo-400" : "text-slate-600"}`}>▶</span>
                     )}
                   </button>
                 )}
@@ -340,14 +379,26 @@ export default function Sidebar() {
           })}
         </nav>
 
+        {/* Toggle Collapse Button */}
+        <div className="hidden lg:flex px-3 py-1.5 border-t border-white/[.03] items-center justify-center">
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="w-full py-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/[.03] transition-all flex items-center justify-center text-[10px] font-bold gap-1.5"
+            title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            <span>{sidebarCollapsed ? "▶" : "◀"}</span>
+            {!sidebarCollapsed && <span className="uppercase tracking-wider text-[8px] text-slate-400">Collapse</span>}
+          </button>
+        </div>
+
         {/* Footer */}
-        <div className="px-3 py-3 border-t border-white/[.03] flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold">
+        <div className={`px-3 py-3 border-t border-white/[.03] flex items-center gap-2 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
+          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
             AD
           </div>
-          <div className="min-w-0">
-            <div className="text-[11px] font-semibold text-slate-200 truncate">Admin</div>
-            <div className="text-[8px] text-slate-600 truncate">Master Admin</div>
+          <div className={`min-w-0 transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
+            <div className="text-[11px] font-semibold text-slate-200 truncate whitespace-nowrap">Admin</div>
+            <div className="text-[8px] text-slate-600 truncate whitespace-nowrap">Master Admin</div>
           </div>
         </div>
       </aside>
@@ -355,8 +406,9 @@ export default function Sidebar() {
       {/* Flyout Mega Menu - Glassmorphism & Slide-in Animation */}
       <div 
         ref={flyoutRef}
-        className={`fixed inset-y-0 left-[160px] z-[1003] bg-[#0b0f1a]/95 backdrop-blur-xl border-r border-white/[.03] shadow-2xl shadow-black/70 flex flex-col
+        className={`fixed inset-y-0 z-[1003] bg-[#0b0f1a]/95 backdrop-blur-xl border-r border-white/[.03] shadow-2xl shadow-black/70 flex flex-col
           transition-all duration-300 ease-out
+          ${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
           ${activeCategory 
             ? "opacity-100 translate-x-0" 
             : "opacity-0 -translate-x-4 pointer-events-none"

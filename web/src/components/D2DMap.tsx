@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { api, post } from "@/lib/api";
 import { toast } from "react-toastify";
+import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 
 interface D2DAlert {
   id: number;
@@ -89,7 +90,7 @@ const STOPPAGE_REASONS = [
   "Vehicle is under maintenance",
   "Going to Rc Point",
   "At Fuel Pump"
-];
+].filter(reason => ENABLE_FUEL_FEATURES || !reason.toLowerCase().includes("fuel"));
 
 export default function D2DMap() {
   const mapRef = useRef<L.Map | null>(null);
@@ -125,7 +126,7 @@ export default function D2DMap() {
   // Map Controls State (Right side checkboxes)
   const [showParking, setShowParking] = useState(true);
   const [showTransfer, setShowTransfer] = useState(true);
-  const [showFuel, setShowFuel] = useState(true);
+  const [showFuel, setShowFuel] = useState(ENABLE_FUEL_FEATURES);
   const [showWorkshop, setShowWorkshop] = useState(true);
 
   const [showStop5_10, setShowStop5_10] = useState(true);
@@ -146,6 +147,28 @@ export default function D2DMap() {
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [snoozes, setSnoozes] = useState<Record<number, number>>({});
   const [activeShift, setActiveShift] = useState<string>("");
+
+  // UI Collapse States
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
+  const sidebarCollapsed = useStore((state) => state.sidebarCollapsed);
+
+  // Invalidate map size when layouts collapse/expand to avoid rendering glitches
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    // Invalidate size immediately
+    mapRef.current.invalidateSize();
+    
+    // Invalidate size after animation ends (300ms transition)
+    const timer = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 320);
+
+    return () => clearTimeout(timer);
+  }, [sidebarCollapsed, rightPanelOpen, bottomPanelOpen]);
 
   // ─── Fetch Dropdowns and Main Data ───
   const fetchData = useCallback(async () => {
@@ -550,7 +573,7 @@ export default function D2DMap() {
     <div className="flex flex-col h-screen w-full bg-[#030712] text-slate-100 overflow-hidden font-sans">
       
       {/* Top Navigation / Filters Bar */}
-      <header className="flex h-16 bg-[#090d16] px-6 items-center justify-between border-b border-slate-800 shrink-0 z-10">
+      <header className="flex flex-col lg:flex-row lg:h-16 bg-[#090d16] px-4 py-3 lg:py-0 lg:px-6 items-start lg:items-center justify-between gap-4 lg:gap-0 border-b border-slate-800 shrink-0 z-10 w-full">
         <div className="flex items-center gap-3">
           <span className="text-xl">📊</span>
           <div>
@@ -560,13 +583,13 @@ export default function D2DMap() {
         </div>
 
         {/* Dropdowns */}
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Zone</span>
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
+            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Zone</span>
             <select
               value={selectedZone}
               onChange={(e) => setSelectedZone(e.target.value)}
-              className="bg-slate-900 border border-slate-850 px-2.5 py-1 rounded text-xs text-slate-200 focus:border-indigo-500/50 outline-none"
+              className="w-full bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-200 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
               <option value="Zone 1 - Hawa Mahal-Aamer Zone">Zone 1 - Hawa Mahal-Aamer Zone</option>
               {zonesList.map(z => (
@@ -575,12 +598,12 @@ export default function D2DMap() {
             </select>
           </div>
 
-          <div className="flex flex-col">
-            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Select Ward</span>
+          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
+            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Select Ward</span>
             <select
               value={selectedWard}
               onChange={(e) => setSelectedWard(e.target.value)}
-              className="bg-slate-900 border border-slate-850 px-2.5 py-1 rounded text-xs text-slate-200 focus:border-indigo-500/50 outline-none min-w-[120px]"
+              className="w-full bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-200 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
               <option value="">All Wards</option>
               {distinctWards.map(w => {
@@ -590,12 +613,12 @@ export default function D2DMap() {
             </select>
           </div>
 
-          <div className="flex flex-col">
-            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Route Type</span>
+          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
+            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Route Type</span>
             <select
               value={selectedRouteType}
               onChange={(e) => setSelectedRouteType(e.target.value)}
-              className="bg-slate-900 border border-slate-850 px-2.5 py-1 rounded text-xs text-slate-200 focus:border-indigo-500/50 outline-none min-w-[120px]"
+              className="w-full bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-200 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
               <option value="">All Route Types</option>
               <option value="SWEEPING">Sweeping Machine</option>
@@ -604,7 +627,7 @@ export default function D2DMap() {
             </select>
           </div>
           
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-850 rounded text-xs text-slate-300">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-300 font-medium shrink-0 ml-auto lg:ml-0 h-[32px] mt-4 lg:mt-0">
             <span className="font-bold text-indigo-400">⏱️ Shift:</span> {activeShift || "N/A"}
           </div>
         </div>
@@ -621,7 +644,7 @@ export default function D2DMap() {
             <div ref={containerRef} className="absolute inset-0 z-0" />
             
             {/* Quick search floating overlay */}
-            <div className="absolute top-4 left-4 z-10 bg-slate-900/90 border border-slate-800/80 rounded-lg p-2 flex items-center gap-2 shadow-2xl backdrop-blur-md">
+            <div className="absolute top-4 left-14 z-10 bg-slate-900/90 border border-slate-800/80 rounded-lg p-2 flex items-center gap-2 shadow-2xl backdrop-blur-md">
               <input
                 type="text"
                 placeholder="Search Reg No..."
@@ -633,16 +656,47 @@ export default function D2DMap() {
                 <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-white text-xs px-1">✕</button>
               )}
             </div>
+
+            {/* Floating button to open right panel when closed */}
+            {!rightPanelOpen && (
+              <button
+                onClick={() => setRightPanelOpen(true)}
+                className="absolute top-4 right-4 z-[1000] bg-slate-900/95 border border-indigo-500/30 hover:border-indigo-500/80 rounded-xl px-3.5 py-2 flex items-center gap-2 shadow-2xl backdrop-blur-md text-xs font-bold text-indigo-400 hover:text-white hover:bg-indigo-950/40 transition-all duration-300 active:scale-95 group animate-fade-in"
+              >
+                <svg className="w-4 h-4 text-indigo-400 group-hover:rotate-45 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Layers & Filters</span>
+                <svg className="w-3.5 h-3.5 text-indigo-500 group-hover:text-white transition-transform duration-200 group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Bottom Tables Tabs */}
-          <div className="h-[340px] border-t border-slate-800 bg-[#070b13] flex flex-col relative shrink-0">
+          <div className={`border-t border-slate-800 bg-[#070b13] flex flex-col relative shrink-0 transition-all duration-300 ease-in-out ${
+            bottomPanelOpen ? "h-[280px] md:h-[340px]" : "h-10 overflow-hidden"
+          }`}>
             
             {/* Tab selection triggers */}
-            <div className="flex h-10 border-b border-slate-850 bg-[#090d16] px-4 items-center justify-between">
+            <div className="flex h-10 border-b border-slate-850 bg-[#090d16] px-4 items-center justify-between cursor-pointer select-none" onClick={(e) => {
+              // Click the tab bar itself to toggle
+              if ((e.target as HTMLElement).tagName === 'DIV' || (e.target as HTMLElement).tagName === 'HEADER') {
+                setBottomPanelOpen(!bottomPanelOpen);
+              }
+            }}>
               <div className="flex gap-2 h-full">
                 <button
-                  onClick={() => setActiveTab("alerts")}
+                  onClick={() => {
+                    if (activeTab === "alerts") {
+                      setBottomPanelOpen(!bottomPanelOpen);
+                    } else {
+                      setActiveTab("alerts");
+                      setBottomPanelOpen(true);
+                    }
+                  }}
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "alerts"
                       ? "border-red-500 text-red-400 bg-red-950/10"
@@ -656,7 +710,14 @@ export default function D2DMap() {
                 </button>
 
                 <button
-                  onClick={() => setActiveTab("started")}
+                  onClick={() => {
+                    if (activeTab === "started") {
+                      setBottomPanelOpen(!bottomPanelOpen);
+                    } else {
+                      setActiveTab("started");
+                      setBottomPanelOpen(true);
+                    }
+                  }}
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "started"
                       ? "border-green-500 text-green-400 bg-green-950/10"
@@ -670,7 +731,14 @@ export default function D2DMap() {
                 </button>
 
                 <button
-                  onClick={() => setActiveTab("unauth")}
+                  onClick={() => {
+                    if (activeTab === "unauth") {
+                      setBottomPanelOpen(!bottomPanelOpen);
+                    } else {
+                      setActiveTab("unauth");
+                      setBottomPanelOpen(true);
+                    }
+                  }}
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "unauth"
                       ? "border-amber-500 text-amber-400 bg-amber-950/10"
@@ -684,7 +752,14 @@ export default function D2DMap() {
                 </button>
 
                 <button
-                  onClick={() => setActiveTab("other")}
+                  onClick={() => {
+                    if (activeTab === "other") {
+                      setBottomPanelOpen(!bottomPanelOpen);
+                    } else {
+                      setActiveTab("other");
+                      setBottomPanelOpen(true);
+                    }
+                  }}
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "other"
                       ? "border-slate-500 text-slate-300 bg-slate-800/10"
@@ -698,7 +773,18 @@ export default function D2DMap() {
                 </button>
               </div>
 
-              {loading && <span className="text-[10px] text-slate-500 animate-pulse">Syncing database data...</span>}
+              <div className="flex items-center gap-3">
+                {loading && <span className="text-[10px] text-slate-500 animate-pulse">Syncing database data...</span>}
+                <button
+                  onClick={() => setBottomPanelOpen(!bottomPanelOpen)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
+                  title={bottomPanelOpen ? "Collapse Panel" : "Expand Panel"}
+                >
+                  <svg className={`w-4 h-4 transition-transform duration-300 ${bottomPanelOpen ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Table Area */}
@@ -706,7 +792,7 @@ export default function D2DMap() {
               {loading ? (
                 <div className="h-full flex items-center justify-center text-xs text-slate-500">Loading fleet tables...</div>
               ) : (
-                <>
+                <div className="overflow-x-auto w-full min-w-0 custom-scrollbar pb-2">
                   {/* --- TAB 1: ALL ALERTS --- */}
                   {activeTab === "alerts" && (
                     <table className="w-full border-collapse text-left text-[11px]">
@@ -739,40 +825,40 @@ export default function D2DMap() {
                               <tr
                                 key={alert.id}
                                 onClick={() => handleSelectRow(alert.vehicle_id)}
-                                className={`hover:bg-slate-800/20 cursor-pointer transition ${
-                                  isSelected ? "bg-indigo-950/20 border-l-2 border-indigo-500" : ""
+                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                  isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2 px-3 font-semibold text-slate-300">🚛</td>
-                                <td className="py-2 px-3 font-bold text-white">{alert.reg_no}</td>
-                                <td className="py-2 px-3">{alert.ward_no}</td>
-                                <td className="py-2 px-3">{alert.driver}</td>
-                                <td className="py-2 px-3">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                <td className="py-2.5 px-3 font-semibold text-slate-300">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-white">{alert.reg_no}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{alert.ward_no}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{alert.driver}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
                                     alert.alert_type === "Stoppage" 
-                                      ? "bg-red-500/10 text-red-400 border border-red-500/20" 
-                                      : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                      ? "bg-red-500/10 text-red-400 border border-red-500/20 shadow-sm shadow-red-500/5" 
+                                      : "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-sm shadow-amber-500/5"
                                   }`}>
                                     {alert.alert_type}
                                   </span>
                                 </td>
-                                <td className="py-2 px-3 text-slate-300 max-w-[200px] truncate" title={alert.alert_detail}>
+                                <td className="py-2.5 px-3 text-slate-300 max-w-[200px] truncate" title={alert.alert_detail}>
                                   {alert.alert_detail}
                                 </td>
-                                <td className="py-2 px-3 font-semibold">{alert.alert_count}</td>
-                                <td className="py-2 px-3 text-indigo-300 font-bold">{alert.alert_time}</td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-300">{alert.alert_count}</td>
+                                <td className="py-2.5 px-3 text-indigo-400 font-bold">{alert.alert_time}</td>
                                 
                                 {/* Reason Selector */}
-                                <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                                <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-slate-400">{alert.reason}</span>
+                                    <span className="text-slate-400 font-medium">{alert.reason}</span>
                                   ) : (
                                     <select
                                       value={reasons[alert.id] || STOPPAGE_REASONS[0]}
                                       onChange={(e) =>
                                         setReasons((prev) => ({ ...prev, [alert.id]: e.target.value }))
                                       }
-                                      className="bg-slate-900 border border-slate-700/60 rounded px-1.5 py-1 text-[11px] text-slate-200 outline-none w-36"
+                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] text-slate-200 outline-none w-36 focus:border-indigo-500/50 cursor-pointer"
                                     >
                                       {STOPPAGE_REASONS.map((r) => (
                                         <option key={r} value={r}>{r}</option>
@@ -782,9 +868,9 @@ export default function D2DMap() {
                                 </td>
 
                                 {/* Snooze input */}
-                                <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                                <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-slate-500">{alert.snooze_duration} Min</span>
+                                    <span className="text-slate-500 font-medium">{alert.snooze_duration} Min</span>
                                   ) : (
                                     <input
                                       type="number"
@@ -797,19 +883,22 @@ export default function D2DMap() {
                                           [alert.id]: parseInt(e.target.value) || 0,
                                         }))
                                       }
-                                      className="bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5 text-[11px] text-slate-200 outline-none w-16"
+                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-slate-200 outline-none w-16 focus:border-indigo-500/50"
                                     />
                                   )}
                                 </td>
 
                                 {/* Submit Submit Button */}
-                                <td className="py-2 px-3 text-center" onClick={e => e.stopPropagation()}>
+                                <td className="py-2.5 px-3 text-center" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-green-400 font-bold">✓ Resolved</span>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-500/10 text-green-400 text-[10px] font-bold rounded-lg border border-green-500/20 shadow-sm shadow-green-500/5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0"></span>
+                                      Resolved
+                                    </span>
                                   ) : (
                                     <button
                                       onClick={() => handleResolveAlert(alert.id)}
-                                      className="px-2.5 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold rounded text-[10px] transition"
+                                      className="px-3 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold rounded-lg text-[10px] shadow-sm shadow-green-600/10 transition duration-150"
                                     >
                                       Submit
                                     </button>
@@ -827,7 +916,7 @@ export default function D2DMap() {
                   {activeTab === "started" && (
                     <table className="w-full border-collapse text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/30">
+                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Reg No.</th>
                           <th className="py-2.5 px-3">Ward No.</th>
@@ -852,40 +941,42 @@ export default function D2DMap() {
                               <tr
                                 key={v.id}
                                 onClick={() => handleSelectRow(v.id)}
-                                className={`hover:bg-slate-800/20 cursor-pointer transition ${
-                                  isSelected ? "bg-indigo-950/20 border-l-2 border-indigo-500" : ""
+                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                  isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2 px-3 font-semibold text-slate-300">🚛</td>
-                                <td className="py-2 px-3 font-bold text-white">{v.reg_no}</td>
-                                <td className="py-2 px-3">{v.ward_no}</td>
-                                <td className="py-2 px-3 text-slate-400">{v.route}</td>
-                                <td className="py-2 px-3">{v.driver}</td>
-                                <td className="py-2 px-3 font-semibold">{v.distance_covered.toFixed(2)} KM</td>
-                                <td className="py-2 px-3">
+                                <td className="py-2.5 px-3 font-semibold text-slate-300">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-white">{v.reg_no}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{v.ward_no}</td>
+                                <td className="py-2.5 px-3 text-slate-400">{v.route}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{v.driver}</td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-300">{v.distance_covered.toFixed(2)} KM</td>
+                                <td className="py-2.5 px-3">
                                   <div className="flex items-center gap-2">
-                                    <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                                      <div className="bg-indigo-500 h-full" style={{ width: `${v.route_covered_percent}%` }} />
+                                    <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden shrink-0">
+                                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${v.route_covered_percent}%` }} />
                                     </div>
                                     <span className="font-semibold text-slate-300">{v.route_covered_percent.toFixed(0)}%</span>
                                   </div>
                                 </td>
-                                <td className="py-2 px-3">
+                                <td className="py-2.5 px-3">
                                   <div className="flex items-center gap-2">
-                                    <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                                      <div className="bg-green-500 h-full" style={{ width: `${v.inorder_route_percent}%` }} />
+                                    <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden shrink-0">
+                                      <div className="bg-green-500 h-full rounded-full" style={{ width: `${v.inorder_route_percent}%` }} />
                                     </div>
                                     <span className="font-semibold text-green-400">{v.inorder_route_percent.toFixed(0)}%</span>
                                   </div>
                                 </td>
-                                <td className="py-2 px-3">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    v.going_to_transfer_station === "Yes" ? "bg-green-500/20 text-green-300" : "bg-slate-800 text-slate-400"
+                                <td className="py-2.5 px-3">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
+                                    v.going_to_transfer_station === "Yes" 
+                                      ? "bg-green-500/10 text-green-400 border border-green-500/20 shadow-sm shadow-green-500/5" 
+                                      : "bg-slate-800/40 text-slate-400 border border-slate-700/20"
                                   }`}>
                                     {v.going_to_transfer_station}
                                   </span>
                                 </td>
-                                <td className="py-2 px-3 text-slate-400">{new Date(v.last_updated).toLocaleTimeString()}</td>
+                                <td className="py-2.5 px-3 text-slate-400">{new Date(v.last_updated).toLocaleTimeString()}</td>
                               </tr>
                             );
                           })
@@ -898,7 +989,7 @@ export default function D2DMap() {
                   {activeTab === "unauth" && (
                     <table className="w-full border-collapse text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/30">
+                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Reg No.</th>
                           <th className="py-2.5 px-3">Ward No.</th>
@@ -926,34 +1017,34 @@ export default function D2DMap() {
                               <tr
                                 key={alert.id}
                                 onClick={() => handleSelectRow(alert.vehicle_id)}
-                                className={`hover:bg-slate-800/20 cursor-pointer transition ${
-                                  isSelected ? "bg-indigo-950/20 border-l-2 border-indigo-500" : ""
+                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                  isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2 px-3 text-slate-300">🚛</td>
-                                <td className="py-2 px-3 font-bold text-white">{alert.reg_no}</td>
-                                <td className="py-2 px-3">{alert.ward_no}</td>
-                                <td className="py-2 px-3">{alert.driver}</td>
-                                <td className="py-2 px-3">
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                <td className="py-2.5 px-3 text-slate-300">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-white">{alert.reg_no}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{alert.ward_no}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{alert.driver}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-sm shadow-amber-500/5">
                                     {alert.alert_type}
                                   </span>
                                 </td>
-                                <td className="py-2 px-3 text-slate-300">{alert.alert_detail}</td>
-                                <td className="py-2 px-3 font-semibold">{alert.alert_count}</td>
-                                <td className="py-2 px-3 text-amber-300 font-bold">{alert.alert_time}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{alert.alert_detail}</td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-300">{alert.alert_count}</td>
+                                <td className="py-2.5 px-3 text-amber-400 font-bold">{alert.alert_time}</td>
                                 
                                 {/* Reason */}
-                                <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                                <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-slate-400">{alert.reason}</span>
+                                    <span className="text-slate-400 font-medium">{alert.reason}</span>
                                   ) : (
                                     <select
                                       value={reasons[alert.id] || STOPPAGE_REASONS[0]}
                                       onChange={(e) =>
                                         setReasons((prev) => ({ ...prev, [alert.id]: e.target.value }))
                                       }
-                                      className="bg-slate-900 border border-slate-700/60 rounded px-1.5 py-1 text-[11px] text-slate-200 outline-none w-36"
+                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] text-slate-200 outline-none w-36 focus:border-indigo-500/50 cursor-pointer"
                                     >
                                       {STOPPAGE_REASONS.map((r) => (
                                         <option key={r} value={r}>{r}</option>
@@ -963,9 +1054,9 @@ export default function D2DMap() {
                                 </td>
 
                                 {/* Snooze */}
-                                <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                                <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-slate-500">{alert.snooze_duration} Min</span>
+                                    <span className="text-slate-500 font-medium">{alert.snooze_duration} Min</span>
                                   ) : (
                                     <input
                                       type="number"
@@ -978,19 +1069,22 @@ export default function D2DMap() {
                                           [alert.id]: parseInt(e.target.value) || 0,
                                         }))
                                       }
-                                      className="bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5 text-[11px] text-slate-200 outline-none w-16"
+                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-slate-200 outline-none w-16 focus:border-indigo-500/50"
                                     />
                                   )}
                                 </td>
 
                                 {/* Submit Submit Button */}
-                                <td className="py-2 px-3 text-center" onClick={e => e.stopPropagation()}>
+                                <td className="py-2.5 px-3 text-center" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-green-400 font-bold">✓ Resolved</span>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-500/10 text-green-400 text-[10px] font-bold rounded-lg border border-green-500/20 shadow-sm shadow-green-500/5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0"></span>
+                                      Resolved
+                                    </span>
                                   ) : (
                                     <button
                                       onClick={() => handleResolveAlert(alert.id)}
-                                      className="px-2.5 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold rounded text-[10px] transition"
+                                      className="px-3 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold rounded-lg text-[10px] shadow-sm shadow-green-600/10 transition duration-150"
                                     >
                                       Submit
                                     </button>
@@ -1008,7 +1102,7 @@ export default function D2DMap() {
                   {activeTab === "other" && (
                     <table className="w-full border-collapse text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/30">
+                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Reg No.</th>
                           <th className="py-2.5 px-3">Ward No.</th>
@@ -1032,19 +1126,27 @@ export default function D2DMap() {
                               <tr
                                 key={v.id}
                                 onClick={() => handleSelectRow(v.id)}
-                                className={`hover:bg-slate-800/20 cursor-pointer transition ${
-                                  isSelected ? "bg-indigo-950/20 border-l-2 border-indigo-500" : ""
+                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                  isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2 px-3 text-slate-400">🚛</td>
-                                <td className="py-2 px-3 font-bold text-white">{v.reg_no}</td>
-                                <td className="py-2 px-3">{v.ward_no}</td>
-                                <td className="py-2 px-3 text-slate-400">{v.route}</td>
-                                <td className="py-2 px-3">{v.driver}</td>
-                                <td className="py-2 px-3 font-semibold text-slate-400">{v.current_status}</td>
-                                <td className="py-2 px-3">{v.distance_covered.toFixed(2)} KM</td>
-                                <td className="py-2 px-3">{v.going_to_transfer_station}</td>
-                                <td className="py-2 px-3 text-slate-500">
+                                <td className="py-2.5 px-3 text-slate-400">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-white">{v.reg_no}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{v.ward_no}</td>
+                                <td className="py-2.5 px-3 text-slate-400">{v.route}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{v.driver}</td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-400">{v.current_status}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{v.distance_covered.toFixed(2)} KM</td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
+                                    v.going_to_transfer_station === "Yes" 
+                                      ? "bg-green-500/10 text-green-400 border border-green-500/20 shadow-sm shadow-green-500/5" 
+                                      : "bg-slate-800/40 text-slate-400 border border-slate-700/20"
+                                  }`}>
+                                    {v.going_to_transfer_station}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-500">
                                   {v.last_updated ? new Date(v.last_updated).toLocaleTimeString() : "N/A"}
                                 </td>
                               </tr>
@@ -1054,26 +1156,55 @@ export default function D2DMap() {
                       </tbody>
                     </table>
                   )}
-                </>
+                </div>
               )}
             </div>
           </div>
         </div>
 
+        {/* Right Side Drawer Mobile Backdrop */}
+        {rightPanelOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000] md:hidden transition-opacity duration-300 animate-fade-in"
+            onClick={() => setRightPanelOpen(false)}
+          />
+        )}
+
         {/* Right Side: Map Indication Controls Checklist */}
-        <aside className="w-72 border-l border-slate-800 bg-[#090d16] flex flex-col shrink-0 overflow-y-auto custom-scrollbar p-4 space-y-5">
+        <aside className={`fixed md:relative right-0 inset-y-0 md:h-full z-[1001] bg-[#090d16]/95 md:bg-[#090d16] border-l border-slate-800 flex flex-col shrink-0 overflow-y-auto custom-scrollbar p-4 space-y-5 transition-all duration-300 ease-in-out ${
+          rightPanelOpen 
+            ? "w-72 opacity-100 translate-x-0" 
+            : "w-0 p-0 border-l-0 opacity-0 overflow-hidden pointer-events-none translate-x-full md:translate-x-0"
+        }`}>
           
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Map Indication Controls</span>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isAllSelected}
-                onChange={(e) => handleSelectAll(e.target.checked)}
-                className="w-3.5 h-3.5 accent-indigo-500 rounded bg-slate-900 border-slate-700"
-              />
-              <span className="text-[10px] text-slate-400 font-semibold hover:text-white">Select All</span>
-            </label>
+          <div className="space-y-2 pb-2.5 border-b border-slate-800">
+            {/* Header Row 1 */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Map Indication Controls</span>
+              <button
+                onClick={() => setRightPanelOpen(false)}
+                className="text-slate-400 hover:text-white hover:bg-slate-800/80 p-1.5 rounded-lg transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
+                title="Collapse Panel"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Header Row 2 */}
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-slate-500 font-semibold uppercase tracking-wider">Layers & Options</span>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-indigo-500 rounded bg-slate-900 border-slate-700 cursor-pointer focus:ring-0 focus:ring-offset-0"
+                />
+                <span className="text-slate-400 font-semibold group-hover:text-white transition duration-150">Select All</span>
+              </label>
+            </div>
           </div>
 
           {/* Group 1: Layer Options */}
@@ -1100,15 +1231,17 @@ export default function D2DMap() {
                 <span className="flex items-center gap-1.5">🔄 Transfer Station(s)</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showFuel}
-                  onChange={(e) => setShowFuel(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-yellow-500 rounded bg-slate-900 border-slate-700"
-                />
-                <span className="flex items-center gap-1.5">⛽ Fuel Station(s)</span>
-              </label>
+              {ENABLE_FUEL_FEATURES && (
+                <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showFuel}
+                    onChange={(e) => setShowFuel(e.target.checked)}
+                    className="w-4.5 h-4.5 accent-yellow-500 rounded bg-slate-900 border-slate-700"
+                  />
+                  <span className="flex items-center gap-1.5">⛽ Fuel Station(s)</span>
+                </label>
+              )}
 
               <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
                 <input
