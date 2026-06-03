@@ -1,15 +1,28 @@
 @import "tailwindcss";
 
+@theme {
+  --color-theme-base: #f4f6fa;
+  --color-theme-surface: #ffffff;
+  --color-theme-surface-hover: #f8fafc;
+  --color-theme-text: #1e293b;
+  --color-theme-text-dim: #64748b;
+  --color-theme-border: #e2e8f0;
+  --color-theme-accent: #059669;
+  --color-theme-accent-hover: #047857;
+  --color-theme-danger: #ef4444;
+  --color-theme-danger-hover: #dc2626;
+}
+
 :root {
-  --bg-dark: #0b0f1a;
-  --bg-card: #111827;
-  --bg-sidebar: #0f1525;
-  --bg-surface: #1a2236;
-  --primary: #6366f1;
-  --primary-glow: rgba(99,102,241,.18);
-  --text-main: #e2e8f0;
-  --text-dim: #64748b;
-  --border: rgba(255,255,255,.06);
+  --bg-dark: var(--color-theme-base);
+  --bg-card: var(--color-theme-surface);
+  --bg-sidebar: var(--color-theme-surface);
+  --bg-surface: var(--color-theme-surface);
+  --primary: var(--color-theme-accent);
+  --primary-glow: rgba(5, 150, 105, 0.18);
+  --text-main: var(--color-theme-text);
+  --text-dim: var(--color-theme-text-dim);
+  --border: var(--color-theme-border);
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
@@ -29,10 +42,20 @@ body {
 
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 3px; }
 
-/* Leaflet overrides for dark theme */
-.leaflet-container { background: #0b0f1a; }
-.leaflet-popup-content-wrapper { background: #111827; color: #e2e8f0; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
-.leaflet-popup-tip { background: #111827; }
-.leaflet-control-zoom a { background: #111827 !important; color: #e2e8f0 !important; border-color: rgba(255,255,255,.08) !important; }
+/* Leaflet overrides for light theme */
+.leaflet-container { background: var(--color-theme-base) !important; }
+.leaflet-popup-content-wrapper { 
+  background: var(--color-theme-surface); 
+  color: var(--color-theme-text); 
+  border: 1px solid var(--color-theme-border); 
+  border-radius: 10px; 
+  box-shadow: 0 8px 32px rgba(0,0,0,.1); 
+}
+.leaflet-popup-tip { background: var(--color-theme-surface); }
+.leaflet-control-zoom a { 
+  background: var(--color-theme-surface) !important; 
+  color: var(--color-theme-text) !important; 
+  border-color: var(--color-theme-border) !important; 
+}

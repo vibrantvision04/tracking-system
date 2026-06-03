@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { api, post } from "@/lib/api";
 import { toast } from "react-toastify";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
+import * as turf from "@turf/turf";
 
 interface D2DAlert {
   id: number;
@@ -74,6 +75,27 @@ interface Ward {
   parent_id: number;
 }
 
+interface ZoneInfo {
+  ID: number;
+  Name: string;
+  Color: string;
+  StartWard: number;
+  EndWard: number;
+}
+
+const Zones: ZoneInfo[] = [
+  { ID: 1, Name: "Vidyadhar Nagar", Color: "#FEF08A", StartWard: 1, EndWard: 22 },
+  { ID: 2, Name: "Jhotwara", Color: "#22D3EE", StartWard: 23, EndWard: 37 },
+  { ID: 3, Name: "Sanganer", Color: "#FB923C", StartWard: 38, EndWard: 58 },
+  { ID: 4, Name: "Bagru", Color: "#60A5FA", StartWard: 59, EndWard: 72 },
+  { ID: 5, Name: "Malviya Nagar", Color: "#2DD4BF", StartWard: 73, EndWard: 87 },
+  { ID: 6, Name: "Civil Line", Color: "#94A3B8", StartWard: 88, EndWard: 103 },
+  { ID: 7, Name: "Kishanpole", Color: "#EAB308", StartWard: 104, EndWard: 115 },
+  { ID: 8, Name: "Adarsh Nagar", Color: "#FCA5A5", StartWard: 116, EndWard: 132 },
+  { ID: 9, Name: "Hawamahal", Color: "#EC4899", StartWard: 133, EndWard: 147 },
+  { ID: 10, Name: "Amer", Color: "#22C55E", StartWard: 148, EndWard: 150 },
+];
+
 const STOPPAGE_REASONS = [
   "Direction By Senior",
   "Invalid",
@@ -100,6 +122,7 @@ export default function D2DMap() {
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const geofencesLayerRef = useRef<L.LayerGroup | null>(null);
   const routesLayerRef = useRef<L.LayerGroup | null>(null);
+  const wardsLayerRef = useRef<L.LayerGroup | null>(null);
 
   // Loaded Data States
   const [alerts, setAlerts] = useState<D2DAlert[]>([]);
@@ -107,17 +130,25 @@ export default function D2DMap() {
   const [unauthorizedVehicles, setUnauthorizedVehicles] = useState<D2DAlert[]>([]);
   const [otherVehicles, setOtherVehicles] = useState<OtherVehicle[]>([]);
   const [geofences, setGeofences] = useState<MapGeofence[]>([]);
+  const [regionsList, setRegionsList] = useState<any[]>([]);
   
   // Dropdown list states
   const [zonesList, setZonesList] = useState<Zone[]>([]);
   const [wardsList, setWardsList] = useState<Ward[]>([]);
+  const [routeTypesList, setRouteTypesList] = useState<{ id: number; name: string }[]>([]);
 
   // Filtering states
-  const [selectedZone, setSelectedZone] = useState("Zone 1 - Hawa Mahal-Aamer Zone");
+  const [selectedZone, setSelectedZone] = useState("Jaipur Heritage (All Zones)");
   const [selectedWard, setSelectedWard] = useState("");
   const [selectedRouteType, setSelectedRouteType] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"alerts" | "started" | "unauth" | "other">("alerts");
+
+  // Facilities states
+  const [parkingSpots, setParkingSpots] = useState<any[]>([]);
+  const [transferStations, setTransferStations] = useState<any[]>([]);
+  const [fuelStations, setFuelStations] = useState<any[]>([]);
+  const [workshops, setWorkshops] = useState<any[]>([]);
 
   // Selection states
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
@@ -173,38 +204,149 @@ export default function D2DMap() {
   // ─── Fetch Dropdowns and Main Data ───
   const fetchData = useCallback(async () => {
     try {
-      const dashboard = await api<{
-        success: boolean;
-        alerts: D2DAlert[];
-        started_vehicles: StartedVehicle[];
-        unauthorized_vehicles: D2DAlert[];
-        other_vehicles: OtherVehicle[];
-        geofences: MapGeofence[];
-        active_shift: string;
-      }>("/api/d2d/dashboard");
+      // Parallelize fetches to reduce loading delay/blocking dramatically
+      const [
+        dashboardRes,
+        zonesRes,
+        wardsRes,
+        regionsRes,
+        routeTypesRes,
+        pSpotsRes,
+        tStationsRes,
+        fStationsRes,
+        workshopsRes
+      ] = await Promise.all([
+        api<{
+          success: boolean;
+          alerts: D2DAlert[];
+          started_vehicles: StartedVehicle[];
+          unauthorized_vehicles: D2DAlert[];
+          other_vehicles: OtherVehicle[];
+          geofences: MapGeofence[];
+          active_shift: string;
+        }>("/api/d2d/dashboard").catch(err => {
+          console.error("Failed to load dashboard telemetry:", err);
+          return { success: false, alerts: [], started_vehicles: [], unauthorized_vehicles: [], other_vehicles: [], geofences: [], active_shift: "" };
+        }),
+        api<{ success: boolean; data: Zone[] }>("/api/zones").catch(err => {
+          console.error("Failed to load zones:", err);
+          return { success: false, data: [] };
+        }),
+        api<{ success: boolean; data: Ward[] }>("/api/wards").catch(err => {
+          console.error("Failed to load wards:", err);
+          return { success: false, data: [] };
+        }),
+        api<{ success: boolean; data: any[] }>("/api/regions").catch(err => {
+          console.error("Failed to load regions:", err);
+          return { success: false, data: [] };
+        }),
+        api<{ success: boolean; data: { id: number; name: string }[] }>("/api/route-types").catch(err => {
+          console.error("Failed to load route types:", err);
+          return { success: false, data: [] };
+        }),
+        api<{ data: any[] }>("/api/parking-spots").catch(err => {
+          console.error("Failed to load parking spots:", err);
+          return { data: [] };
+        }),
+        api<{ data: any[] }>("/api/transfer-stations").catch(err => {
+          console.error("Failed to load transfer stations:", err);
+          return { data: [] };
+        }),
+        api<{ data: any[] }>("/api/fuel-stations").catch(err => {
+          console.error("Failed to load fuel stations:", err);
+          return { data: [] };
+        }),
+        api<{ data: any[] }>("/api/workshops").catch(err => {
+          console.error("Failed to load workshops:", err);
+          return { data: [] };
+        })
+      ]);
 
-      if (dashboard.success) {
-        setAlerts(dashboard.alerts || []);
-        setStartedVehicles(dashboard.started_vehicles || []);
-        setUnauthorizedVehicles(dashboard.unauthorized_vehicles || []);
-        setOtherVehicles(dashboard.other_vehicles || []);
-        setGeofences(dashboard.geofences || []);
-        setActiveShift(dashboard.active_shift || "");
+      if (dashboardRes.success) {
+        setAlerts(dashboardRes.alerts || []);
+        setStartedVehicles(dashboardRes.started_vehicles || []);
+        setUnauthorizedVehicles(dashboardRes.unauthorized_vehicles || []);
+        setOtherVehicles(dashboardRes.other_vehicles || []);
+        setGeofences(dashboardRes.geofences || []);
+        setActiveShift(dashboardRes.active_shift || "");
       }
 
-      const zones = await api<{ success: boolean; data: Zone[] }>("/api/zones");
-      if (zones.success) {
-        setZonesList(zones.data || []);
+      if (zonesRes.success) {
+        const allOption = { id: -1, region_name: "Jaipur Heritage (All Zones)", name: "Jaipur Heritage (All Zones)" } as any;
+        setZonesList([allOption, ...(zonesRes.data || [])]);
+        localStorage.setItem("d2d_zones", JSON.stringify(zonesRes.data || []));
       }
 
-      const wards = await api<{ success: boolean; data: Ward[] }>("/api/wards");
-      if (wards.success) {
-        setWardsList(wards.data || []);
+      if (wardsRes.success) {
+        setWardsList(wardsRes.data || []);
+        localStorage.setItem("d2d_wards", JSON.stringify(wardsRes.data || []));
+      }
+
+      if (regionsRes.success) {
+        setRegionsList(regionsRes.data || []);
+        localStorage.setItem("d2d_regions", JSON.stringify(regionsRes.data || []));
+      }
+
+      if (routeTypesRes.success) {
+        setRouteTypesList(routeTypesRes.data || []);
+        localStorage.setItem("d2d_route_types", JSON.stringify(routeTypesRes.data || []));
+      }
+
+      if (pSpotsRes.data) {
+        setParkingSpots(pSpotsRes.data);
+        localStorage.setItem("d2d_parking_spots", JSON.stringify(pSpotsRes.data));
+      }
+
+      if (tStationsRes.data) {
+        setTransferStations(tStationsRes.data);
+        localStorage.setItem("d2d_transfer_stations", JSON.stringify(tStationsRes.data));
+      }
+      
+      if (fStationsRes.data) {
+        setFuelStations(fStationsRes.data);
+        localStorage.setItem("d2d_fuel_stations", JSON.stringify(fStationsRes.data));
+      }
+      
+      if (workshopsRes.data) {
+        setWorkshops(workshopsRes.data);
+        localStorage.setItem("d2d_workshops", JSON.stringify(workshopsRes.data));
       }
     } catch (err) {
       console.error("Failed to load dashboard telemetry", err);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // SWR: Load static elements instantly from localStorage cache on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cachedZones = localStorage.getItem("d2d_zones");
+        const cachedWards = localStorage.getItem("d2d_wards");
+        const cachedRegions = localStorage.getItem("d2d_regions");
+        const cachedRouteTypes = localStorage.getItem("d2d_route_types");
+        const cachedParking = localStorage.getItem("d2d_parking_spots");
+        const cachedTransfer = localStorage.getItem("d2d_transfer_stations");
+        const cachedFuel = localStorage.getItem("d2d_fuel_stations");
+
+        if (cachedZones) {
+          const parsed = JSON.parse(cachedZones);
+          const allOption = { id: -1, region_name: "Jaipur Heritage (All Zones)", name: "Jaipur Heritage (All Zones)" } as any;
+          setZonesList([allOption, ...parsed]);
+        }
+        if (cachedWards) setWardsList(JSON.parse(cachedWards));
+        if (cachedRegions) setRegionsList(JSON.parse(cachedRegions));
+        if (cachedRouteTypes) setRouteTypesList(JSON.parse(cachedRouteTypes));
+        if (cachedParking) setParkingSpots(JSON.parse(cachedParking));
+        if (cachedTransfer) setTransferStations(JSON.parse(cachedTransfer));
+        if (cachedFuel) setFuelStations(JSON.parse(cachedFuel));
+        
+        const cachedWorkshops = localStorage.getItem("d2d_workshops");
+        if (cachedWorkshops) setWorkshops(JSON.parse(cachedWorkshops));
+      } catch (e) {
+        console.warn("Failed to load cached D2DMap layers:", e);
+      }
     }
   }, []);
 
@@ -217,7 +359,7 @@ export default function D2DMap() {
     if (!containerRef.current || mapRef.current) return;
 
     const m = L.map(containerRef.current, {
-      zoomControl: true,
+      zoomControl: false,
       minZoom: 4,
       preferCanvas: true,
     }).setView([26.9239, 75.8267], 13);
@@ -234,12 +376,20 @@ export default function D2DMap() {
     markersLayerRef.current = L.layerGroup().addTo(m);
     geofencesLayerRef.current = L.layerGroup().addTo(m);
     routesLayerRef.current = L.layerGroup().addTo(m);
+    wardsLayerRef.current = L.layerGroup().addTo(m);
+
+    // Reposition zoom controls manually to bottomright corner
+    L.control.zoom({ position: "bottomright" }).addTo(m);
 
     mapRef.current = m;
 
     return () => {
       m.remove();
       mapRef.current = null;
+      markersLayerRef.current = null;
+      geofencesLayerRef.current = null;
+      routesLayerRef.current = null;
+      wardsLayerRef.current = null;
     };
   }, []);
 
@@ -354,6 +504,61 @@ export default function D2DMap() {
       }
     });
 
+    const renderFacilityPolygon = (item: any, typeName: string, emoji: string, defaultColor: string) => {
+      if (!item.geojson) return;
+      try {
+        let feature = item.geojson;
+        if (typeof feature === "string") {
+          try {
+            feature = JSON.parse(feature);
+          } catch (e) {
+            console.error("Failed to parse geojson string for facility:", e);
+            return;
+          }
+        }
+        const center = turf.centroid(feature);
+        if (!center || !center.geometry || !center.geometry.coordinates) return;
+        const coords = center.geometry.coordinates;
+        const latLng = [coords[1], coords[0]] as [number, number];
+        
+        const color = item.color || defaultColor;
+
+        // Draw Polygon
+        L.geoJSON(feature, {
+          style: {
+            color: color,
+            weight: 2,
+            fillColor: color,
+            fillOpacity: 0.2,
+            dashArray: "3, 3"
+          }
+        }).addTo(geofencesLayerRef.current!);
+
+        // Draw Icon
+        const icon = L.divIcon({
+          className: "",
+          html: `<div style="font-size: 16px; transform: translate(-8px, -8px); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">${emoji}</div>`,
+          iconSize: [20, 20],
+        });
+
+        const m = L.marker(latLng, { icon }).addTo(geofencesLayerRef.current!);
+        m.bindPopup(`<b style="color: #fff;">${item.name}</b><br/><span style="color:#94a3b8;">Type: ${typeName}</span>`);
+      } catch (err) {
+        console.error("Failed to render facility:", err);
+      }
+    };
+
+    // Draw facilities based on toggles
+    const facilities: any[] = [];
+    if (showParking) facilities.push(...parkingSpots.map(p => ({ ...p, type: 'Parking Spot', icon: '🅿️', color: p.color || '#000000' })));
+    if (showTransfer) facilities.push(...transferStations.map(t => ({ ...t, type: 'Transfer Station', icon: '🔄', color: t.color || '#000000' })));
+    if (showFuel) facilities.push(...fuelStations.map(f => ({ ...f, type: 'Fuel Station', icon: '⛽', color: f.color || '#000000' })));
+    if (showWorkshop) facilities.push(...workshops.map(w => ({ ...w, type: 'Workshop', icon: '🛠️', color: w.color || '#000000' })));
+
+    facilities.forEach(item => {
+      renderFacilityPolygon(item, item.type, item.icon, item.color);
+    });
+
     // 2. Draw Active/Started Vehicles with Interactive Emojis Status Block permanent tooltip
     startedVehicles.forEach((v) => {
       const isSelected = selectedVehicleId === v.id;
@@ -464,7 +669,7 @@ export default function D2DMap() {
             </div>
           `);
 
-        // Binding permanent Marker tooltip label as requested: RJ14GQ5302SW 🚫 🚫 🚫 🚫 🚫 🍎 ⏱️ 🚫 🚫 🚫 (50%)
+        // Binding Marker tooltip label (shows on hover to prevent clutter): RJ14GQ5302SW 🚫 🚫 🚫 🚫 🚫 🍎 ⏱️ 🚫 🚫 🚫 (50%)
         mMarker.bindTooltip(
           `<div style="font-family: monospace; font-size: 11px; font-weight: bold; background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 2px 6px; border-radius: 4px; white-space: nowrap; display: flex; gap: 6px; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
             <span>${v.reg_no}</span>
@@ -472,7 +677,7 @@ export default function D2DMap() {
             <span style="color: #3b82f6;">(${v.inorder_route_percent}%)</span>
           </div>`,
           {
-            permanent: true,
+            permanent: false,
             direction: "top",
             offset: [0, -18],
             className: "custom-marker-tooltip",
@@ -531,6 +736,10 @@ export default function D2DMap() {
     startedVehicles,
     selectedVehicleId,
     geofences,
+    parkingSpots,
+    transferStations,
+    fuelStations,
+    workshops,
     showParking,
     showTransfer,
     showFuel,
@@ -549,6 +758,267 @@ export default function D2DMap() {
     alerts,
   ]);
 
+  // ─── Render Ward Boundaries overlay on map ───
+  useEffect(() => {
+    const layer = wardsLayerRef.current;
+    if (!layer || !mapRef.current) return;
+
+    layer.clearLayers();
+
+    const isAllJaipur = selectedZone === "Jaipur Heritage (All Zones)";
+
+    if (isAllJaipur) {
+      // Draw all zones and their wards
+      const realZones = zonesList.filter(z => z.id !== -1);
+      realZones.forEach((z) => {
+        const zoneWards = regionsList.filter(r => 
+          r.region_type_id === 3 && 
+          r.parent_id === z.id
+        );
+
+        const zoneRegion = regionsList.find(r => r.region_type_id === 2 && r.id === z.id);
+        const zoneColor = zoneRegion && zoneRegion.color ? zoneRegion.color : "#8b5cf6";
+
+        // Draw Combined Zone boundary for this zone
+        if (zoneRegion && zoneRegion.geojson) {
+          try {
+            const zoneBoundaryLayer = L.geoJSON(zoneRegion.geojson, {
+              style: {
+                color: zoneColor,
+                weight: 4.5,
+                fillColor: zoneColor,
+                fillOpacity: 0.15,
+              }
+            });
+
+            zoneBoundaryLayer.bindPopup(`
+              <div style="font-family:Inter,sans-serif;font-size:12px;padding:6px;color:#1e293b;">
+                <b style="font-size:14px;color:#4f46e5;">${z.region_name || z.name || `Zone ${z.id}`}</b><br/>
+                <span style="color:#64748b;font-weight:bold;">Combined Zone Boundary</span><br/>
+                <span style="color:#64748b;">Wards: ${zoneWards.length} Total</span>
+              </div>
+            `);
+
+            zoneBoundaryLayer.on("mouseover", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: 0.25,
+                weight: 5.5,
+              });
+            });
+
+            zoneBoundaryLayer.on("mouseout", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: 0.15,
+                weight: 4.5,
+              });
+            });
+
+            layer.addLayer(zoneBoundaryLayer);
+          } catch (err) {
+            console.error("Failed to render pre-calculated zone boundary", err);
+          }
+        }
+
+
+        // Draw all individual Wards of this zone as thin dividers
+        zoneWards.forEach((w) => {
+          if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+            try {
+              const regionGeoJSON = L.geoJSON(w.geojson, {
+                style: {
+                  color: w.color || zoneColor,
+                  weight: 1.0,
+                  dashArray: "3, 4",
+                  fillColor: w.color || zoneColor,
+                  fillOpacity: 0.0,
+                },
+              });
+
+              regionGeoJSON.bindPopup(`
+                <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
+                  <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
+                  <span style="color:#64748b;font-weight:bold;">Vidhansabha: ${z.region_name}</span><br/>
+                  <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
+                </div>
+              `);
+
+              regionGeoJSON.on("mouseover", function (e) {
+                const layerObj = e.target;
+                layerObj.setStyle({
+                  fillOpacity: 0.2,
+                  weight: 2.2,
+                  dashArray: undefined,
+                });
+              });
+
+              regionGeoJSON.on("mouseout", function (e) {
+                const layerObj = e.target;
+                layerObj.setStyle({
+                  fillOpacity: 0.0,
+                  weight: 1.0,
+                  dashArray: "3, 4",
+                });
+              });
+
+              layer.addLayer(regionGeoJSON);
+            } catch (err) {
+              console.error("Failed to render ward boundary in Jaipur view", err);
+            }
+          }
+        });
+      });
+
+      // Fit map to show all wards
+      if (regionsList.length > 0) {
+        try {
+          const boundsGroup = L.featureGroup();
+          regionsList.forEach(w => {
+            if (w.region_type_id === 3 && w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+              const g = L.geoJSON(w.geojson);
+              boundsGroup.addLayer(g);
+            }
+          });
+          const bounds = boundsGroup.getBounds();
+          if (bounds.isValid()) {
+            mapRef.current.fitBounds(bounds, { padding: [30, 30] });
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    } else {
+      // Find the currently selected zone ID
+      const activeZone = zonesList.find(z => z.region_name === selectedZone);
+      if (!activeZone) return;
+
+      // Filter regionsList to only show wards (region_type_id = 3) belonging to the selected Zone
+      const activeWards = regionsList.filter(r => 
+        r.region_type_id === 3 && 
+        r.parent_id === activeZone.id
+      );
+
+      const selectedZoneRegion = regionsList.find(r => r.region_type_id === 2 && r.id === activeZone.id);
+      const zoneColor = selectedZoneRegion && selectedZoneRegion.color ? selectedZoneRegion.color : "#8b5cf6";
+
+      // 1. Draw Combined Zone Boundary if multiple wards exist and no specific ward is selected
+      if (selectedZoneRegion && selectedZoneRegion.geojson && !selectedWard) {
+        try {
+          const zoneBoundaryLayer = L.geoJSON(selectedZoneRegion.geojson, {
+            style: {
+              color: zoneColor,
+              weight: 4.5,
+              fillColor: zoneColor,
+              fillOpacity: 0.18,
+            }
+          });
+
+          zoneBoundaryLayer.bindPopup(`
+            <div style="font-family:Inter,sans-serif;font-size:12px;padding:6px;color:#1e293b;">
+              <b style="font-size:14px;color:#4f46e5;">${selectedZone}</b><br/>
+              <span style="color:#64748b;font-weight:bold;">Combined Zone Boundary</span><br/>
+              <span style="color:#64748b;">Wards: 1 to ${activeWards.length} (${activeWards.length} Total)</span>
+            </div>
+          `);
+
+          zoneBoundaryLayer.on("mouseover", function (e) {
+            const layerObj = e.target;
+            layerObj.setStyle({
+              fillOpacity: 0.28,
+              weight: 5.5,
+            });
+          });
+
+          zoneBoundaryLayer.on("mouseout", function (e) {
+            const layerObj = e.target;
+            layerObj.setStyle({
+              fillOpacity: 0.18,
+              weight: 4.5,
+            });
+          });
+
+          layer.addLayer(zoneBoundaryLayer);
+        } catch (err) {
+          console.error("Failed to render pre-calculated combined zone boundary", err);
+        }
+      }
+
+
+      // 2. Plot individual Wards
+      const wardsToDraw = selectedWard 
+        ? activeWards.filter(w => w.region_name.split(" - ")[0] === selectedWard || w.region_code === selectedWard || w.region_name === selectedWard)
+        : activeWards;
+
+      wardsToDraw.forEach((w) => {
+        if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+          try {
+            const isSelectedWard = selectedWard && (w.region_name.split(" - ")[0] === selectedWard || w.region_code === selectedWard || w.region_name === selectedWard);
+
+            const regionGeoJSON = L.geoJSON(w.geojson, {
+              style: {
+                color: w.color || zoneColor,
+                weight: isSelectedWard ? 3.5 : 1.2,
+                dashArray: isSelectedWard ? undefined : "3, 4",
+                fillColor: w.color || zoneColor,
+                fillOpacity: isSelectedWard ? 0.25 : 0.0, // transparent inside when displaying combined boundary to avoid overlap
+              },
+            });
+
+            regionGeoJSON.bindPopup(`
+              <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
+                <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
+                <span style="color:#64748b;font-weight:bold;">Vidhansabha: ${selectedZone}</span><br/>
+                <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
+              </div>
+            `);
+
+            regionGeoJSON.on("mouseover", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: isSelectedWard ? 0.35 : 0.25,
+                weight: isSelectedWard ? 4.5 : 2.5,
+                dashArray: undefined,
+              });
+            });
+
+            regionGeoJSON.on("mouseout", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: isSelectedWard ? 0.25 : 0.0,
+                weight: isSelectedWard ? 3.5 : 1.2,
+                dashArray: isSelectedWard ? undefined : "3, 4",
+              });
+            });
+
+            layer.addLayer(regionGeoJSON);
+          } catch (err) {
+            console.error("Failed to render ward boundary polygon", w.region_name, err);
+          }
+        }
+      });
+
+      // Optionally pan map to fit the selected/filtered boundaries
+      if (wardsToDraw.length > 0) {
+        try {
+          const boundsGroup = L.featureGroup();
+          wardsToDraw.forEach(w => {
+            if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+              const g = L.geoJSON(w.geojson);
+              boundsGroup.addLayer(g);
+            }
+          });
+          const bounds = boundsGroup.getBounds();
+          if (bounds.isValid()) {
+            mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+          }
+        } catch (e) {
+          // quiet fail
+        }
+      }
+    }
+  }, [selectedZone, selectedWard, regionsList, zonesList]);
+
   // Handle row selection
   const handleSelectRow = (id: number) => {
     setSelectedVehicleId(id);
@@ -556,12 +1026,40 @@ export default function D2DMap() {
   };
 
   // Filters calculation
-  const distinctWards = Array.from(new Set(wardsList.map((w) => w.region_name))).sort();
+  const activeZone = zonesList.find(z => z.region_name === selectedZone);
+  const filteredWardsList = activeZone && activeZone.id !== -1
+    ? wardsList.filter(w => w.parent_id === activeZone.id)
+    : wardsList;
+  
+  const distinctWards = Array.from(new Set(filteredWardsList.map((w) => w.region_name))).sort((a, b) => {
+    const numA = parseInt(a.replace(/\D/g, "")) || 0;
+    const numB = parseInt(b.replace(/\D/g, "")) || 0;
+    return numA - numB;
+  });
 
   const filterItem = (reg: string, ward: string) => {
     const matchesSearch = reg.toLowerCase().includes(searchQuery.toLowerCase()) || ward.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesWard = !selectedWard || ward.includes(selectedWard);
-    return matchesSearch && matchesWard;
+    
+    let matchesWard = true;
+    if (selectedWard) {
+      const selectedNum = parseInt(selectedWard.replace(/\D/g, "")) || 0;
+      const wardNum = parseInt(ward.replace(/\D/g, "")) || 0;
+      matchesWard = selectedNum === wardNum;
+    }
+
+    let matchesZone = true;
+    if (selectedZone && selectedZone !== "Jaipur Heritage (All Zones)" && activeZone) {
+      const wardRegion = regionsList.find(r => r.region_type_id === 3 && r.region_name.toLowerCase() === ward.toLowerCase());
+      if (wardRegion) {
+        matchesZone = wardRegion.parent_id === activeZone.id;
+      } else {
+        const wardNum = parseInt(ward.replace(/\D/g, "")) || 0;
+        const foundWard = regionsList.find(r => r.region_type_id === 3 && parseInt(r.region_name.replace(/\D/g, "")) === wardNum);
+        matchesZone = foundWard ? foundWard.parent_id === activeZone.id : false;
+      }
+    }
+
+    return matchesSearch && matchesWard && matchesZone;
   };
 
   const filteredAlerts = alerts.filter(a => filterItem(a.reg_no, a.ward_no));
@@ -570,28 +1068,30 @@ export default function D2DMap() {
   const filteredOther = otherVehicles.filter(ov => filterItem(ov.reg_no, ov.ward_no));
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#030712] text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-full bg-theme-base text-theme-text overflow-hidden font-sans">
       
       {/* Top Navigation / Filters Bar */}
-      <header className="flex flex-col lg:flex-row lg:h-16 bg-[#090d16] px-4 py-3 lg:py-0 lg:px-6 items-start lg:items-center justify-between gap-4 lg:gap-0 border-b border-slate-800 shrink-0 z-10 w-full">
+      <header className="flex flex-col lg:flex-row lg:h-16 bg-theme-surface px-4 py-3 lg:py-0 lg:px-6 items-start lg:items-center justify-between gap-4 lg:gap-0 border-b border-theme-border shrink-0 z-10 w-full">
         <div className="flex items-center gap-3">
           <span className="text-xl">📊</span>
           <div>
-            <h1 className="text-sm font-bold tracking-wider text-indigo-400">ISWM - NAGAR NIGAM JAIPUR</h1>
-            <span className="text-[10px] text-slate-400">Door-to-Door (D2D) Fleet Monitoring Dashboard</span>
+            <h1 className="text-sm font-bold tracking-wider text-theme-accent">ISWM - NAGAR NIGAM JAIPUR</h1>
+            <span className="text-[10px] text-theme-text-dim">Door-to-Door (D2D) Fleet Monitoring Dashboard</span>
           </div>
         </div>
 
         {/* Dropdowns */}
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
           <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Zone</span>
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Zone</span>
             <select
               value={selectedZone}
-              onChange={(e) => setSelectedZone(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-200 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
+              onChange={(e) => {
+                setSelectedZone(e.target.value);
+                setSelectedWard(""); // Reset selected ward when zone changes
+              }}
+              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
-              <option value="Zone 1 - Hawa Mahal-Aamer Zone">Zone 1 - Hawa Mahal-Aamer Zone</option>
               {zonesList.map(z => (
                 <option key={z.id} value={z.region_name}>{z.region_name}</option>
               ))}
@@ -599,11 +1099,11 @@ export default function D2DMap() {
           </div>
 
           <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Select Ward</span>
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Select Ward</span>
             <select
               value={selectedWard}
               onChange={(e) => setSelectedWard(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-200 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
+              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
               <option value="">All Wards</option>
               {distinctWards.map(w => {
@@ -614,21 +1114,23 @@ export default function D2DMap() {
           </div>
 
           <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Route Type</span>
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Route Type</span>
             <select
               value={selectedRouteType}
               onChange={(e) => setSelectedRouteType(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-200 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
+              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
               <option value="">All Route Types</option>
-              <option value="SWEEPING">Sweeping Machine</option>
-              <option value="COMPACTOR">Compactor</option>
-              <option value="D2D">D2D Hopper Tipper</option>
+              {routeTypesList.map((rt) => (
+                <option key={rt.id} value={rt.name}>
+                  {rt.name}
+                </option>
+              ))}
             </select>
           </div>
           
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-300 font-medium shrink-0 ml-auto lg:ml-0 h-[32px] mt-4 lg:mt-0">
-            <span className="font-bold text-indigo-400">⏱️ Shift:</span> {activeShift || "N/A"}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text font-medium shrink-0 ml-auto lg:ml-0 h-[32px] mt-4 lg:mt-0">
+            <span className="font-bold text-theme-accent">⏱️ Shift:</span> {activeShift || "N/A"}
           </div>
         </div>
       </header>
@@ -640,20 +1142,20 @@ export default function D2DMap() {
         <div className="flex-1 flex flex-col min-w-0 h-full">
           
           {/* Map area */}
-          <div className="flex-1 relative bg-slate-950">
+          <div className="flex-1 relative bg-theme-surface">
             <div ref={containerRef} className="absolute inset-0 z-0" />
             
             {/* Quick search floating overlay */}
-            <div className="absolute top-4 left-14 z-10 bg-slate-900/90 border border-slate-800/80 rounded-lg p-2 flex items-center gap-2 shadow-2xl backdrop-blur-md">
+            <div className="absolute top-4 left-4 z-10 bg-theme-surface/90 border border-theme-border rounded-lg p-2 flex items-center gap-2 shadow-2xl backdrop-blur-md">
               <input
                 type="text"
                 placeholder="Search Reg No..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-black/35 px-3 py-1.5 border border-slate-700/60 rounded text-xs text-white placeholder:text-slate-500 focus:border-indigo-500 outline-none w-52 transition duration-200"
+                className="bg-black/35 px-3 py-1.5 border border-theme-border rounded text-xs text-theme-text placeholder:text-theme-text-dim focus:border-indigo-500 outline-none w-52 transition duration-200"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-white text-xs px-1">✕</button>
+                <button onClick={() => setSearchQuery("")} className="text-theme-text-dim hover:text-theme-text text-xs px-1">✕</button>
               )}
             </div>
 
@@ -661,14 +1163,14 @@ export default function D2DMap() {
             {!rightPanelOpen && (
               <button
                 onClick={() => setRightPanelOpen(true)}
-                className="absolute top-4 right-4 z-[1000] bg-slate-900/95 border border-indigo-500/30 hover:border-indigo-500/80 rounded-xl px-3.5 py-2 flex items-center gap-2 shadow-2xl backdrop-blur-md text-xs font-bold text-indigo-400 hover:text-white hover:bg-indigo-950/40 transition-all duration-300 active:scale-95 group animate-fade-in"
+                className="absolute top-4 right-4 z-[1000] bg-theme-surface/95 border border-indigo-500/30 hover:border-indigo-500/80 rounded-xl px-3.5 py-2 flex items-center gap-2 shadow-2xl backdrop-blur-md text-xs font-bold text-theme-accent hover:text-theme-text hover:bg-indigo-950/40 transition-all duration-300 active:scale-95 group animate-fade-in"
               >
-                <svg className="w-4 h-4 text-indigo-400 group-hover:rotate-45 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-theme-accent group-hover:rotate-45 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <span>Layers & Filters</span>
-                <svg className="w-3.5 h-3.5 text-indigo-500 group-hover:text-white transition-transform duration-200 group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="w-3.5 h-3.5 text-indigo-500 group-hover:text-theme-text transition-transform duration-200 group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
@@ -676,12 +1178,12 @@ export default function D2DMap() {
           </div>
 
           {/* Bottom Tables Tabs */}
-          <div className={`border-t border-slate-800 bg-[#070b13] flex flex-col relative shrink-0 transition-all duration-300 ease-in-out ${
+          <div className={`border-t border-theme-border bg-theme-base flex flex-col relative shrink-0 transition-all duration-300 ease-in-out ${
             bottomPanelOpen ? "h-[280px] md:h-[340px]" : "h-10 overflow-hidden"
           }`}>
             
             {/* Tab selection triggers */}
-            <div className="flex h-10 border-b border-slate-850 bg-[#090d16] px-4 items-center justify-between cursor-pointer select-none" onClick={(e) => {
+            <div className="flex h-10 border-b border-theme-border bg-theme-surface px-4 items-center justify-between cursor-pointer select-none" onClick={(e) => {
               // Click the tab bar itself to toggle
               if ((e.target as HTMLElement).tagName === 'DIV' || (e.target as HTMLElement).tagName === 'HEADER') {
                 setBottomPanelOpen(!bottomPanelOpen);
@@ -700,7 +1202,7 @@ export default function D2DMap() {
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "alerts"
                       ? "border-red-500 text-red-400 bg-red-950/10"
-                      : "border-transparent text-slate-400 hover:text-white"
+                      : "border-transparent text-theme-text-dim hover:text-theme-text"
                   }`}
                 >
                   <span>⚠️ All Alerts</span>
@@ -721,7 +1223,7 @@ export default function D2DMap() {
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "started"
                       ? "border-green-500 text-green-400 bg-green-950/10"
-                      : "border-transparent text-slate-400 hover:text-white"
+                      : "border-transparent text-theme-text-dim hover:text-theme-text"
                   }`}
                 >
                   <span>🟢 Started Vehicles</span>
@@ -742,7 +1244,7 @@ export default function D2DMap() {
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "unauth"
                       ? "border-amber-500 text-amber-400 bg-amber-950/10"
-                      : "border-transparent text-slate-400 hover:text-white"
+                      : "border-transparent text-theme-text-dim hover:text-theme-text"
                   }`}
                 >
                   <span>🛡️ Unauthorized Movements</span>
@@ -762,22 +1264,22 @@ export default function D2DMap() {
                   }}
                   className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
                     activeTab === "other"
-                      ? "border-slate-500 text-slate-300 bg-slate-800/10"
-                      : "border-transparent text-slate-400 hover:text-white"
+                      ? "border-slate-500 text-theme-text bg-slate-800/10"
+                      : "border-transparent text-theme-text-dim hover:text-theme-text"
                   }`}
                 >
                   <span>💤 Other / Stopped</span>
-                  <span className="px-1.5 py-0.5 bg-slate-500/20 text-slate-300 rounded-full text-[10px] font-bold">
+                  <span className="px-1.5 py-0.5 bg-theme-surface0/20 text-theme-text rounded-full text-[10px] font-bold">
                     {filteredOther.length}
                   </span>
                 </button>
               </div>
 
               <div className="flex items-center gap-3">
-                {loading && <span className="text-[10px] text-slate-500 animate-pulse">Syncing database data...</span>}
+                {loading && <span className="text-[10px] text-theme-text-dim animate-pulse">Syncing database data...</span>}
                 <button
                   onClick={() => setBottomPanelOpen(!bottomPanelOpen)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
+                  className="p-1.5 rounded-lg text-theme-text-dim hover:text-theme-text hover:bg-slate-800/80 transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
                   title={bottomPanelOpen ? "Collapse Panel" : "Expand Panel"}
                 >
                   <svg className={`w-4 h-4 transition-transform duration-300 ${bottomPanelOpen ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -790,14 +1292,14 @@ export default function D2DMap() {
             {/* Table Area */}
             <div className="flex-1 overflow-auto custom-scrollbar p-3">
               {loading ? (
-                <div className="h-full flex items-center justify-center text-xs text-slate-500">Loading fleet tables...</div>
+                <div className="h-full flex items-center justify-center text-xs text-theme-text-dim">Loading fleet tables...</div>
               ) : (
                 <div className="overflow-x-auto w-full min-w-0 custom-scrollbar pb-2">
                   {/* --- TAB 1: ALL ALERTS --- */}
                   {activeTab === "alerts" && (
                     <table className="w-full border-collapse text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/30">
+                        <tr className="border-b border-theme-border text-theme-text-dim bg-theme-surface/30">
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Reg No.</th>
                           <th className="py-2.5 px-3">Ward No.</th>
@@ -811,10 +1313,10 @@ export default function D2DMap() {
                           <th className="py-2.5 px-3 text-center">Submit</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-850">
+                      <tbody className="divide-y divide-theme-border">
                         {filteredAlerts.length === 0 ? (
                           <tr>
-                            <td colSpan={11} className="py-8 text-center text-slate-500">No active alerts found.</td>
+                            <td colSpan={11} className="py-8 text-center text-theme-text-dim">No active alerts found.</td>
                           </tr>
                         ) : (
                           filteredAlerts.map((alert) => {
@@ -825,14 +1327,14 @@ export default function D2DMap() {
                               <tr
                                 key={alert.id}
                                 onClick={() => handleSelectRow(alert.vehicle_id)}
-                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                className={`hover:bg-theme-surface/40 cursor-pointer border-b border-theme-border transition duration-150 ${
                                   isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2.5 px-3 font-semibold text-slate-300">🚛</td>
-                                <td className="py-2.5 px-3 font-bold text-white">{alert.reg_no}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{alert.ward_no}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{alert.driver}</td>
+                                <td className="py-2.5 px-3 font-semibold text-theme-text">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-theme-text">{alert.reg_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{alert.ward_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{alert.driver}</td>
                                 <td className="py-2.5 px-3">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
                                     alert.alert_type === "Stoppage" 
@@ -842,68 +1344,68 @@ export default function D2DMap() {
                                     {alert.alert_type}
                                   </span>
                                 </td>
-                                <td className="py-2.5 px-3 text-slate-300 max-w-[200px] truncate" title={alert.alert_detail}>
+                                <td className="py-2.5 px-3 text-theme-text max-w-[200px] truncate" title={alert.alert_detail}>
                                   {alert.alert_detail}
                                 </td>
-                                <td className="py-2.5 px-3 font-semibold text-slate-300">{alert.alert_count}</td>
-                                <td className="py-2.5 px-3 text-indigo-400 font-bold">{alert.alert_time}</td>
+                                <td className="py-2.5 px-3 font-semibold text-theme-text">{alert.alert_count}</td>
+                                <td className="py-2.5 px-3 text-theme-accent font-bold">{alert.alert_time}</td>
                                 
                                 {/* Reason Selector */}
-                                <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
-                                  {isResolved ? (
-                                    <span className="text-slate-400 font-medium">{alert.reason}</span>
-                                  ) : (
-                                    <select
-                                      value={reasons[alert.id] || STOPPAGE_REASONS[0]}
-                                      onChange={(e) =>
-                                        setReasons((prev) => ({ ...prev, [alert.id]: e.target.value }))
-                                      }
-                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] text-slate-200 outline-none w-36 focus:border-indigo-500/50 cursor-pointer"
-                                    >
-                                      {STOPPAGE_REASONS.map((r) => (
-                                        <option key={r} value={r}>{r}</option>
-                                      ))}
-                                    </select>
-                                  )}
-                                </td>
+                                 <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
+                                   {isResolved ? (
+                                     <span className="text-theme-text-dim font-medium">{alert.reason}</span>
+                                   ) : (
+                                     <select
+                                       value={reasons[alert.id] || STOPPAGE_REASONS[0]}
+                                       onChange={(e) =>
+                                         setReasons((prev) => ({ ...prev, [alert.id]: e.target.value }))
+                                       }
+                                       className="bg-theme-surface border border-theme-border hover:border-indigo-500/40 rounded-lg px-2.5 py-1.5 text-[11px] text-theme-text outline-none w-36 focus:border-emerald-500 cursor-pointer transition"
+                                     >
+                                       {STOPPAGE_REASONS.map((r) => (
+                                         <option key={r} value={r}>{r}</option>
+                                       ))}
+                                     </select>
+                                   )}
+                                 </td>
 
-                                {/* Snooze input */}
-                                <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
-                                  {isResolved ? (
-                                    <span className="text-slate-500 font-medium">{alert.snooze_duration} Min</span>
-                                  ) : (
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      placeholder="Min"
-                                      value={snoozes[alert.id] || ""}
-                                      onChange={(e) =>
-                                        setSnoozes((prev) => ({
-                                          ...prev,
-                                          [alert.id]: parseInt(e.target.value) || 0,
-                                        }))
-                                      }
-                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-slate-200 outline-none w-16 focus:border-indigo-500/50"
-                                    />
-                                  )}
-                                </td>
+                                 {/* Snooze input */}
+                                 <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
+                                   {isResolved ? (
+                                     <span className="text-theme-text-dim font-medium">{alert.snooze_duration} Min</span>
+                                   ) : (
+                                     <input
+                                       type="number"
+                                       min="0"
+                                       placeholder="Min"
+                                       value={snoozes[alert.id] || ""}
+                                       onChange={(e) =>
+                                         setSnoozes((prev) => ({
+                                           ...prev,
+                                           [alert.id]: parseInt(e.target.value) || 0,
+                                         }))
+                                       }
+                                       className="bg-theme-surface border border-theme-border hover:border-indigo-500/40 rounded-lg px-2 py-1.5 text-[11px] text-theme-text outline-none w-16 focus:border-emerald-500 text-center transition"
+                                     />
+                                   )}
+                                 </td>
 
-                                {/* Submit Submit Button */}
-                                <td className="py-2.5 px-3 text-center" onClick={e => e.stopPropagation()}>
-                                  {isResolved ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-500/10 text-green-400 text-[10px] font-bold rounded-lg border border-green-500/20 shadow-sm shadow-green-500/5">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0"></span>
-                                      Resolved
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleResolveAlert(alert.id)}
-                                      className="px-3 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold rounded-lg text-[10px] shadow-sm shadow-green-600/10 transition duration-150"
-                                    >
-                                      Submit
-                                    </button>
-                                  )}
-                                </td>
+                                 {/* Submit Submit Button */}
+                                 <td className="py-2.5 px-3 text-center" onClick={e => e.stopPropagation()}>
+                                   {isResolved ? (
+                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-theme-surface-hover0/10 text-emerald-400 text-[9px] font-extrabold uppercase tracking-wider rounded-lg border border-emerald-500/20 shadow-sm shadow-emerald-500/5">
+                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                                       Resolved
+                                     </span>
+                                   ) : (
+                                     <button
+                                       onClick={() => handleResolveAlert(alert.id)}
+                                       className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-extrabold uppercase tracking-wider rounded-lg text-[9px] shadow-md shadow-emerald-950/60 transition duration-150"
+                                     >
+                                       Submit
+                                     </button>
+                                   )}
+                                 </td>
                               </tr>
                             );
                           })
@@ -916,7 +1418,7 @@ export default function D2DMap() {
                   {activeTab === "started" && (
                     <table className="w-full border-collapse text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider">
+                        <tr className="border-b border-theme-border text-theme-text-dim bg-theme-surface text-[10px] font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Reg No.</th>
                           <th className="py-2.5 px-3">Ward No.</th>
@@ -929,10 +1431,10 @@ export default function D2DMap() {
                           <th className="py-2.5 px-3">Last Updated</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-850">
+                      <tbody className="divide-y divide-theme-border">
                         {filteredStarted.length === 0 ? (
                           <tr>
-                            <td colSpan={10} className="py-8 text-center text-slate-500">No started vehicles found.</td>
+                            <td colSpan={10} className="py-8 text-center text-theme-text-dim">No started vehicles found.</td>
                           </tr>
                         ) : (
                           filteredStarted.map((v) => {
@@ -941,22 +1443,22 @@ export default function D2DMap() {
                               <tr
                                 key={v.id}
                                 onClick={() => handleSelectRow(v.id)}
-                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                className={`hover:bg-theme-surface/40 cursor-pointer border-b border-theme-border transition duration-150 ${
                                   isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2.5 px-3 font-semibold text-slate-300">🚛</td>
-                                <td className="py-2.5 px-3 font-bold text-white">{v.reg_no}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{v.ward_no}</td>
-                                <td className="py-2.5 px-3 text-slate-400">{v.route}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{v.driver}</td>
-                                <td className="py-2.5 px-3 font-semibold text-slate-300">{v.distance_covered.toFixed(2)} KM</td>
+                                <td className="py-2.5 px-3 font-semibold text-theme-text">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-theme-text">{v.reg_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{v.ward_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text-dim">{v.route}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{v.driver}</td>
+                                <td className="py-2.5 px-3 font-semibold text-theme-text">{v.distance_covered.toFixed(2)} KM</td>
                                 <td className="py-2.5 px-3">
                                   <div className="flex items-center gap-2">
                                     <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden shrink-0">
-                                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${v.route_covered_percent}%` }} />
+                                      <div className="bg-theme-surface-hover0 h-full rounded-full" style={{ width: `${v.route_covered_percent}%` }} />
                                     </div>
-                                    <span className="font-semibold text-slate-300">{v.route_covered_percent.toFixed(0)}%</span>
+                                    <span className="font-semibold text-theme-text">{v.route_covered_percent.toFixed(0)}%</span>
                                   </div>
                                 </td>
                                 <td className="py-2.5 px-3">
@@ -971,12 +1473,12 @@ export default function D2DMap() {
                                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
                                     v.going_to_transfer_station === "Yes" 
                                       ? "bg-green-500/10 text-green-400 border border-green-500/20 shadow-sm shadow-green-500/5" 
-                                      : "bg-slate-800/40 text-slate-400 border border-slate-700/20"
+                                      : "bg-slate-800/40 text-theme-text-dim border border-theme-border/20"
                                   }`}>
                                     {v.going_to_transfer_station}
                                   </span>
                                 </td>
-                                <td className="py-2.5 px-3 text-slate-400">{new Date(v.last_updated).toLocaleTimeString()}</td>
+                                <td className="py-2.5 px-3 text-theme-text-dim">{new Date(v.last_updated).toLocaleTimeString()}</td>
                               </tr>
                             );
                           })
@@ -989,7 +1491,7 @@ export default function D2DMap() {
                   {activeTab === "unauth" && (
                     <table className="w-full border-collapse text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider">
+                        <tr className="border-b border-theme-border text-theme-text-dim bg-theme-surface text-[10px] font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Reg No.</th>
                           <th className="py-2.5 px-3">Ward No.</th>
@@ -1003,10 +1505,10 @@ export default function D2DMap() {
                           <th className="py-2.5 px-3 text-center">Submit</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-850">
+                      <tbody className="divide-y divide-theme-border">
                         {filteredUnauthorized.length === 0 ? (
                           <tr>
-                            <td colSpan={11} className="py-8 text-center text-slate-500">No unauthorized movements found.</td>
+                            <td colSpan={11} className="py-8 text-center text-theme-text-dim">No unauthorized movements found.</td>
                           </tr>
                         ) : (
                           filteredUnauthorized.map((alert) => {
@@ -1017,34 +1519,34 @@ export default function D2DMap() {
                               <tr
                                 key={alert.id}
                                 onClick={() => handleSelectRow(alert.vehicle_id)}
-                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                className={`hover:bg-theme-surface/40 cursor-pointer border-b border-theme-border transition duration-150 ${
                                   isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2.5 px-3 text-slate-300">🚛</td>
-                                <td className="py-2.5 px-3 font-bold text-white">{alert.reg_no}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{alert.ward_no}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{alert.driver}</td>
+                                <td className="py-2.5 px-3 text-theme-text">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-theme-text">{alert.reg_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{alert.ward_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{alert.driver}</td>
                                 <td className="py-2.5 px-3">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-sm shadow-amber-500/5">
                                     {alert.alert_type}
                                   </span>
                                 </td>
-                                <td className="py-2.5 px-3 text-slate-300">{alert.alert_detail}</td>
-                                <td className="py-2.5 px-3 font-semibold text-slate-300">{alert.alert_count}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{alert.alert_detail}</td>
+                                <td className="py-2.5 px-3 font-semibold text-theme-text">{alert.alert_count}</td>
                                 <td className="py-2.5 px-3 text-amber-400 font-bold">{alert.alert_time}</td>
                                 
                                 {/* Reason */}
                                 <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-slate-400 font-medium">{alert.reason}</span>
+                                    <span className="text-theme-text-dim font-medium">{alert.reason}</span>
                                   ) : (
                                     <select
                                       value={reasons[alert.id] || STOPPAGE_REASONS[0]}
                                       onChange={(e) =>
                                         setReasons((prev) => ({ ...prev, [alert.id]: e.target.value }))
                                       }
-                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] text-slate-200 outline-none w-36 focus:border-indigo-500/50 cursor-pointer"
+                                      className="bg-theme-surface border border-theme-border rounded-lg px-2.5 py-1 text-[11px] text-theme-text outline-none w-36 focus:border-emerald-500 cursor-pointer"
                                     >
                                       {STOPPAGE_REASONS.map((r) => (
                                         <option key={r} value={r}>{r}</option>
@@ -1056,7 +1558,7 @@ export default function D2DMap() {
                                 {/* Snooze */}
                                 <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="text-slate-500 font-medium">{alert.snooze_duration} Min</span>
+                                    <span className="text-theme-text-dim font-medium">{alert.snooze_duration} Min</span>
                                   ) : (
                                     <input
                                       type="number"
@@ -1069,7 +1571,7 @@ export default function D2DMap() {
                                           [alert.id]: parseInt(e.target.value) || 0,
                                         }))
                                       }
-                                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-slate-200 outline-none w-16 focus:border-indigo-500/50"
+                                      className="bg-theme-surface border border-theme-border rounded-lg px-2 py-1 text-[11px] text-theme-text outline-none w-16 focus:border-emerald-500"
                                     />
                                   )}
                                 </td>
@@ -1077,14 +1579,14 @@ export default function D2DMap() {
                                 {/* Submit Submit Button */}
                                 <td className="py-2.5 px-3 text-center" onClick={e => e.stopPropagation()}>
                                   {isResolved ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-500/10 text-green-400 text-[10px] font-bold rounded-lg border border-green-500/20 shadow-sm shadow-green-500/5">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0"></span>
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-theme-surface-hover0/10 text-emerald-400 text-[10px] font-bold rounded-lg border border-emerald-500/20 shadow-sm shadow-emerald-500/5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                                       Resolved
                                     </span>
                                   ) : (
                                     <button
                                       onClick={() => handleResolveAlert(alert.id)}
-                                      className="px-3 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold rounded-lg text-[10px] shadow-sm shadow-green-600/10 transition duration-150"
+                                      className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold rounded-lg text-[10px] shadow-md shadow-emerald-950/60 transition duration-150"
                                     >
                                       Submit
                                     </button>
@@ -1102,7 +1604,7 @@ export default function D2DMap() {
                   {activeTab === "other" && (
                     <table className="w-full border-collapse text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider">
+                        <tr className="border-b border-theme-border text-theme-text-dim bg-theme-surface text-[10px] font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Reg No.</th>
                           <th className="py-2.5 px-3">Ward No.</th>
@@ -1114,10 +1616,10 @@ export default function D2DMap() {
                           <th className="py-2.5 px-3">Last Updated</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-850">
+                      <tbody className="divide-y divide-theme-border">
                         {filteredOther.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="py-8 text-center text-slate-500">No other vehicles found.</td>
+                            <td colSpan={9} className="py-8 text-center text-theme-text-dim">No other vehicles found.</td>
                           </tr>
                         ) : (
                           filteredOther.map((v) => {
@@ -1126,27 +1628,27 @@ export default function D2DMap() {
                               <tr
                                 key={v.id}
                                 onClick={() => handleSelectRow(v.id)}
-                                className={`hover:bg-slate-850/40 cursor-pointer border-b border-slate-850/30 transition duration-150 ${
+                                className={`hover:bg-theme-surface/40 cursor-pointer border-b border-theme-border transition duration-150 ${
                                   isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                                 }`}
                               >
-                                <td className="py-2.5 px-3 text-slate-400">🚛</td>
-                                <td className="py-2.5 px-3 font-bold text-white">{v.reg_no}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{v.ward_no}</td>
-                                <td className="py-2.5 px-3 text-slate-400">{v.route}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{v.driver}</td>
-                                <td className="py-2.5 px-3 font-semibold text-slate-400">{v.current_status}</td>
-                                <td className="py-2.5 px-3 text-slate-300">{v.distance_covered.toFixed(2)} KM</td>
+                                <td className="py-2.5 px-3 text-theme-text-dim">🚛</td>
+                                <td className="py-2.5 px-3 font-bold text-theme-text">{v.reg_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{v.ward_no}</td>
+                                <td className="py-2.5 px-3 text-theme-text-dim">{v.route}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{v.driver}</td>
+                                <td className="py-2.5 px-3 font-semibold text-theme-text-dim">{v.current_status}</td>
+                                <td className="py-2.5 px-3 text-theme-text">{v.distance_covered.toFixed(2)} KM</td>
                                 <td className="py-2.5 px-3">
                                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
                                     v.going_to_transfer_station === "Yes" 
                                       ? "bg-green-500/10 text-green-400 border border-green-500/20 shadow-sm shadow-green-500/5" 
-                                      : "bg-slate-800/40 text-slate-400 border border-slate-700/20"
+                                      : "bg-slate-800/40 text-theme-text-dim border border-theme-border/20"
                                   }`}>
                                     {v.going_to_transfer_station}
                                   </span>
                                 </td>
-                                <td className="py-2.5 px-3 text-slate-500">
+                                <td className="py-2.5 px-3 text-theme-text-dim">
                                   {v.last_updated ? new Date(v.last_updated).toLocaleTimeString() : "N/A"}
                                 </td>
                               </tr>
@@ -1171,19 +1673,19 @@ export default function D2DMap() {
         )}
 
         {/* Right Side: Map Indication Controls Checklist */}
-        <aside className={`fixed md:relative right-0 inset-y-0 md:h-full z-[1001] bg-[#090d16]/95 md:bg-[#090d16] border-l border-slate-800 flex flex-col shrink-0 overflow-y-auto custom-scrollbar p-4 space-y-5 transition-all duration-300 ease-in-out ${
+        <aside className={`fixed md:relative right-0 inset-y-0 md:h-full z-[1001] bg-theme-surface/95 md:bg-theme-surface border-l border-theme-border flex flex-col shrink-0 overflow-y-auto custom-scrollbar p-4 space-y-5 transition-all duration-300 ease-in-out ${
           rightPanelOpen 
             ? "w-72 opacity-100 translate-x-0" 
             : "w-0 p-0 border-l-0 opacity-0 overflow-hidden pointer-events-none translate-x-full md:translate-x-0"
         }`}>
           
-          <div className="space-y-2 pb-2.5 border-b border-slate-800">
+          <div className="space-y-2 pb-2.5 border-b border-theme-border">
             {/* Header Row 1 */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Map Indication Controls</span>
+              <span className="text-xs font-bold text-theme-accent uppercase tracking-wider">Map Indication Controls</span>
               <button
                 onClick={() => setRightPanelOpen(false)}
-                className="text-slate-400 hover:text-white hover:bg-slate-800/80 p-1.5 rounded-lg transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
+                className="text-theme-text-dim hover:text-theme-text hover:bg-slate-800/80 p-1.5 rounded-lg transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
                 title="Collapse Panel"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1194,194 +1696,206 @@ export default function D2DMap() {
             
             {/* Header Row 2 */}
             <div className="flex items-center justify-between text-[10px]">
-              <span className="text-slate-500 font-semibold uppercase tracking-wider">Layers & Options</span>
+              <span className="text-theme-text-dim font-semibold uppercase tracking-wider">Layers & Options</span>
               <label className="flex items-center gap-1.5 cursor-pointer select-none group">
                 <input
                   type="checkbox"
                   checked={isAllSelected}
                   onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="w-3.5 h-3.5 accent-indigo-500 rounded bg-slate-900 border-slate-700 cursor-pointer focus:ring-0 focus:ring-offset-0"
+                  className="w-3.5 h-3.5 accent-indigo-500 rounded bg-theme-surface border-theme-border cursor-pointer focus:ring-0 focus:ring-offset-0"
                 />
-                <span className="text-slate-400 font-semibold group-hover:text-white transition duration-150">Select All</span>
+                <span className="text-theme-text-dim font-semibold group-hover:text-theme-text transition duration-150">Select All</span>
               </label>
             </div>
           </div>
 
           {/* Group 1: Layer Options */}
-          <div className="space-y-2.5">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Geofences & Layers</h3>
-            <div className="space-y-2 pl-1">
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+          <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
+            <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
+              <span>Geofences & Layers</span>
+              <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
+            </summary>
+            <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showParking}
                   onChange={(e) => setShowParking(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-emerald-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-emerald-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🅿️ Parking Lot(s)</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showTransfer}
                   onChange={(e) => setShowTransfer(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-blue-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-blue-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🔄 Transfer Station(s)</span>
               </label>
 
               {ENABLE_FUEL_FEATURES && (
-                <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+                <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={showFuel}
                     onChange={(e) => setShowFuel(e.target.checked)}
-                    className="w-4.5 h-4.5 accent-yellow-500 rounded bg-slate-900 border-slate-700"
+                    className="w-4 h-4 accent-yellow-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                   />
                   <span className="flex items-center gap-1.5">⛽ Fuel Station(s)</span>
                 </label>
               )}
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showWorkshop}
                   onChange={(e) => setShowWorkshop(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-purple-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-purple-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🛠️ Workshop</span>
               </label>
             </div>
-          </div>
+          </details>
 
           {/* Group 2: Stoppage Duration Filters */}
-          <div className="space-y-2.5">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Stoppage Levels</h3>
-            <div className="space-y-2 pl-1">
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+          <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
+            <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
+              <span>Stoppage Thresholds</span>
+              <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
+            </summary>
+            <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showStop5_10}
                   onChange={(e) => setShowStop5_10(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-yellow-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-yellow-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🟡 Stoppage 5 to 10 mins</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showStop10_15}
                   onChange={(e) => setShowStop10_15(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-orange-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-orange-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🟠 Stoppage 10 to 15 mins</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showStop15_plus}
                   onChange={(e) => setShowStop15_plus(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-red-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-red-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🔴 Stoppage of 15 mins +</span>
               </label>
             </div>
-          </div>
+          </details>
 
           {/* Group 3: Alert Types Checklist */}
-          <div className="space-y-2.5">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Alert Filters</h3>
-            <div className="space-y-2 pl-1">
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+          <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
+            <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
+              <span>Alert Filters</span>
+              <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
+            </summary>
+            <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showOverspeeding}
                   onChange={(e) => setShowOverspeeding(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-red-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-red-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">⚡ Over Speeding</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showFastCoverage}
                   onChange={(e) => setShowFastCoverage(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-indigo-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-indigo-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🛻 Fast Coverage</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showDeviation}
                   onChange={(e) => setShowDeviation(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-red-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-red-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🍎 Deviation</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showDelay}
                   onChange={(e) => setShowDelay(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-yellow-600 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-yellow-600 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">⏱️ Delay</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showLateStarted}
                   onChange={(e) => setShowLateStarted(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-amber-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-amber-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🕒 Late Started</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showUnauthorizedMovement}
                   onChange={(e) => setShowUnauthorizedMovement(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-red-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-red-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🛡️ Unauthorized Movement</span>
               </label>
             </div>
-          </div>
+          </details>
 
           {/* Group 4: Routes & Overlays */}
-          <div className="space-y-2.5">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Route Overlays</h3>
-            <div className="space-y-2 pl-1">
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+          <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
+            <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
+              <span>Route Overlays</span>
+              <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
+            </summary>
+            <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showPlannedRoute}
                   onChange={(e) => setShowPlannedRoute(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-indigo-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-indigo-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🗺️ Planned Route</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showActualMovement}
                   onChange={(e) => setShowActualMovement(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-emerald-500 rounded bg-slate-900 border-slate-700"
+                  className="w-4 h-4 accent-emerald-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">📈 Actual Movement</span>
               </label>
             </div>
-          </div>
+          </details>
         </aside>
       </div>
     </div>

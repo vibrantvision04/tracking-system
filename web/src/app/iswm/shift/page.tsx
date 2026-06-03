@@ -1,6 +1,14 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { api, post, del } from '@/lib/api';
+import { z } from "zod";
+
+import PageHeader from '@/components/shared/PageHeader';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import Input from '@/components/ui/Input';
+import Button from '@/components/ui/Button';
+import DeleteButton from '@/components/ui/DeleteButton';
+import Table from '@/components/shared/Table';
 
 type Shift = {
   id: number;
@@ -10,10 +18,19 @@ type Shift = {
   time_duration: number;
 };
 
+const shiftSchema = z.object({
+  shift_name: z.string().trim().min(1, "Shift Name is required").max(100, "Shift Name cannot exceed 100 characters"),
+  start_time: z.string().min(1, "Start Time is required"),
+  end_time: z.string().min(1, "End Time is required"),
+  time_duration: z.number().int().min(1, "Duration must be at least 1 hour").max(24, "Duration cannot exceed 24 hours")
+});
+
 export default function ShiftManager() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(false);
+  const [tableLoading, setTableLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
   const [form, setForm] = useState({
     shift_name: "",
@@ -23,6 +40,7 @@ export default function ShiftManager() {
   });
 
   const loadShifts = async () => {
+    setTableLoading(true);
     try {
       const res: any = await api('/api/shifts');
       if (res.success && res.data) {
@@ -30,6 +48,8 @@ export default function ShiftManager() {
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setTableLoading(false);
     }
   };
 
@@ -39,8 +59,21 @@ export default function ShiftManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setMessage("");
+    setErrors({});
+
+    const result = shiftSchema.safeParse(form);
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      result.error.issues.forEach(issue => {
+        const path = issue.path[0] as string;
+        fieldErrors[path] = issue.message;
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setLoading(true);
 
     // Ensure seconds are included in time for postgres time format
     let st = form.start_time;
@@ -53,7 +86,7 @@ export default function ShiftManager() {
         shift_name: form.shift_name,
         start_time: st,
         end_time: et,
-        time_duration: Number(form.time_duration)
+        time_duration: Number(form.time_duration) * 60
       });
       if (res.success) {
         setMessage("Shift created successfully!");
@@ -70,7 +103,6 @@ export default function ShiftManager() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this shift?")) return;
     try {
       const res: any = await del(`/api/shifts/${id}`);
       if (res.success) {
@@ -84,134 +116,133 @@ export default function ShiftManager() {
   };
 
   return (
-    <div className="flex-1 p-6 lg:p-8 bg-[#0b0f1a] min-h-screen text-slate-200">
-      <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="flex-1 p-6 lg:p-8 bg-theme-base min-h-screen text-theme-text space-y-6">
+      <PageHeader
+        title="Shift Manager"
+        description="Create and manage operational schedules, timing windows, and working shifts."
+        breadcrumbs={[
+          { label: "ISWM", href: "/iswm/shift" },
+          { label: "Shift Manager" }
+        ]}
+      />
+
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left Col - Create Form */}
-        <div className="lg:col-span-1">
-          <header className="mb-6">
-            <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Shift Manager</h1>
-            <p className="text-sm text-slate-400">Create and manage operational shifts.</p>
-          </header>
-
-          <div className="bg-[#131b2f] rounded-xl border border-white/[.05] shadow-2xl p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Create New Shift</h2>
+        <div className="lg:col-span-1 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Shift</CardTitle>
+              <CardDescription>Setup a clean shift configuration block with exact hour boundaries.</CardDescription>
+            </CardHeader>
             
-            {message && (
-              <div className={`p-3 rounded-lg mb-4 text-sm ${message.includes("success") ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-                {message}
-              </div>
-            )}
+            <CardContent>
+              {message && (
+                <div className={`p-3 rounded-lg mb-4 text-xs font-medium border ${
+                  message.includes("success") 
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                    : "bg-red-500/10 text-red-400 border-red-500/20"
+                }`}>
+                  {message}
+                </div>
+              )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Shift Name</label>
-                <input 
-                  type="text" 
-                  required
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                  label="Shift Name"
                   placeholder="e.g. Morning Shift"
+                  required
                   value={form.shift_name}
                   onChange={e => setForm({...form, shift_name: e.target.value})}
-                  className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  error={errors.shift_name}
                 />
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Start Time</label>
-                <input 
-                  type="time" 
+                <Input
+                  label="Start Time"
+                  type="time"
                   required
                   value={form.start_time}
                   onChange={e => setForm({...form, start_time: e.target.value})}
-                  className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  error={errors.start_time}
                 />
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">End Time</label>
-                <input 
-                  type="time" 
+                <Input
+                  label="End Time"
+                  type="time"
                   required
                   value={form.end_time}
                   onChange={e => setForm({...form, end_time: e.target.value})}
-                  className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  error={errors.end_time}
                 />
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Duration (Hours)</label>
-                <input 
-                  type="number" 
+                <Input
+                  label="Duration (Hours)"
+                  type="number"
                   required
-                  min="1" max="24"
+                  min="1"
+                  max="24"
                   value={form.time_duration}
                   onChange={e => setForm({...form, time_duration: Number(e.target.value)})}
-                  className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  error={errors.time_duration}
                 />
-              </div>
 
-              <div className="pt-4">
-                <button 
-                  type="submit" 
-                  disabled={loading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-indigo-500/30 disabled:opacity-50"
-                >
-                  {loading ? "Creating..." : "Create Shift"}
-                </button>
-              </div>
-            </form>
-          </div>
+                <div className="pt-2">
+                  <Button
+                    type="submit"
+                    variant="accent"
+                    loading={loading}
+                    loadingText="Creating..."
+                    className="w-full"
+                  >
+                    Create Shift
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right Col - List */}
         <div className="lg:col-span-2">
-          <div className="bg-[#131b2f] rounded-xl border border-white/[.05] shadow-2xl overflow-hidden mt-16 lg:mt-0">
-            <div className="p-4 border-b border-white/[.05]">
-              <h2 className="text-lg font-semibold text-white">Existing Shifts</h2>
-            </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Existing Shifts</CardTitle>
+              <CardDescription>View, manage, and remove shifts. Changes update vehicles and routes immediately.</CardDescription>
+            </CardHeader>
             
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr className="bg-white/[.02] border-b border-white/[.05] text-slate-400 text-xs uppercase tracking-wider">
-                    <th className="p-4 font-semibold">ID</th>
-                    <th className="p-4 font-semibold">Name</th>
-                    <th className="p-4 font-semibold">Start</th>
-                    <th className="p-4 font-semibold">End</th>
-                    <th className="p-4 font-semibold text-center">Duration</th>
-                    <th className="p-4 font-semibold text-center">Action</th>
+            <CardContent className="p-0">
+              <Table
+                headers={[
+                  "ID",
+                  "Name",
+                  "Start",
+                  "End",
+                  <div key="dur" className="text-center">Duration</div>,
+                  <div key="act" className="text-center">Action</div>
+                ]}
+                isLoading={tableLoading}
+              >
+                {shifts.map((s) => (
+                  <tr key={s.id} className="hover:bg-theme-base/40 transition-colors">
+                    <td className="px-5 py-3.5 text-theme-text-dim font-mono">{s.id}</td>
+                    <td className="px-5 py-3.5 font-semibold text-theme-text">{s.shift_name}</td>
+                    <td className="px-5 py-3.5 font-medium">{s.start_time}</td>
+                    <td className="px-5 py-3.5 font-medium">{s.end_time}</td>
+                    <td className="px-5 py-3.5 text-center font-bold text-theme-accent">
+                      {(s.time_duration / 60).toFixed(1).replace(".0", "")} hr
+                    </td>
+                    <td className="px-5 py-3.5 text-center">
+                      <DeleteButton
+                        onDelete={() => handleDelete(s.id)}
+                        confirmMessage={`Are you sure you want to delete shift "${s.shift_name}"?`}
+                        className="mx-auto"
+                      />
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[.04]">
-                  {shifts.map((s) => (
-                    <tr key={s.id} className="hover:bg-white/[.02] transition-colors text-slate-300">
-                      <td className="p-4 text-slate-500 font-mono">{s.id}</td>
-                      <td className="p-4 font-medium text-white">{s.shift_name}</td>
-                      <td className="p-4">{s.start_time}</td>
-                      <td className="p-4">{s.end_time}</td>
-                      <td className="p-4 text-center">{s.time_duration} hr</td>
-                      <td className="p-4 text-center">
-                        <button 
-                          onClick={() => handleDelete(s.id)}
-                          className="p-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors"
-                          title="Delete Shift"
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {shifts.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-8 text-slate-500">
-                        No shifts configured yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                ))}
+              </Table>
+            </CardContent>
+          </Card>
         </div>
 
       </div>

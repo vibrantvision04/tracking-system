@@ -1,0 +1,264 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type TransferStationResponse struct {
+	ID         int             `json:"id"`
+	Name       string          `json:"name"`
+	Address    string          `json:"address"`
+	GeofenceID *int            `json:"geofence_id"`
+	IsActive   bool            `json:"is_active"`
+	CreatedAt  string          `json:"created_at"`
+	GeoJSON    json.RawMessage `json:"geojson"`
+	Color      string          `json:"color"`
+}
+
+func (h *Handler) GetTransferStations(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	query := `
+		SELECT 
+			ts.id, 
+			ts.name, 
+			COALESCE(ts.address, ''), 
+			ts.geofence_id, 
+			COALESCE(ts.is_active, true),
+			TO_CHAR(ts.created_at, 'YYYY-MM-DD HH24:MI:SS'),
+			g.polygon,
+			COALESCE(g.color, '#000000')
+		FROM transfer_stations ts
+		LEFT JOIN geofences g ON ts.geofence_id = g.id
+		ORDER BY ts.id DESC
+	`
+	rows, err := db.Query(ctx, query)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query transfer stations: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var stations []TransferStationResponse
+	for rows.Next() {
+		var ts TransferStationResponse
+		var geojson []byte
+		err := rows.Scan(&ts.ID, &ts.Name, &ts.Address, &ts.GeofenceID, &ts.IsActive, &ts.CreatedAt, &geojson, &ts.Color)
+		if err == nil {
+			if len(geojson) > 0 {
+				ts.GeoJSON = json.RawMessage(geojson)
+			} else {
+				ts.GeoJSON = json.RawMessage("null")
+			}
+			stations = append(stations, ts)
+		} else {
+			fmt.Printf("Error scanning transfer station: %v\n", err)
+		}
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    stations,
+	})
+}
+
+func (h *Handler) CreateTransferStation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	var req struct {
+		Name    string          `json:"name"`
+		Address string          `json:"address"`
+		GeoJSON json.RawMessage `json:"geojson"`
+		Color   string          `json:"color"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload: " + err.Error()})
+		return
+	}
+
+	if req.Name == "" {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Transfer station name is required"})
+		return
+	}
+
+	// 1. Create geofence if GeoJSON is provided
+	var geofenceID *int
+	if len(req.GeoJSON) > 0 && string(req.GeoJSON) != "null" && string(req.GeoJSON) != "" {
+		var gID int
+		geofenceColor := req.Color
+		if geofenceColor == "" {
+			geofenceColor = "#000000"
+		}
+		err := db.QueryRow(ctx, `
+			INSERT INTO geofences (name, type, polygon, color)
+			VALUES ($1, 'polygon', $2::jsonb, $3)
+			RETURNING id
+		`, req.Name+"_geom", req.GeoJSON, geofenceColor).Scan(&gID)
+
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create geofence geometry: " + err.Error()})
+			return
+		}
+		geofenceID = &gID
+	}
+
+	// 2. Create transfer station
+	var tsID int
+	err := db.QueryRow(ctx, `
+		INSERT INTO transfer_stations (name, address, geofence_id)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`, req.Name, req.Address, geofenceID).Scan(&tsID)
+
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create transfer station: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusCreated, map[string]interface{}{
+		"success": true,
+		"id":      tsID,
+	})
+}
+
+func (h *Handler) UpdateTransferStation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+
+	var req struct {
+		Name    string          `json:"name"`
+		Address string          `json:"address"`
+		GeoJSON json.RawMessage `json:"geojson"`
+		Color   string          `json:"color"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload: " + err.Error()})
+		return
+	}
+
+	if req.Name == "" {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Transfer station name is required"})
+		return
+	}
+
+	// 1. Get current geofence ID
+	var currentGeofenceID *int
+	err = db.QueryRow(ctx, "SELECT geofence_id FROM transfer_stations WHERE id = $1", id).Scan(&currentGeofenceID)
+	if err != nil {
+		sendJSON(w, http.StatusNotFound, map[string]string{"error": "Transfer station not found"})
+		return
+	}
+
+	// 2. Handle Geofence Update/Create
+	var newGeofenceID *int = currentGeofenceID
+	if len(req.GeoJSON) > 0 && string(req.GeoJSON) != "null" && string(req.GeoJSON) != "" {
+		geofenceColor := req.Color
+		if geofenceColor == "" {
+			geofenceColor = "#000000"
+		}
+
+		if currentGeofenceID != nil {
+			// Update existing geofence
+			_, err = db.Exec(ctx, `
+				UPDATE geofences 
+				SET name = $1, polygon = $2::jsonb, color = $3
+				WHERE id = $4
+			`, req.Name+"_geom", req.GeoJSON, geofenceColor, *currentGeofenceID)
+			
+			if err != nil {
+				sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update geofence: " + err.Error()})
+				return
+			}
+		} else {
+			// Create new geofence
+			var gID int
+			err := db.QueryRow(ctx, `
+				INSERT INTO geofences (name, type, polygon, color)
+				VALUES ($1, 'polygon', $2::jsonb, $3)
+				RETURNING id
+			`, req.Name+"_geom", req.GeoJSON, geofenceColor).Scan(&gID)
+
+			if err != nil {
+				sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create geofence: " + err.Error()})
+				return
+			}
+			newGeofenceID = &gID
+		}
+	} else if currentGeofenceID != nil {
+		// They cleared the GeoJSON, so delete the geofence
+		_, err = db.Exec(ctx, "DELETE FROM geofences WHERE id = $1", *currentGeofenceID)
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete old geofence: " + err.Error()})
+			return
+		}
+		newGeofenceID = nullGeofenceTS()
+	}
+
+	// 3. Update transfer station
+	_, err = db.Exec(ctx, `
+		UPDATE transfer_stations 
+		SET name = $1, address = $2, geofence_id = $3
+		WHERE id = $4
+	`, req.Name, req.Address, newGeofenceID, id)
+
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update transfer station: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+
+func nullGeofenceTS() *int { return nil }
+
+func (h *Handler) DeleteTransferStation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+
+	// First get the geofence_id
+	var geofenceID *int
+	err = db.QueryRow(ctx, "SELECT geofence_id FROM transfer_stations WHERE id = $1", id).Scan(&geofenceID)
+	if err != nil {
+		sendJSON(w, http.StatusNotFound, map[string]string{"error": "Transfer station not found"})
+		return
+	}
+
+	// Delete transfer station
+	_, err = db.Exec(ctx, "DELETE FROM transfer_stations WHERE id = $1", id)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete transfer station: " + err.Error()})
+		return
+	}
+
+	// Delete geofence
+	if geofenceID != nil {
+		_, _ = db.Exec(ctx, "DELETE FROM geofences WHERE id = $1", *geofenceID)
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}

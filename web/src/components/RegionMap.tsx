@@ -42,6 +42,34 @@ export default function RegionMap({
   const existingRegionsLayer = useRef<L.FeatureGroup | null>(null);
 
   const [tempPoints, setTempPoints] = useState<[number, number][]>([]); // Store coordinates as [lng, lat] for GeoJSON
+  
+  const [parkingSpots, setParkingSpots] = useState<any[]>([]);
+  const [transferStations, setTransferStations] = useState<any[]>([]);
+  const [fuelStations, setFuelStations] = useState<any[]>([]);
+  const [workshops, setWorkshops] = useState<any[]>([]);
+
+  // Fetch POIs for background context
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cachedP = localStorage.getItem("live_parking_spots");
+        const cachedT = localStorage.getItem("live_transfer_stations");
+        const cachedF = localStorage.getItem("live_fuel_stations");
+        const cachedW = localStorage.getItem("live_workshops");
+        if (cachedP) setParkingSpots(JSON.parse(cachedP));
+        if (cachedT) setTransferStations(JSON.parse(cachedT));
+        if (cachedF) setFuelStations(JSON.parse(cachedF));
+        if (cachedW) setWorkshops(JSON.parse(cachedW));
+      } catch (e) {}
+
+      Promise.all([
+        fetch("/api/parking-spots").then(r => r.json()).then(res => setParkingSpots(res.data || [])).catch(() => {}),
+        fetch("/api/transfer-stations").then(r => r.json()).then(res => setTransferStations(res.data || [])).catch(() => {}),
+        fetch("/api/fuel-stations").then(r => r.json()).then(res => setFuelStations(res.data || [])).catch(() => {}),
+        fetch("/api/workshops").then(r => r.json()).then(res => setWorkshops(res.data || [])).catch(() => {})
+      ]);
+    }
+  }, []);
 
   // ─── Initialize Map ───
   useEffect(() => {
@@ -100,19 +128,30 @@ export default function RegionMap({
 
     layer.clearLayers();
 
-    // If a particular region is selected for editing/viewing, do not render other regions in the background
-    if (editingRegionId) {
-      return;
-    }
-
+    // HIDE other items when creating or editing!
+    // Show ONLY the specific region/item being edited, hide all others!
     regions.forEach((reg) => {
-      if (reg.geojson && reg.geojson.features && reg.geojson.features.length > 0) {
+      if (editingRegionId !== undefined && editingRegionId !== null) {
+        if (reg.id !== editingRegionId) return;
+        // If the user has cleared the geojson in the form, do not show the old static geofence layer on the map either!
+        if (!geoJSON || geoJSON.trim() === "" || geoJSON.trim() === "null") return;
+      } else {
+        // If we are creating a new one (editingRegionId is null/undefined), hide all other existing features
+        return;
+      }
+
+      if (reg.geojson) {
         try {
-          const regionGeoJSON = L.geoJSON(reg.geojson, {
+          let feature = reg.geojson;
+          if (typeof feature === "string") feature = JSON.parse(feature);
+
+          const color = reg.color || "#888888";
+
+          const regionGeoJSON = L.geoJSON(feature, {
             style: {
-              color: reg.color || "#888888",
+              color: color,
               weight: 1.5,
-              fillColor: reg.color || "#888888",
+              fillColor: color,
               fillOpacity: 0.1,
             },
           });
@@ -125,13 +164,39 @@ export default function RegionMap({
             </div>
           `);
 
-          layer.addLayer(regionGeoJSON);
+          // Do NOT add the static polygon to the map if it's the one being edited,
+          // since the editable shape is already rendered dynamically by currentDrawLayer!
+          if (editingRegionId !== reg.id) {
+            layer.addLayer(regionGeoJSON);
+          }
+
+          // Add POI marker at center if it is a POI type (Workshop, Parking, Transfer, Fuel)
+          const poiTypes = ["Workshop", "Parking Spot", "Transfer Station", "Fuel Station"];
+          if (poiTypes.includes(reg.region_type_title)) {
+            let emoji = "R";
+            if (reg.region_type_title === "Workshop") emoji = "W";
+            else if (reg.region_type_title === "Parking Spot") emoji = "P";
+            else if (reg.region_type_title === "Transfer Station") emoji = "T";
+            else if (reg.region_type_title === "Fuel Station") emoji = "F";
+
+            const center = regionGeoJSON.getBounds().getCenter();
+            const icon = L.divIcon({
+              className: "",
+              html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${emoji}</div>`,
+              iconSize: [24, 24],
+              iconAnchor: [12, 12],
+            });
+
+            const marker = L.marker(center, { icon });
+            marker.bindPopup(`<b>${reg.region_name}</b><br/><span style="color:#64748b;">${reg.region_type_title}</span>`);
+            layer.addLayer(marker);
+          }
         } catch (err) {
-          console.error("Failed to render background region", reg.region_name, err);
+          console.error("Failed to render region", reg.region_name, err);
         }
       }
     });
-  }, [regions, editingRegionId]);
+  }, [regions, editingRegionId, parkingSpots, transferStations, fuelStations, workshops, geoJSON]);
 
   // ─── Initialize tempPoints from geoJSON (External Sync, e.g. when editing starts) ───
   useEffect(() => {
@@ -151,7 +216,7 @@ export default function RegionMap({
             const temp = coords.slice(0, -1);
             
             // Only set if different to prevent infinite loops
-            const isDifferent = temp.some((pt, idx) => {
+            const isDifferent = temp.some((pt: number[], idx: number) => {
               const prevPt = tempPoints[idx];
               return !prevPt || pt[0] !== prevPt[0] || pt[1] !== prevPt[1];
             }) || temp.length !== tempPoints.length;
@@ -451,22 +516,47 @@ export default function RegionMap({
     setIsDrawing(false);
   };
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Automatically sync full screen mode with drawing mode
+  useEffect(() => {
+    setIsFullscreen(isDrawing);
+    setTimeout(() => mapRef.current?.invalidateSize(), 300);
+  }, [isDrawing]);
+
   return (
-    <div className="relative w-full h-full min-h-[300px] overflow-hidden flex flex-col">
+    <div className={`w-full h-full flex flex-col transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-[9999] bg-theme-surface' : 'relative min-h-[300px] overflow-hidden'}`}>
       <div ref={mapContainer} className="flex-1 w-full h-full z-0" />
 
+      {/* Fullscreen Toggle */}
+      <button
+        type="button"
+        onClick={() => {
+          setIsFullscreen(!isFullscreen);
+          // Trigger a map resize shortly after the transition
+          setTimeout(() => mapRef.current?.invalidateSize(), 100);
+        }}
+        className={`absolute right-16 z-[1000] p-2 bg-theme-surface rounded-lg shadow-md border border-theme-border hover:bg-theme-surface text-theme-text transition ${isFullscreen ? 'top-16 md:top-[72px]' : 'top-4'}`}
+        title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+        )}
+      </button>
+
       {/* Sleek, Top-Center Drawing Controller & Actions Toolbar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex gap-2.5 items-center select-none">
+      <div className={`absolute left-1/2 -translate-x-1/2 z-[1000] flex gap-2.5 items-center select-none transition-all duration-300 ${isFullscreen ? 'top-16 md:top-[72px]' : 'top-4'}`}>
         <button
           type="button"
           onClick={() => {
             setIsDrawing(!isDrawing);
-            if (!isDrawing) setTempPoints([]);
           }}
           className={`p-2.5 rounded-xl shadow-lg border transition-all flex items-center justify-center
             ${isDrawing 
-              ? "bg-emerald-600 text-white border-emerald-500 scale-105" 
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              ? "bg-theme-accent text-white border-emerald-500 scale-105" 
+              : "bg-theme-surface text-theme-text border-theme-border hover:bg-theme-surface"
             }`}
           title={isDrawing ? "Stop Drawing" : "Start Drawing Polygon"}
         >
@@ -479,12 +569,12 @@ export default function RegionMap({
         </button>
 
         {isDrawing && (
-          <div className="flex gap-1.5 bg-white/95 backdrop-blur-md border border-slate-200 p-1.5 rounded-xl shadow-lg animate-slide-in">
+          <div className="flex gap-1.5 bg-theme-surface/95 backdrop-blur-md border border-theme-border p-1.5 rounded-xl shadow-lg animate-slide-in">
             <button
               type="button"
               onClick={handleUndo}
               disabled={tempPoints.length === 0}
-              className="bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 text-[10px] font-bold px-3 py-1.5 rounded-lg transition"
+              className="bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-theme-text text-[10px] font-bold px-3 py-1.5 rounded-lg transition"
             >
               Undo
             </button>
@@ -500,7 +590,7 @@ export default function RegionMap({
               type="button"
               onClick={handleFinish}
               disabled={tempPoints.length < 3}
-              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-[10px] font-bold px-4 py-1.5 rounded-lg transition shadow-md shadow-emerald-600/10"
+              className="bg-theme-accent text-white text-[10px] font-bold px-4 py-1.5 rounded-lg transition shadow-md shadow-emerald-600/10"
             >
               Finish Shape
             </button>

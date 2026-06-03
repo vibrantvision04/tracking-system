@@ -20,6 +20,7 @@ type Config struct {
 	WorkerPoolSize    int
 	BatchSize         int
 	BatchTimeoutMS    int
+	BatchBufferCeiling int
 	LogLevel          string
 	ReportCron        string
 	MaxPlaybackHours  int
@@ -51,9 +52,10 @@ func LoadConfig() *Config {
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:     getEnv("REDIS_PASSWORD", ""),
 		JWTSecret:         getEnv("JWT_SECRET", "your-super-secret-key-here"),
-		WorkerPoolSize:    getEnvInt("WORKER_POOL_SIZE", 2),
-		BatchSize:         getEnvInt("BATCH_SIZE", 100),
+		WorkerPoolSize:    getEnvInt("WORKER_POOL_SIZE", 8),
+		BatchSize:         getEnvInt("BATCH_SIZE", 200),
 		BatchTimeoutMS:    getEnvInt("BATCH_TIMEOUT_MS", 5000),
+		BatchBufferCeiling: getEnvInt("BATCH_BUFFER_CEILING", 5000),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		ReportCron:        getEnv("REPORT_CRON", "5 0 * * *"),
 		MaxPlaybackHours:  getEnvInt("MAX_PLAYBACK_HOURS", 24),

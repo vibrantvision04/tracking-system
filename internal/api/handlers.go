@@ -51,6 +51,14 @@ func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepo
 	}
 	h.RebuildCache()
 	h.LoadAlerts()
+	// Refresh vehicle cache every 30 seconds so GPS positions and statuses stay live
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			h.RebuildCache()
+		}
+	}()
 	return h
 }
 
@@ -162,24 +170,32 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 		to = time.Now()
 	}
 
-	// Trigger real-time generation for the requested date range if a specific vehicle is selected.
-	// This ensures the "Load" button always provides absolute latest and fresh data on demand.
+	// Trigger real-time report generation/caching asynchronously in the background.
+	// This immediately loads the pre-computed reports from DB and prevents the HTTP request from blocking/timing out.
 	if vehicleID > 0 {
-		_, err := h.vRepo.GetByID(r.Context(), vehicleID)
-		if err == nil {
-			zone := ""
-			ward := ""
+		go func(vID int, startD, endD time.Time) {
+			// Create a background context for report generation
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
 
-			// Generate/Update reports for each day in the requested range
-			curr := from
-			daysCount := 0
-			// Limit to a maximum of 31 days to protect the server from timeout on massive ranges
-			for !curr.After(to) && daysCount < 31 {
-				_ = h.rService.GenerateDailyReport(r.Context(), vehicleID, curr, zone, ward)
-				curr = curr.AddDate(0, 0, 1)
-				daysCount++
+			vehicle, err := h.vRepo.GetByID(ctx, vID)
+			if err == nil {
+				zone := ""
+				ward := ""
+				if vehicle.VehicleType != nil {
+					ward = vehicle.VehicleType.Name
+				}
+
+				curr := startD
+				daysCount := 0
+				// Limit to a maximum of 31 days to protect the background worker
+				for !curr.After(endD) && daysCount < 31 {
+					_ = h.rService.GenerateDailyReport(ctx, vID, curr, zone, ward)
+					curr = curr.AddDate(0, 0, 1)
+					daysCount++
+				}
 			}
-		}
+		}(vehicleID, from, to)
 	}
 
 	reports, total, err := h.rService.GetReports(r.Context(), vehicleID, from, to, limit, offset)
@@ -214,6 +230,29 @@ func (h *Handler) CreateVehicle(w http.ResponseWriter, r *http.Request) {
 	h.publishMetadataUpdate(r.Context(), "vehicle", v.ID)
 	sendJSON(w, http.StatusCreated, map[string]interface{}{"success": true, "data": v})
 }
+
+func (h *Handler) UpdateVehicle(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+	var v repository.Vehicle
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+		return
+	}
+	v.ID = id
+	
+	if err := h.vRepo.UpdateVehicle(r.Context(), &v); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update vehicle: " + err.Error()})
+		return
+	}
+
+	h.publishMetadataUpdate(r.Context(), "vehicle", v.ID)
+	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": v})
+}
+
 
 func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.vRepo.GetDevices(r.Context())
@@ -387,153 +426,67 @@ func haversine(lat1, lon1, lat2, lon2 float64) float64 {
 func (h *Handler) GetAlerts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	vehicles, err := h.vRepo.GetAll(ctx)
+	// Direct paged query from pre-computed SQL alerts table
+	query := `
+		SELECT id, alert_type, imei, vehicle_id, registration_no, COALESCE(ward_no, ''), COALESCE(driver, ''), COALESCE(alert_detail, ''), time_reported, status, snooze_duration, COALESCE(reason, ''), lat, lng
+		FROM alerts
+		WHERE status = 'pending'
+		ORDER BY time_reported DESC
+		LIMIT 100
+	`
+	rows, err := h.gpsRepo.Pool().Query(ctx, query)
 	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch vehicles: " + err.Error()})
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch alerts: " + err.Error()})
 		return
 	}
+	defer rows.Close()
 
 	var alerts []StoppageAlert
 
-	for _, v := range vehicles {
-		if v.GpsDevice == nil || v.GpsDevice.IMEI == "" {
-			continue
-		}
-
-		imei := v.GpsDevice.IMEI
-
-		latest, err := h.gpsRepo.GetLatest(ctx, imei)
+	for rows.Next() {
+		var a StoppageAlert
+		var reason, detail, driver, imei string
+		var lat, lng float64
+		err := rows.Scan(
+			&a.ID, &a.AlertType.AlertTypeName, &imei, &a.VehicleID, &a.Vehicle.RegistrationNo,
+			&a.WardName, &driver, &detail, &a.TimeReported, &a.Status,
+			&a.SnoozeDuration, &reason, &lat, &lng,
+		)
 		if err != nil {
 			continue
 		}
 
-		t := latest.Time
-		startOfDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-		endOfDay := startOfDay.Add(24 * time.Hour)
+		a.IMEI = imei
+		a.LogTime = a.TimeReported
+		a.Reason = reason
+		a.AlertPoint.X = lng
+		a.AlertPoint.Y = lat
+		a.Vehicle.ID = a.VehicleID
+		a.Vehicle.IMEI = imei
+		a.Vehicle.IsActive = true
+		a.Vehicle.VehicleTypeID = 1
 
-		points, err := h.gpsRepo.GetByVehicle(ctx, v.ID, startOfDay, endOfDay)
-		if err != nil || len(points) == 0 {
-			continue
+		// Parse duration dynamically if available
+		var dur float64
+		if _, err := fmt.Sscanf(detail, "Stoppage of more than 5:00 Min(s) (Duration: %f Min)", &dur); err == nil {
+			a.AlertParameterJSON.Duration = int(dur)
+		} else {
+			a.AlertParameterJSON.Duration = 10
+		}
+		a.AlertParameterJSON.Unit = "minutes"
+		a.AlertParameterJSON.LimitTime = 10
+
+		// Map type IDs to match frontend requirements
+		a.AlertTypeID = 5
+		a.AlertType.ID = 5
+		a.AlertType.Slug = "stoppage"
+		if a.AlertType.AlertTypeName == "Over Speeding" {
+			a.AlertTypeID = 6
+			a.AlertType.ID = 6
+			a.AlertType.Slug = "overspeeding"
 		}
 
-		var valid []decoder.AVLData
-		for _, p := range points {
-			if p.Lat != 0 && p.Lng != 0 {
-				valid = append(valid, p)
-			}
-		}
-
-		if len(valid) == 0 {
-			continue
-		}
-
-		const minStoppageSec = 60.0 
-		const maxDriftRadiusKm = 0.05 
-
-		stoppageStartIdx := -1
-
-		addAlert := func(startIdx, endIdx int) {
-			durSec := valid[endIdx].Time.Sub(valid[startIdx].Time).Seconds()
-			if durSec < minStoppageSec {
-				return
-			}
-
-			key := fmt.Sprintf("%s-%d", imei, valid[startIdx].Time.Unix())
-			alertID := int(crc32.ChecksumIEEE([]byte(key)))
-
-			status := "pending"
-			reason := ""
-			snooze := 0
-
-			h.alertsMutex.Lock()
-			if resolved, exists := h.resolvedAlerts[alertID]; exists {
-				status = "resolved"
-				reason = resolved.Reason
-				snooze = resolved.SnoozeDuration
-			}
-			h.alertsMutex.Unlock()
-
-			wardName := "23 - Ward - 23"
-			routeName := "SWEEPING_W23_RJ14GN6114"
-			parkingAt := "HawaMahal Parking"
-
-			if v.ID != 1245 {
-				wardName = "351 - Ward - 351"
-				routeName = "COMPACTOR_W351_RJ14GQ1102"
-				parkingAt = "Transport Nagar Parking"
-			}
-
-			alertTypeId := 5
-			vehicleTypeId := 0
-			if v.VehicleTypeID != nil {
-				vehicleTypeId = *v.VehicleTypeID
-			}
-
-			alerts = append(alerts, StoppageAlert{
-				ID:           alertID,
-				AlertTypeID:  alertTypeId,
-				TimeReported: valid[startIdx].Time,
-				LogTime:      valid[startIdx].Time,
-				ZoneID:       177,
-				WardID:       351,
-				RouteID:      1588,
-				VehicleID:    v.ID,
-				IMEI:         imei,
-				Status:       status,
-				AlertParameterJSON: AlertParameter{
-					Unit:      "minutes",
-					LimitTime: 10,
-					Duration:  int(durSec / 60.0),
-				},
-				AlertPoint: AlertPoint{
-					X: valid[startIdx].Lng,
-					Y: valid[startIdx].Lat,
-				},
-				Vehicle: AlertVehicle{
-					ID:             v.ID,
-					RegistrationNo: v.RegistrationNo,
-					VehicleTypeID:  vehicleTypeId,
-					IMEI:           imei,
-					IsActive:       v.IsActive,
-				},
-				WardName:  wardName,
-				RouteName: routeName,
-				ParkingAt: parkingAt,
-				AlertType: AlertTypeDetails{
-					ID:            alertTypeId,
-					AlertTypeName: "Stoppage",
-					Slug:          "stoppage",
-				},
-				AlertCount:     1,
-				Reason:         reason,
-				SnoozeDuration: snooze,
-			})
-		}
-
-		for i := 0; i < len(valid); i++ {
-			isStopped := valid[i].Speed == 0
-
-			if isStopped {
-				if stoppageStartIdx == -1 {
-					stoppageStartIdx = i
-				} else {
-					dist := haversine(valid[stoppageStartIdx].Lat, valid[stoppageStartIdx].Lng, valid[i].Lat, valid[i].Lng)
-					if dist > maxDriftRadiusKm {
-						addAlert(stoppageStartIdx, i-1)
-						stoppageStartIdx = i
-					}
-				}
-			} else {
-				if stoppageStartIdx != -1 {
-					addAlert(stoppageStartIdx, i-1)
-					stoppageStartIdx = -1
-				}
-			}
-		}
-
-		if stoppageStartIdx != -1 {
-			addAlert(stoppageStartIdx, len(valid)-1)
-		}
+		alerts = append(alerts, a)
 	}
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{
@@ -558,12 +511,25 @@ func (h *Handler) ResolveAlert(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload: " + err.Error()})
 		return
 	}
+
+	// 1. Update in-memory fallback cache
 	h.alertsMutex.Lock()
 	h.resolvedAlerts[alertID] = ResolvedDetails{
 		Reason:         payload.Reason,
 		SnoozeDuration: payload.SnoozeDuration,
 	}
 	h.alertsMutex.Unlock()
+
+	// 2. Persist update to database alerts table
+	_, err = h.gpsRepo.Pool().Exec(r.Context(), `
+		UPDATE alerts 
+		SET status = 'resolved', reason = $1, snooze_duration = $2 
+		WHERE id = $3
+	`, payload.Reason, payload.SnoozeDuration, alertID)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update alert in database: " + err.Error()})
+		return
+	}
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
@@ -612,6 +578,20 @@ func (h *Handler) DeleteVehicle(w http.ResponseWriter, r *http.Request) {
 	h.publishMetadataUpdate(r.Context(), "vehicle", vehicleID)
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
+
+func (h *Handler) DeleteVehicleType(w http.ResponseWriter, r *http.Request) {
+	typeIDStr := chi.URLParam(r, "id")
+	var typeID int
+	fmt.Sscanf(typeIDStr, "%d", &typeID)
+
+	if err := h.vRepo.DeleteType(r.Context(), typeID); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete type: " + err.Error()})
+		return
+	}
+	h.publishMetadataUpdate(r.Context(), "type", typeID)
+	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+}
+
 
 func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 	deviceIDStr := chi.URLParam(r, "id")
@@ -920,16 +900,59 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	coverageData, _ := h.routeRepo.GetDashboardCoverageData(ctx, coverageDateStr)
 
-	var allPoints map[int][]decoder.AVLData
+	// Define time window for alerts queries
+	var alertStart, alertEnd time.Time
 	if !shiftStart.IsZero() && !shiftEnd.IsZero() {
-		allPoints, _ = h.gpsRepo.GetAllByTimeWindow(ctx, shiftStart, shiftEnd)
+		alertStart, alertEnd = shiftStart, shiftEnd
 	} else {
 		now := time.Now()
-		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		allPoints, _ = h.gpsRepo.GetAllByTimeWindow(ctx, startOfDay, startOfDay.Add(24*time.Hour))
+		alertStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		alertEnd = alertStart.Add(24 * time.Hour)
 	}
 
-	// Query vehicles from DB with their details, filtered by the active shift assignment
+	// 1. Fetch pre-computed alerts from PostgreSQL alerts table for the time window
+	alertQuery := `
+		SELECT id, alert_type, imei, vehicle_id, registration_no, COALESCE(ward_no, ''), COALESCE(driver, ''), COALESCE(alert_detail, ''), time_reported, status, snooze_duration, COALESCE(reason, ''), lat, lng
+		FROM alerts
+		WHERE time_reported >= $1 AND time_reported < $2
+		ORDER BY time_reported DESC
+	`
+	aRows, err := h.gpsRepo.Pool().Query(ctx, alertQuery, alertStart, alertEnd)
+	
+	var alerts []D2DAlert
+	var unauthorizedVehicles []D2DAlert
+	vehicleAlertTypes := make(map[int]map[string]string) // vehicleID -> alertType -> detail
+
+	if err == nil {
+		defer aRows.Close()
+		for aRows.Next() {
+			var a D2DAlert
+			var detail, reason, imei string
+			err := aRows.Scan(
+				&a.ID, &a.AlertType, &imei, &a.VehicleID, &a.RegNo,
+				&a.WardNo, &a.Driver, &detail, &a.TimeReported, &a.Status,
+				&a.SnoozeDuration, &reason, &a.Lat, &a.Lng,
+			)
+			if err != nil {
+				continue
+			}
+			a.AlertDetail = detail
+			a.Reason = reason
+			a.AlertTime = a.TimeReported.Format("03:04 PM")
+			alerts = append(alerts, a)
+
+			if vehicleAlertTypes[a.VehicleID] == nil {
+				vehicleAlertTypes[a.VehicleID] = make(map[string]string)
+			}
+			vehicleAlertTypes[a.VehicleID][a.AlertType] = detail
+
+			if a.AlertType == "Unauthorized Movement" {
+				unauthorizedVehicles = append(unauthorizedVehicles, a)
+			}
+		}
+	}
+
+	// 2. Query active vehicles joining the lightweight latest_gps_data cache table
 	var rows interface {
 		Close()
 		Next() bool
@@ -944,7 +967,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 				COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
 				COALESCE(v.zone_id, 0), COALESCE(z.region_name, 'Zone 1 - Hawa Mahal-Aamer Zone'),
 				COALESCE(v.ward_id, 0), COALESCE(w.region_name, '15 - Ward - 15'),
-				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.time
+				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.captured_at
 			FROM vehicles v
 			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
 			JOIN routes r ON va.route_id = r.id AND r.is_active = true
@@ -954,13 +977,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			LEFT JOIN gps_devices d ON m.device_id = d.id
 			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
 			LEFT JOIN regions w ON v.ward_id = w.id AND w.region_type_id = 3
-			LEFT JOIN LATERAL (
-				SELECT lat, lng, captured_at as time 
-				FROM gps_data 
-				WHERE imei = d.imei
-				ORDER BY captured_at DESC
-				LIMIT 1
-			) lp ON true
+			LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
 			WHERE va.assigned_date = $1 AND s.id = $2
 		`
 		assignedDateStr := shiftStart.Format("2006-01-02")
@@ -973,7 +990,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 				COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
 				COALESCE(v.zone_id, 0), COALESCE(z.region_name, 'Zone 1 - Hawa Mahal-Aamer Zone'),
 				COALESCE(v.ward_id, 0), COALESCE(w.region_name, '15 - Ward - 15'),
-				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.time
+				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.captured_at
 			FROM vehicles v
 			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
 			JOIN routes r ON va.route_id = r.id AND r.is_active = true
@@ -983,13 +1000,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			LEFT JOIN gps_devices d ON m.device_id = d.id
 			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
 			LEFT JOIN regions w ON v.ward_id = w.id AND w.region_type_id = 3
-			LEFT JOIN LATERAL (
-				SELECT lat, lng, captured_at as time 
-				FROM gps_data 
-				WHERE imei = d.imei
-				ORDER BY captured_at DESC
-				LIMIT 1
-			) lp ON true
+			LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
 			WHERE va.assigned_date = $1
 		`
 		rows, err = h.gpsRepo.Pool().Query(ctx, query, todayStr)
@@ -1001,9 +1012,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var alerts []D2DAlert
 	var startedVehicles []StartedVehicle
-	var unauthorizedVehicles []D2DAlert
 	var otherVehicles []OtherVehicle
 
 	for rows.Next() {
@@ -1015,7 +1024,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 
 		err := rows.Scan(
 			&vID, &regNo, &chassisNo, &isOwned, &vtID, &vActive,
-			&vtName, &vtColor, &dID, &dImei, &dSerial, &dSim, &dDevType, &dActive,
+			&vtName, &vtColor, &dID, &dImei, &dSim, &dSerial, &dDevType, &dActive,
 			&zoneID, &zName, &wardID, &wName,
 			&lastLat, &lastLng, &lastTime,
 		)
@@ -1030,7 +1039,6 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			driverName = "Suresh Sharma"
 		}
 
-		// Clean up Ward Name (extract "23" from "23 - Ward - 23")
 		wardNo := wName
 		if len(wName) > 0 {
 			var wardNum int
@@ -1039,7 +1047,9 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// If no GPS device mapped or no telemetry, it's inactive ("Other")
+		// Offline state detection
+		isOffline := lastTime == nil || lastLat == 0.0 || lastLng == 0.0 || (time.Since(*lastTime) > 15*time.Minute)
+
 		if dImei == "" || lastTime == nil || lastLat == 0.0 || lastLng == 0.0 {
 			otherVehicles = append(otherVehicles, OtherVehicle{
 				ID:                     vID,
@@ -1055,53 +1065,8 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// We already fetched points using the global windowStart/End in allPoints.
-		points := allPoints[vID]
-		if len(points) == 0 {
-			otherVehicles = append(otherVehicles, OtherVehicle{
-				ID:                     vID,
-				RegNo:                  regNo,
-				WardNo:                 wardNo,
-				Route:                  "ROUTE_" + wardNo,
-				Driver:                 driverName,
-				CurrentStatus:          "Offline",
-				DistanceCovered:        0.0,
-				GoingToTransferStation: "No",
-				LastUpdated:            lastTime,
-			})
-			continue
-		}
-
-		var valid []decoder.AVLData
-		for _, p := range points {
-			if p.Lat != 0.0 && p.Lng != 0.0 {
-				valid = append(valid, p)
-			}
-		}
-
-		if len(valid) == 0 {
-			otherVehicles = append(otherVehicles, OtherVehicle{
-				ID:                     vID,
-				RegNo:                  regNo,
-				WardNo:                 wardNo,
-				Route:                  "ROUTE_" + wardNo,
-				Driver:                 driverName,
-				CurrentStatus:          "Offline",
-				DistanceCovered:        0.0,
-				GoingToTransferStation: "No",
-				LastUpdated:            lastTime,
-			})
-			continue
-		}
-
-		// Metrics calculation
-		var distCovered float64
-		for idx := 1; idx < len(valid); idx++ {
-			d := haversine(valid[idx-1].Lat, valid[idx-1].Lng, valid[idx].Lat, valid[idx].Lng)
-			if d < 1.0 { // jump filter
-				distCovered += d
-			}
-		}
+		// Retrieve pre-accumulated daily distance covered from Redis
+		distCovered, _ := h.rdb.Get(ctx, fmt.Sprintf("trip:distance:%s", dImei)).Float64()
 
 		cov := coverageData[vID]
 		routeCoveredPercent := 0.0
@@ -1110,246 +1075,61 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			routeCoveredPercent = math.Round((float64(cov.CoveredCheckpoints) / float64(cov.TotalCheckpoints)) * 100)
 			inorderRoutePercent = math.Round((float64(cov.InOrderHits) / float64(cov.TotalCheckpoints)) * 100)
 		} else if distCovered > 0 {
-			// Fallback if no checkpoints defined but moved
 			routeCoveredPercent = math.Min(100.0, (distCovered/12.0)*100.0)
 			inorderRoutePercent = math.Min(100.0, (distCovered/13.5)*100.0)
 		}
 
 		// Geofence checks
 		goingToTS := "No"
-		tsLat, tsLng := 26.9239, 75.8267 // transfer station coordinates
+		tsLat, tsLng := 26.9239, 75.8267
 		if haversine(lastLat, lastLng, tsLat, tsLng) < 0.2 {
 			goingToTS = "Yes"
 		}
 
-		// Initialize active checks array for emoji rendering
+		// Build Emoji Sequence using the mapped background alerts
 		hasAlert := make([]bool, 10)
-
-		// 1. Detect Stoppages
-		const minStoppageSec = 300.0 // 5 minutes
-		const maxDriftRadiusKm = 0.05 // 50 meters
-		stoppageStartIdx := -1
-
-		for i := 0; i < len(valid); i++ {
-			isStopped := valid[i].Speed == 0
-			if isStopped {
-				if stoppageStartIdx == -1 {
-					stoppageStartIdx = i
+		activeAlerts := vehicleAlertTypes[vID]
+		
+		if activeAlerts != nil {
+			if detail, exists := activeAlerts["Stoppage"]; exists {
+				var stopDur float64
+				if _, err := fmt.Sscanf(detail, "Stoppage of more than 5:00 Min(s) (Duration: %f Min)", &stopDur); err == nil {
+					if stopDur >= 15 {
+						hasAlert[2] = true
+					} else if stopDur >= 10 {
+						hasAlert[1] = true
+					} else {
+						hasAlert[0] = true
+					}
 				} else {
-					dist := haversine(valid[stoppageStartIdx].Lat, valid[stoppageStartIdx].Lng, valid[i].Lat, valid[i].Lng)
-					if dist > maxDriftRadiusKm {
-						dur := valid[i-1].Time.Sub(valid[stoppageStartIdx].Time).Seconds()
-						if dur >= minStoppageSec {
-							h.triggerStoppageAlert(&alerts, &hasAlert, valid[stoppageStartIdx], valid[i-1], dur, regNo, wardNo, driverName, dImei, vID)
-						}
-						stoppageStartIdx = i
-					}
-				}
-			} else {
-				if stoppageStartIdx != -1 {
-					dur := valid[i-1].Time.Sub(valid[stoppageStartIdx].Time).Seconds()
-					if dur >= minStoppageSec {
-						h.triggerStoppageAlert(&alerts, &hasAlert, valid[stoppageStartIdx], valid[i-1], dur, regNo, wardNo, driverName, dImei, vID)
-					}
-					stoppageStartIdx = -1
+					hasAlert[0] = true
 				}
 			}
-		}
-		if stoppageStartIdx != -1 {
-			dur := valid[len(valid)-1].Time.Sub(valid[stoppageStartIdx].Time).Seconds()
-			if dur >= minStoppageSec {
-				h.triggerStoppageAlert(&alerts, &hasAlert, valid[stoppageStartIdx], valid[len(valid)-1], dur, regNo, wardNo, driverName, dImei, vID)
+			if _, exists := activeAlerts["Over Speeding"]; exists {
+				hasAlert[3] = true
 			}
-		}
-
-		// 2. Detect Overspeeding (>10.10 km/hr)
-		overspeedStartIdx := -1
-		for i := 0; i < len(valid); i++ {
-			isOverspeed := valid[i].Speed > 10
-			if isOverspeed {
-				if overspeedStartIdx == -1 {
-					overspeedStartIdx = i
-				}
-			} else {
-				if overspeedStartIdx != -1 {
-					dur := valid[i-1].Time.Sub(valid[overspeedStartIdx].Time).Seconds()
-					h.triggerOverspeedAlert(&alerts, &hasAlert, valid[overspeedStartIdx], valid[i-1], dur, regNo, wardNo, driverName, dImei, vID)
-					overspeedStartIdx = -1
-				}
+			if _, exists := activeAlerts["Deviation"]; exists {
+				hasAlert[5] = true
 			}
-		}
-		if overspeedStartIdx != -1 {
-			dur := valid[len(valid)-1].Time.Sub(valid[overspeedStartIdx].Time).Seconds()
-			h.triggerOverspeedAlert(&alerts, &hasAlert, valid[overspeedStartIdx], valid[len(valid)-1], dur, regNo, wardNo, driverName, dImei, vID)
-		}
-
-		// 3. Detect Unauthorized Movement (operating speed > 0 after 8:00 PM / 20:00)
-		for i := 0; i < len(valid); i++ {
-			hVal := valid[i].Time.Hour()
-			if valid[i].Speed > 0 && (hVal >= 20 || hVal < 6) {
-				hasAlert[8] = true
-				key := fmt.Sprintf("unauth-%s-%d", dImei, valid[i].Time.Unix())
-				alertID := int(crc32.ChecksumIEEE([]byte(key)))
-
-				status := "pending"
-				reason := ""
-				snooze := 0
-				h.alertsMutex.Lock()
-				if resolved, exists := h.resolvedAlerts[alertID]; exists {
-					status = "resolved"
-					reason = resolved.Reason
-					snooze = resolved.SnoozeDuration
-				}
-				h.alertsMutex.Unlock()
-
-				alertTimeStr := valid[i].Time.Format("03:04 PM")
-				unauthAlert := D2DAlert{
-					ID:             alertID,
-					AlertType:      "Unauthorized Movement",
-					RegNo:          regNo,
-					WardNo:         wardNo,
-					Driver:         driverName,
-					AlertDetail:    "Unauthorized vehicle movement outside shift hours",
-					AlertCount:     1,
-					AlertTime:      alertTimeStr,
-					TimeReported:   valid[i].Time,
-					Status:         status,
-					Reason:         reason,
-					SnoozeDuration: snooze,
-					Lat:            valid[i].Lat,
-					Lng:            valid[i].Lng,
-					VehicleID:      vID,
-				}
-				alerts = append(alerts, unauthAlert)
-				unauthorizedVehicles = append(unauthorizedVehicles, unauthAlert)
-				break // trigger once per vehicle day for simplicity
+			if _, exists := activeAlerts["Delay"]; exists {
+				hasAlert[6] = true
 			}
-		}
-
-		// 4. Detect Late Started (first ping after 07:00 AM)
-		if len(valid) > 0 {
-			firstTime := valid[0].Time
-			if firstTime.Hour() > 7 || (firstTime.Hour() == 7 && firstTime.Minute() > 0) {
+			if _, exists := activeAlerts["Late Started"]; exists {
 				hasAlert[7] = true
-				key := fmt.Sprintf("late-%s-%d", dImei, firstTime.Unix())
-				alertID := int(crc32.ChecksumIEEE([]byte(key)))
-
-				status := "pending"
-				reason := ""
-				snooze := 0
-				h.alertsMutex.Lock()
-				if resolved, exists := h.resolvedAlerts[alertID]; exists {
-					status = "resolved"
-					reason = resolved.Reason
-					snooze = resolved.SnoozeDuration
-				}
-				h.alertsMutex.Unlock()
-
-				alerts = append(alerts, D2DAlert{
-					ID:             alertID,
-					AlertType:      "Late Started",
-					RegNo:          regNo,
-					WardNo:         wardNo,
-					Driver:         driverName,
-					AlertDetail:    "Shift started late at " + firstTime.Format("03:04 PM"),
-					AlertCount:     1,
-					AlertTime:      firstTime.Format("03:04 PM"),
-					TimeReported:   firstTime,
-					Status:         status,
-					Reason:         reason,
-					SnoozeDuration: snooze,
-					Lat:            firstTimeLat(valid),
-					Lng:            firstTimeLng(valid),
-					VehicleID:      vID,
-				})
+			}
+			if _, exists := activeAlerts["Unauthorized Movement"]; exists {
+				hasAlert[8] = true
 			}
 		}
 
-		// 5. Detect Deviation and Delay (visually mock for ID 1245 to match user request)
-		if vID == 1245 {
-			// Trigger Deviation (index 5)
-			hasAlert[5] = true
-			keyDev := fmt.Sprintf("dev-%s", dImei)
-			alertIDDev := int(crc32.ChecksumIEEE([]byte(keyDev)))
-			statusDev := "pending"
-			reasonDev := ""
-			snoozeDev := 0
-			h.alertsMutex.Lock()
-			if resolved, exists := h.resolvedAlerts[alertIDDev]; exists {
-				statusDev = "resolved"
-				reasonDev = resolved.Reason
-				snoozeDev = resolved.SnoozeDuration
-			}
-			h.alertsMutex.Unlock()
-
-			alerts = append(alerts, D2DAlert{
-				ID:             alertIDDev,
-				AlertType:      "Deviation",
-				RegNo:          regNo,
-				WardNo:         wardNo,
-				Driver:         driverName,
-				AlertDetail:    "Route coverage deviation detected",
-				AlertCount:     1,
-				AlertTime:      lastTime.Format("03:04 PM"),
-				TimeReported:   *lastTime,
-				Status:         statusDev,
-				Reason:         reasonDev,
-				SnoozeDuration: snoozeDev,
-				Lat:            lastLat,
-				Lng:            lastLng,
-				VehicleID:      vID,
-			})
-
-			// Trigger Delay (index 6)
-			hasAlert[6] = true
-			keyDel := fmt.Sprintf("del-%s", dImei)
-			alertIDDel := int(crc32.ChecksumIEEE([]byte(keyDel)))
-			statusDel := "pending"
-			reasonDel := ""
-			snoozeDel := 0
-			h.alertsMutex.Lock()
-			if resolved, exists := h.resolvedAlerts[alertIDDel]; exists {
-				statusDel = "resolved"
-				reasonDel = resolved.Reason
-				snoozeDel = resolved.SnoozeDuration
-			}
-			h.alertsMutex.Unlock()
-
-			alerts = append(alerts, D2DAlert{
-				ID:             alertIDDel,
-				AlertType:      "Delay",
-				RegNo:          regNo,
-				WardNo:         wardNo,
-				Driver:         driverName,
-				AlertDetail:    "Coverage delays in ward geofence",
-				AlertCount:     1,
-				AlertTime:      lastTime.Format("03:04 PM"),
-				TimeReported:   *lastTime,
-				Status:         statusDel,
-				Reason:         reasonDel,
-				SnoozeDuration: snoozeDel,
-				Lat:            lastLat,
-				Lng:            lastLng,
-				VehicleID:      vID,
-			})
+		if isOffline {
+			hasAlert[9] = true
 		}
 
-		// Calculate Emoji sequence string (exactly 10 emojis)
-		// Match example format: RJ14GQ5302SW 🚫 🚫 🚫 🚫 🚫 🍎 ⏱️ 🚫 🚫 🚫 (50%)
 		emojiSeq := ""
 		emojis := []string{
-			"🟡", // Stoppage 5-10
-			"🟠", // Stoppage 10-15
-			"🔴", // Stoppage 15+
-			"⚡", // Over Speeding
-			"🛻", // Fast Coverage
-			"🍎", // Deviation
-			"⏱️", // Delay
-			"🕒", // Late Started
-			"🛡️", // Unauthorized Movement
-			"📴", // GPS Not Reporting
+			"🟡", "🟠", "🔴", "⚡", "🛻", "🍎", "⏱️", "🕒", "🛡️", "📴",
 		}
-
 		for idx, trigger := range hasAlert {
 			if trigger {
 				emojiSeq += emojis[idx] + " "
@@ -1359,9 +1139,9 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		emojiSeq = strings.TrimSpace(emojiSeq)
 
-		// Determine current status
 		vStatus := "Moving"
-		if valid[len(valid)-1].Speed == 0 {
+		// If offline or has a stoppage alert, set status to stopped
+		if isOffline || (activeAlerts != nil && activeAlerts["Stoppage"] != "") {
 			vStatus = "Stopped"
 		}
 
@@ -1378,13 +1158,12 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			LastUpdated:            *lastTime,
 			Lat:                    lastLat,
 			Lng:                    lastLng,
-			Heading:                int(valid[len(valid)-1].Heading),
+			Heading:                0,
 			EmojiSequence:          emojiSeq,
 			CurrentStatus:          vStatus,
 		})
 	}
 
-	// Dynamic geofences mock centered around active Hawa Mahal tracking data
 	geofences := []MapGeofence{
 		{ID: 1, Name: "HawaMahal Parking", Type: "Parking Lot", Lat: 26.9250, Lng: 75.8236, RadiusMeter: 100},
 		{ID: 2, Name: "Hawa Mahal Transfer Station", Type: "Transfer Station", Lat: 26.9239, Lng: 75.8267, RadiusMeter: 150},

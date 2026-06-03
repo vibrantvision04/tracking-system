@@ -48,23 +48,20 @@ func NewVehicleRepository(pool *pgxpool.Pool) *VehicleRepository {
 
 func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 	// Joining with vehicle_types and gps_devices via mapping table
+	// Also pulls speed from latest_gps_data to compute live status
 	query := `
 		SELECT 
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
 			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
-			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.time
+			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
+			COALESCE(lp.speed, 0)
 		FROM vehicles v
 		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
-		LEFT JOIN LATERAL (
-			SELECT lat, lng, captured_at as time 
-			FROM gps_data 
-			WHERE imei = d.imei
-			ORDER BY captured_at DESC
-			LIMIT 1
-		) lp ON true
+		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
+		ORDER BY v.id
 	`
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -78,12 +75,14 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 		var vt VehicleType
 		var d GpsDevice
 		var vTypeId *int
-		
+		var speed float64
+
 		err := rows.Scan(
 			&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 			&vt.Name, &vt.IconColor,
 			&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
 			&v.LastLat, &v.LastLng, &v.LastTime,
+			&speed,
 		)
 		if err == nil {
 			v.VehicleTypeID = vTypeId
@@ -91,12 +90,26 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			if d.ID > 0 {
 				v.GpsDevice = &d
 			}
-			// Status logic (simplified for now, usually comes from cache)
-			v.Status = "offline" 
+			v.Status = vehicleStatus(v.LastTime, speed)
 			vehicles = append(vehicles, v)
 		}
 	}
 	return vehicles, nil
+}
+
+// vehicleStatus computes a human-readable status from the last GPS ping time and speed.
+func vehicleStatus(lastTime *time.Time, speed float64) string {
+	if lastTime == nil {
+		return "offline"
+	}
+	age := time.Since(*lastTime)
+	if age > 15*time.Minute {
+		return "offline"
+	}
+	if speed > 3.0 {
+		return "moving"
+	}
+	return "stopped"
 }
 func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicle, error) {
 	query := `
@@ -104,40 +117,37 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
 			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active,
-			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.time
+			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
+			COALESCE(lp.speed, 0)
 		FROM vehicles v
 		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
 		JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		JOIN gps_devices d ON m.device_id = d.id
-		LEFT JOIN LATERAL (
-			SELECT lat, lng, captured_at as time 
-			FROM gps_data 
-			WHERE imei = d.imei
-			ORDER BY captured_at DESC
-			LIMIT 1
-		) lp ON true
+		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
 		WHERE d.imei = $1
 	`
 	var v Vehicle
 	var vt VehicleType
 	var d GpsDevice
 	var vTypeId *int
-	
+	var speed float64
+
 	err := r.pool.QueryRow(ctx, query, imei).Scan(
 		&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 		&vt.Name, &vt.IconColor,
 		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
 		&v.LastLat, &v.LastLng, &v.LastTime,
+		&speed,
 	)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	v.VehicleTypeID = vTypeId
 	v.VehicleType = &vt
 	v.GpsDevice = &d
-	v.Status = "offline"
-	
+	v.Status = vehicleStatus(v.LastTime, speed)
+
 	return &v, nil
 }
 
@@ -147,42 +157,39 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
 			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
-			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.time
+			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
+			COALESCE(lp.speed, 0)
 		FROM vehicles v
 		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
-		LEFT JOIN LATERAL (
-			SELECT lat, lng, captured_at as time 
-			FROM gps_data 
-			WHERE imei = d.imei
-			ORDER BY captured_at DESC
-			LIMIT 1
-		) lp ON true
+		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
 		WHERE v.id = $1
 	`
 	var v Vehicle
 	var vt VehicleType
 	var d GpsDevice
 	var vTypeId *int
-	
+	var speed float64
+
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 		&vt.Name, &vt.IconColor,
 		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
 		&v.LastLat, &v.LastLng, &v.LastTime,
+		&speed,
 	)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	v.VehicleTypeID = vTypeId
 	v.VehicleType = &vt
 	if d.ID > 0 {
 		v.GpsDevice = &d
 	}
-	v.Status = "offline"
-	
+	v.Status = vehicleStatus(v.LastTime, speed)
+
 	return &v, nil
 }
 
@@ -232,6 +239,22 @@ func (r *VehicleRepository) CreateVehicle(ctx context.Context, v *Vehicle) error
 	).Scan(&v.ID)
 	return err
 }
+
+func (r *VehicleRepository) UpdateVehicle(ctx context.Context, v *Vehicle) error {
+	query := `
+		UPDATE vehicles
+		SET registration_no = $1, chassis_no = $2, vehicle_type_id = $3, name = $1, plate_number = $1
+		WHERE id = $4
+	`
+	_, err := r.pool.Exec(ctx, query,
+		v.RegistrationNo,
+		v.ChassisNo,
+		v.VehicleTypeID,
+		v.ID,
+	)
+	return err
+}
+
 
 func (r *VehicleRepository) GetDevices(ctx context.Context) ([]GpsDevice, error) {
 	query := `
@@ -334,6 +357,19 @@ func (r *VehicleRepository) DeleteVehicle(ctx context.Context, vehicleID int) er
 	_, err = r.pool.Exec(ctx, `DELETE FROM vehicles WHERE id = $1`, vehicleID)
 	return err
 }
+
+func (r *VehicleRepository) DeleteType(ctx context.Context, id int) error {
+	// 1. Unassign vehicles using this type
+	_, err := r.pool.Exec(ctx, `UPDATE vehicles SET vehicle_type_id = NULL WHERE vehicle_type_id = $1`, id)
+	if err != nil {
+		return err
+	}
+
+	// 2. Delete the type
+	_, err = r.pool.Exec(ctx, `DELETE FROM vehicle_types_iswm WHERE id = $1`, id)
+	return err
+}
+
 
 func (r *VehicleRepository) UpdateDeviceStatus(ctx context.Context, id int, isActive bool) error {
 	status := "inactive"

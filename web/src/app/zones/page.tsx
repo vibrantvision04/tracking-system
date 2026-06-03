@@ -41,7 +41,10 @@ export default function RegionManager() {
     parent_id: "" as string | number,
     geojson: "",
     color: "#fba339",
+    sub_region_ids: [] as number[],
   });
+
+  const [wardSearch, setWardSearch] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterText, setFilterText] = useState("");
@@ -93,7 +96,9 @@ export default function RegionManager() {
       parent_id: "",
       geojson: "",
       color: "#fba339",
+      sub_region_ids: [],
     });
+    setWardSearch("");
     setFormOpen(true);
     setMessage(null);
     setIsDrawing(false); // Default to split-screen mode
@@ -101,6 +106,11 @@ export default function RegionManager() {
 
   const handleEditClick = (reg: Region) => {
     setEditingRegion(reg);
+    // Find all Wards currently belonging to this Zone
+    const currentSubRegionIDs = regions
+      .filter((r) => r.region_type_id === 3 && r.parent_id === reg.id)
+      .map((r) => r.id);
+
     setForm({
       region_name: reg.region_name,
       region_code: reg.region_code,
@@ -109,7 +119,9 @@ export default function RegionManager() {
       parent_id: reg.parent_id !== null ? reg.parent_id : "",
       geojson: reg.geojson ? JSON.stringify(reg.geojson, null, 2) : "",
       color: reg.color || "#fba339",
+      sub_region_ids: currentSubRegionIDs,
     });
+    setWardSearch("");
     setFormOpen(true);
     setMessage(null);
     setIsDrawing(false); // Default to split-screen mode
@@ -126,7 +138,9 @@ export default function RegionManager() {
       parent_id: "",
       geojson: "",
       color: "#fba339",
+      sub_region_ids: [],
     });
+    setWardSearch("");
     setMessage(null);
     setIsDrawing(false);
   };
@@ -159,6 +173,7 @@ export default function RegionManager() {
       parent_id: parentIdVal,
       geojson: parsedGeoJSON,
       color: form.color,
+      sub_region_ids: form.sub_region_ids,
     };
 
     try {
@@ -183,6 +198,7 @@ export default function RegionManager() {
             parent_id: "",
             geojson: "",
             color: "#fba339",
+            sub_region_ids: [],
           });
           setTimeout(() => setFormOpen(false), 1500);
           loadData();
@@ -290,7 +306,7 @@ export default function RegionManager() {
     <>
       {/* Name */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
           Name<span className="text-red-500">*</span>
         </label>
         <input
@@ -299,13 +315,13 @@ export default function RegionManager() {
           placeholder="Enter Region Name"
           value={form.region_name}
           onChange={(e) => setForm({ ...form, region_name: e.target.value })}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold"
+          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold"
         />
       </div>
 
       {/* Code */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
           Code
         </label>
         <input
@@ -313,20 +329,20 @@ export default function RegionManager() {
           placeholder="Enter Region Code"
           value={form.region_code}
           onChange={(e) => setForm({ ...form, region_code: e.target.value })}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold"
+          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold"
         />
       </div>
 
       {/* Region Type */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
           Region Type<span className="text-red-500">*</span>
         </label>
         <select
           required
           value={form.region_type_id}
           onChange={(e) => setForm({ ...form, region_type_id: e.target.value })}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold cursor-pointer"
+          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold cursor-pointer"
         >
           <option value="">Select</option>
           {regionTypes.map((t) => (
@@ -339,14 +355,14 @@ export default function RegionManager() {
 
       {/* Parent Region */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
           Parent Region<span className="text-red-500">*</span>
         </label>
         <select
           required
           value={form.parent_id}
           onChange={(e) => setForm({ ...form, parent_id: e.target.value })}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold cursor-pointer"
+          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold cursor-pointer"
         >
           <option value="">Select</option>
           {regions
@@ -359,9 +375,58 @@ export default function RegionManager() {
         </select>
       </div>
 
+      {/* Wards Assignment Multi-Select for Zones */}
+      {Number(form.region_type_id) === 2 && (
+        <div className="pt-2 border-t border-slate-100 space-y-2">
+          <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
+            Wards Assignment ({form.sub_region_ids.length} Selected)
+          </label>
+          <div className="bg-theme-surface border border-theme-border rounded-xl p-3 space-y-2 shadow-inner">
+            <input
+              type="text"
+              placeholder="Filter Wards..."
+              value={wardSearch}
+              onChange={(e) => setWardSearch(e.target.value)}
+              className="w-full bg-theme-surface border border-theme-border rounded-lg px-2.5 py-1.5 text-xs text-theme-text placeholder:text-theme-text-dim focus:border-emerald-500 outline-none transition font-semibold"
+            />
+            <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+              {regions
+                .filter((r) => r.region_type_id === 3)
+                .filter((r) => r.region_name.toLowerCase().includes(wardSearch.toLowerCase()))
+                .map((w) => {
+                  const isChecked = form.sub_region_ids.includes(w.id);
+                  return (
+                    <label key={w.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-200 cursor-pointer select-none transition text-xs font-semibold text-theme-text">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setForm((prev) => ({
+                              ...prev,
+                              sub_region_ids: [...prev.sub_region_ids, w.id],
+                            }));
+                          } else {
+                            setForm((prev) => ({
+                              ...prev,
+                              sub_region_ids: prev.sub_region_ids.filter((id) => id !== w.id),
+                            }));
+                          }
+                        }}
+                        className="rounded border-slate-350 text-emerald-650 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                      />
+                      <span>{w.region_name}</span>
+                    </label>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Estimated Population */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
           Est. Population<span className="text-red-500">*</span>
         </label>
         <input
@@ -371,13 +436,13 @@ export default function RegionManager() {
           placeholder="Enter est. population"
           value={form.estimated_population || ""}
           onChange={(e) => setForm({ ...form, estimated_population: Number(e.target.value) })}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold"
+          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold"
         />
       </div>
 
       {/* Color Selector */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
           Border / Fill Color
         </label>
         <div className="flex gap-2">
@@ -385,26 +450,26 @@ export default function RegionManager() {
             type="color"
             value={form.color}
             onChange={(e) => setForm({ ...form, color: e.target.value })}
-            className="w-9 h-[34px] p-0.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer"
+            className="w-9 h-[34px] p-0.5 bg-theme-surface border border-theme-border rounded-lg cursor-pointer"
           />
           <input
             type="text"
             value={form.color}
             onChange={(e) => setForm({ ...form, color: e.target.value })}
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 outline-none focus:bg-white focus:border-emerald-500 transition-all font-mono font-semibold"
+            className="flex-1 bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text outline-none focus:bg-theme-surface focus:border-emerald-500 transition-all font-mono font-semibold"
           />
         </div>
       </div>
 
       {/* Set Geometry divider */}
       <div className="pt-2 border-t border-slate-100 space-y-3">
-        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider block">
+        <span className="text-[10px] font-black text-theme-accent uppercase tracking-wider block">
           Set Geometry
         </span>
 
         {/* GeoJSON box */}
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+          <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
             GEOJSON/KML<span className="text-red-500">*</span>
           </label>
           <textarea
@@ -412,26 +477,26 @@ export default function RegionManager() {
             rows={3}
             value={form.geojson}
             onChange={(e) => setForm({ ...form, geojson: e.target.value })}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-500 outline-none transition-all font-mono font-semibold resize-none custom-scrollbar"
+            className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-mono font-semibold resize-none custom-scrollbar"
           />
         </div>
 
         {/* Drag & drop upload */}
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+          <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
             Upload File
           </label>
-          <div className="border border-dashed border-slate-200 rounded-xl flex items-center justify-center p-3.5 hover:border-emerald-400 cursor-pointer bg-slate-50/50 hover:bg-white transition-all relative">
+          <div className="border border-dashed border-theme-border rounded-xl flex items-center justify-center p-3.5 hover:border-emerald-400 cursor-pointer bg-theme-surface/50 hover:bg-theme-surface transition-all relative">
             <input
               type="file"
               accept=".geojson,.json,.kml"
               onChange={handleFileUpload}
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
             />
-            <svg className="w-5 h-5 text-slate-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-theme-text-dim mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
-            <span className="text-[10px] font-bold text-slate-600">
+            <span className="text-[10px] font-bold text-theme-text-dim">
               Click to upload (GEOJSON / KML)
             </span>
           </div>
@@ -456,22 +521,22 @@ export default function RegionManager() {
   const totalPages = Math.ceil(filteredRegions.length / itemsPerPage);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f4f6fa] text-slate-800 overflow-hidden relative select-none">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden relative select-none">
       {formOpen && isDrawing ? (
         /* ─── CASE A.1: Full-Screen Interactive Editing Map Layout (Drawing Active) ─── */
         <div className="flex-1 w-full h-full relative overflow-hidden flex flex-col">
           {/* Header over map */}
-          <header className="h-14 bg-white/90 backdrop-blur-md px-6 flex items-center justify-between border-b border-slate-200 shrink-0 shadow-sm z-[11]">
+          <header className="h-14 bg-theme-surface/90 backdrop-blur-md px-6 flex items-center justify-between border-b border-theme-border shrink-0 shadow-sm z-[11]">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-[11px] shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-theme-accent text-white font-bold text-[11px] shrink-0">
                 JN
               </div>
-              <h1 className="text-xs font-black text-slate-800 uppercase tracking-wider leading-none">
+              <h1 className="text-xs font-black text-theme-text uppercase tracking-wider leading-none">
                 {editingRegion ? "Full-Screen Editor — Nagar Nigam Jaipur" : "Drawing Workspace — Nagar Nigam Jaipur"}
               </h1>
             </div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider bg-slate-100 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider bg-slate-100 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-theme-surface-hover0 animate-pulse" />
               GIS Canvas Active
             </div>
           </header>
@@ -493,42 +558,42 @@ export default function RegionManager() {
         /* ─── CASES WITH STANDARD HEADER ─── */
         <>
           {/* Header Bar */}
-          <header className="h-16 bg-white px-6 flex items-center justify-between border-b border-slate-200 shrink-0 shadow-sm z-10">
+          <header className="h-16 bg-theme-surface px-6 flex items-center justify-between border-b border-theme-border shrink-0 shadow-sm z-10">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-[13px] shadow-md shadow-emerald-500/20 shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-theme-accent text-white font-bold text-[13px] shadow-md shadow-emerald-500/20 shrink-0">
                 JN
               </div>
               <div>
-                <h1 className="text-sm font-extrabold text-slate-800 tracking-tight leading-none uppercase">
+                <h1 className="text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase">
                   ISWM - Nagar Nigam Jaipur
                 </h1>
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                <span className="text-[9px] text-theme-text-dim font-bold uppercase tracking-wider">
                   Integrated Solid Waste Management System
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 select-none">
-                <span className="text-[10px] text-slate-400 uppercase font-extrabold mr-1.5">Lang:</span>
+              <div className="flex items-center bg-theme-surface border border-theme-border rounded-lg px-2 py-1 select-none">
+                <span className="text-[10px] text-theme-text-dim uppercase font-extrabold mr-1.5">Lang:</span>
                 <select
                   value={selectedLanguage}
                   onChange={(e) => setSelectedLanguage(e.target.value)}
-                  className="bg-transparent text-xs text-slate-600 font-bold outline-none cursor-pointer pr-1"
+                  className="bg-transparent text-xs text-theme-text-dim font-bold outline-none cursor-pointer pr-1"
                 >
                   <option value="en">English</option>
                   <option value="hi">हिन्दी</option>
                 </select>
               </div>
 
-              <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+              <div className="flex items-center gap-2 border-l border-theme-border pl-4">
                 <div className="text-right hidden sm:block">
-                  <div className="text-[11px] font-bold text-slate-700 leading-none">Admin User</div>
-                  <span className="text-[8px] font-semibold text-emerald-600 uppercase tracking-wider">
+                  <div className="text-[11px] font-bold text-theme-text leading-none">Admin User</div>
+                  <span className="text-[8px] font-semibold text-theme-accent uppercase tracking-wider">
                     Online
                   </span>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xs font-black shadow-md shadow-emerald-500/20">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 text-white text-xs font-black shadow-md shadow-emerald-500/20">
                   AD
                 </div>
               </div>
@@ -541,18 +606,18 @@ export default function RegionManager() {
               <div className="max-w-7xl mx-auto space-y-6">
                 
                 {/* Form Title & Breadcrumb */}
-                <div className="flex justify-between items-center border-b border-slate-200 pb-4">
+                <div className="flex justify-between items-center border-b border-theme-border pb-4">
                   <div>
-                    <h2 className="text-xl font-black text-slate-800 tracking-tight">
+                    <h2 className="text-xl font-black text-theme-text tracking-tight">
                       {editingRegion ? "Edit Region" : "Create Region"}
                     </h2>
-                    <div className="h-1 bg-emerald-600 w-10 mt-1.5 rounded-full" />
+                    <div className="h-1 bg-theme-accent w-10 mt-1.5 rounded-full" />
                   </div>
                   
                   <button
                     type="button"
                     onClick={handleCloseForm}
-                    className="bg-[#e4e8f0] hover:bg-[#d8dce6] text-slate-700 font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm"
+                    className="bg-[#e4e8f0] hover:bg-[#d8dce6] text-theme-text font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm"
                   >
                     Back to List
                   </button>
@@ -561,9 +626,9 @@ export default function RegionManager() {
                 {/* Side-by-Side split content */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
                   {/* Form Card (Left) */}
-                  <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                  <div className="bg-theme-surface rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
                     <div>
-                      <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider mb-4">
+                      <h3 className="text-sm font-black text-theme-text uppercase tracking-wider mb-4">
                         Region Details
                       </h3>
 
@@ -571,7 +636,7 @@ export default function RegionManager() {
                         <div
                           className={`p-3 rounded-lg mb-4 text-xs font-bold ${
                             message.type === "success"
-                              ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                              ? "bg-theme-surface-hover text-theme-accent border border-emerald-100"
                               : "bg-red-50 text-red-600 border border-red-100"
                           }`}
                         >
@@ -590,14 +655,14 @@ export default function RegionManager() {
                         type="button"
                         disabled={loading}
                         onClick={handleSubmit}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-lg transition-all shadow-md shadow-emerald-600/10 disabled:opacity-50"
+                        className="flex-1 bg-theme-accent text-white font-bold text-xs py-2.5 rounded-lg transition-all shadow-md shadow-emerald-600/10 disabled:opacity-50"
                       >
                         {loading ? "Submitting..." : "Submit"}
                       </button>
                       <button
                         type="button"
                         onClick={handleCloseForm}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-5 py-2.5 rounded-lg transition-all"
+                        className="bg-slate-100 hover:bg-slate-200 text-theme-text-dim font-bold text-xs px-5 py-2.5 rounded-lg transition-all"
                       >
                         Cancel
                       </button>
@@ -605,7 +670,7 @@ export default function RegionManager() {
                   </div>
 
                   {/* Map Card (Right) */}
-                  <div className="bg-white rounded-2xl border border-slate-100 p-2 shadow-sm flex flex-col relative min-h-[500px]">
+                  <div className="bg-theme-surface rounded-2xl border border-slate-100 p-2 shadow-sm flex flex-col relative min-h-[500px]">
                     <div className="flex-1 w-full h-full rounded-xl overflow-hidden relative">
                       <RegionMap
                         geoJSON={form.geojson}
@@ -628,23 +693,23 @@ export default function RegionManager() {
               <div className="max-w-7xl mx-auto space-y-6">
                 
                 {/* Section Title */}
-                <div className="flex justify-between items-center border-b border-slate-200 pb-4 shrink-0">
+                <div className="flex justify-between items-center border-b border-theme-border pb-4 shrink-0">
                   <div>
-                    <h2 className="text-xl font-black text-slate-800 tracking-tight">Region</h2>
-                    <div className="h-1 bg-emerald-600 w-10 mt-1.5 rounded-full" />
+                    <h2 className="text-xl font-black text-theme-text tracking-tight">Region</h2>
+                    <div className="h-1 bg-theme-accent w-10 mt-1.5 rounded-full" />
                   </div>
 
                   <button
                     type="button"
                     onClick={handleAddClick}
-                    className="bg-[#e4e8f0] hover:bg-[#d8dce6] text-slate-700 font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm"
+                    className="bg-[#e4e8f0] hover:bg-[#d8dce6] text-theme-text font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm"
                   >
                     Add Region
                   </button>
                 </div>
 
                 {/* Table listing */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-theme-surface rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                   <div className="p-4 border-b border-slate-100 flex justify-end">
                     <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-80 select-none">
                       <input
@@ -652,11 +717,11 @@ export default function RegionManager() {
                         placeholder="Type to filter..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:bg-white focus:border-emerald-500 font-semibold"
+                        className="flex-1 bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim outline-none focus:bg-theme-surface focus:border-emerald-500 font-semibold"
                       />
                       <button
                         type="submit"
-                        className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm shrink-0"
+                        className="bg-amber-500 hover:bg-amber-600 text-theme-text font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm shrink-0"
                       >
                         Search
                       </button>
@@ -666,7 +731,7 @@ export default function RegionManager() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 uppercase font-black tracking-wider">
+                        <tr className="bg-theme-surface border-b border-slate-100 text-theme-text-dim uppercase font-black tracking-wider">
                           <th className="py-3.5 px-6 w-20">S. No.</th>
                           <th className="py-3.5 px-6">Name</th>
                           <th className="py-3.5 px-6">Code</th>
@@ -676,27 +741,27 @@ export default function RegionManager() {
                           <th className="py-3.5 px-6 w-32 text-center">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      <tbody className="divide-y divide-slate-100 font-semibold text-theme-text">
                         {paginatedRegions.map((reg, index) => (
-                          <tr key={reg.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="py-3.5 px-6 font-mono text-slate-400">{startIndex + index + 1}</td>
-                            <td className="py-3.5 px-6 text-slate-800 font-bold">{reg.region_name}</td>
-                            <td className="py-3.5 px-6">{reg.region_code || <span className="text-slate-300 font-medium">—</span>}</td>
+                          <tr key={reg.id} className="hover:bg-theme-surface/50 transition-colors">
+                            <td className="py-3.5 px-6 font-mono text-theme-text-dim">{startIndex + index + 1}</td>
+                            <td className="py-3.5 px-6 text-theme-text font-bold">{reg.region_name}</td>
+                            <td className="py-3.5 px-6">{reg.region_code || <span className="text-theme-text font-medium">—</span>}</td>
                             <td className="py-3.5 px-6">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-50 border border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-theme-surface border border-theme-border text-theme-text-dim font-bold uppercase tracking-wider">
                                 {reg.region_type_title}
                               </span>
                             </td>
-                            <td className="py-3.5 px-6 text-slate-500">
-                              {reg.parent_region_name || <span className="text-slate-300 font-medium">—</span>}
+                            <td className="py-3.5 px-6 text-theme-text-dim">
+                              {reg.parent_region_name || <span className="text-theme-text font-medium">—</span>}
                             </td>
                             <td className="py-3.5 px-6 text-center">
                               <div className="inline-flex items-center gap-1.5">
                                 <span
-                                  className="w-3.5 h-3.5 rounded border border-slate-200 shadow-sm"
+                                  className="w-3.5 h-3.5 rounded border border-theme-border shadow-sm"
                                   style={{ backgroundColor: reg.color || "#fba339" }}
                                 />
-                                <span className="text-[10px] font-mono text-slate-400 uppercase">
+                                <span className="text-[10px] font-mono text-theme-text-dim uppercase">
                                   {reg.color || "#fba339"}
                                 </span>
                               </div>
@@ -705,7 +770,7 @@ export default function RegionManager() {
                               <div className="inline-flex gap-2">
                                 <button
                                   onClick={() => handleEditClick(reg)}
-                                  className="p-1.5 border border-slate-200 rounded-md text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 transition-all"
+                                  className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-theme-accent hover:bg-theme-surface-hover hover:border-theme-border transition-all"
                                   title="Edit Region on Map"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -714,7 +779,7 @@ export default function RegionManager() {
                                 </button>
                                 <button
                                   onClick={() => handleDelete(reg.id)}
-                                  className="p-1.5 border border-slate-200 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all"
+                                  className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all"
                                   title="Delete Region"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -727,7 +792,7 @@ export default function RegionManager() {
                         ))}
                         {filteredRegions.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="text-center py-10 text-slate-400 font-medium">
+                            <td colSpan={7} className="text-center py-10 text-theme-text-dim font-medium">
                               No regions configured.
                             </td>
                           </tr>
@@ -736,8 +801,8 @@ export default function RegionManager() {
                     </table>
                   </div>
 
-                  <div className="bg-slate-50 border-t border-slate-200 px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <div className="text-slate-500 text-xs font-bold">
+                  <div className="bg-theme-surface border-t border-theme-border px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="text-theme-text-dim text-xs font-bold">
                       Showing {filteredRegions.length > 0 ? startIndex + 1 : 0} to{" "}
                       {Math.min(endIndex, filteredRegions.length)} of {filteredRegions.length} total
                     </div>
@@ -748,7 +813,7 @@ export default function RegionManager() {
                           type="button"
                           disabled={currentPage === 1}
                           onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 rounded text-[10px] font-extrabold text-slate-500 disabled:opacity-40 transition-all select-none"
+                          className="px-2.5 py-1 bg-theme-surface hover:bg-theme-surface border border-theme-border rounded text-[10px] font-extrabold text-theme-text-dim disabled:opacity-40 transition-all select-none"
                         >
                           Prev
                         </button>
@@ -759,7 +824,7 @@ export default function RegionManager() {
 
                           if (showEllipsis) {
                             return (
-                              <span key={page} className="w-6 h-6 flex items-center justify-center text-[10px] text-slate-400 font-bold select-none">
+                              <span key={page} className="w-6 h-6 flex items-center justify-center text-[10px] text-theme-text-dim font-bold select-none">
                                 ...
                               </span>
                             );
@@ -776,8 +841,8 @@ export default function RegionManager() {
                               onClick={() => setCurrentPage(page)}
                               className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-extrabold transition-all select-none
                                 ${currentPage === page
-                                  ? "bg-emerald-600 text-white shadow-sm"
-                                  : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-500"
+                                  ? "bg-theme-accent text-white shadow-sm"
+                                  : "bg-theme-surface hover:bg-theme-surface border border-theme-border text-theme-text-dim"
                                 }`}
                             >
                               {page}
@@ -789,7 +854,7 @@ export default function RegionManager() {
                           type="button"
                           disabled={currentPage === totalPages}
                           onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 rounded text-[10px] font-extrabold text-slate-500 disabled:opacity-40 transition-all select-none"
+                          className="px-2.5 py-1 bg-theme-surface hover:bg-theme-surface border border-theme-border rounded text-[10px] font-extrabold text-theme-text-dim disabled:opacity-40 transition-all select-none"
                         >
                           Next
                         </button>

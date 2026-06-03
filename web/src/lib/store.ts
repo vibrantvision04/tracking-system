@@ -3,7 +3,7 @@ import { api } from "./api";
 import type { Vehicle, GpsDevice, VehicleType } from "./types";
 
 // Central Feature Toggle: Set this to true to enable, or false to disable all fuel-related menus, options, and fields in the program.
-export const ENABLE_FUEL_FEATURES = false;
+export const ENABLE_FUEL_FEATURES = true;
 
 interface AppState {
   vehicles: Vehicle[];
@@ -24,6 +24,7 @@ interface AppState {
   updateDevice: (device: GpsDevice) => void;
   removeDevice: (id: number) => void;
   addType: (type: VehicleType) => void;
+  removeType: (id: number) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -105,6 +106,11 @@ export const useStore = create<AppState>((set, get) => ({
   addType: (type) => {
     set((state) => ({
       types: [...state.types, type]
+    }));
+  },
+  removeType: (id) => {
+    set((state) => ({
+      types: state.types.filter((t) => t.id !== id)
     }));
   }
 }));

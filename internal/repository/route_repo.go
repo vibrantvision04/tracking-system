@@ -169,7 +169,8 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 		FROM vehicle_route_assignments va
 		JOIN routes r ON va.route_id = r.id
 		JOIN vehicles v ON va.vehicle_id = v.id
-		LEFT JOIN regions w ON r.ward_id = w.id
+		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
+		LEFT JOIN regions w ON rw.ward_id = w.id
 		LEFT JOIN regions z ON w.parent_id = z.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id

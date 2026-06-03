@@ -45,8 +45,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		
-		// We'll use the repository to check/create
-		// Since we don't have a direct 'EnsureDevice' method, we'll try to find it first
+		// 1. Fast check in Redis Set to avoid database query
+		registered, err := s.rdb.SIsMember(ctx, "gps:registered_imeis", id).Result()
+		if err == nil && registered {
+			return // Already registered and cached, do nothing!
+		}
+
+		// 2. Cache miss: Query DB to check if the device exists
 		devices, err := s.vRepo.GetDevices(ctx)
 		if err == nil {
 			exists := false
@@ -63,6 +68,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 					DeviceType: "Auto-Detected",
 				})
 			}
+			// 3. Store in Redis Set so future handshakes bypass PostgreSQL completely
+			s.rdb.SAdd(ctx, "gps:registered_imeis", id)
 		}
 	}(imei)
 
@@ -182,7 +189,7 @@ func (s *Server) pushBatchToStream(data []decoder.AVLData) {
 
 	err = s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: "gps:stream",
-		MaxLen: 1000, // Reduced from 5000 to save even more shared memory
+		MaxLen: 5000, // Capped at 5000 entries (trimmed with ~ approx matching) to prevent unbounded memory growth
 		Approx: true,
 		Values: map[string]interface{}{
 			"data": jsonData,

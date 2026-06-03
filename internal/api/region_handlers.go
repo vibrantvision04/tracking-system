@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -256,6 +257,7 @@ func (h *Handler) CreateRegion(w http.ResponseWriter, r *http.Request) {
 		ParentID            *int            `json:"parent_id"`
 		GeoJSON             json.RawMessage `json:"geojson"`
 		Color               string          `json:"color"`
+		SubRegionIDs        []int           `json:"sub_region_ids"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -278,6 +280,18 @@ func (h *Handler) CreateRegion(w http.ResponseWriter, r *http.Request) {
 	if len(req.GeoJSON) > 0 && string(req.GeoJSON) != "null" && string(req.GeoJSON) != "" {
 		var gID int
 		geofenceColor := req.Color
+		if req.RegionTypeID == 3 && req.ParentID != nil {
+			var parentColor string
+			err := db.QueryRow(ctx, `
+				SELECT COALESCE(g.color, '#fba339') 
+				FROM regions r
+				LEFT JOIN geofences g ON r.geofence_id = g.id
+				WHERE r.id = $1
+			`, *req.ParentID).Scan(&parentColor)
+			if err == nil {
+				geofenceColor = parentColor
+			}
+		}
 		if geofenceColor == "" {
 			geofenceColor = "#fba339"
 		}
@@ -311,6 +325,37 @@ func (h *Handler) CreateRegion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update sub-regions parent relation if region_type_id = 2 (Zone)
+	if req.RegionTypeID == 2 && len(req.SubRegionIDs) > 0 {
+		_, err = db.Exec(ctx, `
+			UPDATE regions SET parent_id = $1 WHERE id = ANY($2) AND region_type_id = 3
+		`, regionID, req.SubRegionIDs)
+		if err != nil {
+			log.Printf("Warning: failed to associate sub-regions on create: %v", err)
+		}
+
+		// Update the geofence colors of the newly linked Wards to match the Zone's color
+		var geofenceColor string
+		if len(req.GeoJSON) > 0 && string(req.GeoJSON) != "null" && string(req.GeoJSON) != "" {
+			geofenceColor = req.Color
+		}
+		if geofenceColor == "" {
+			geofenceColor = "#fba339"
+		}
+		_, err = db.Exec(ctx, `
+			UPDATE geofences 
+			SET color = $1 
+			WHERE id IN (
+				SELECT geofence_id 
+				FROM regions 
+				WHERE id = ANY($2) AND region_type_id = 3 AND geofence_id IS NOT NULL
+			)
+		`, geofenceColor, req.SubRegionIDs)
+		if err != nil {
+			log.Printf("Warning: failed to update sub-regions colors on create: %v", err)
+		}
+	}
+
 	sendJSON(w, http.StatusCreated, map[string]interface{}{
 		"success": true,
 		"id":      regionID,
@@ -336,6 +381,7 @@ func (h *Handler) UpdateRegion(w http.ResponseWriter, r *http.Request) {
 		ParentID            *int            `json:"parent_id"`
 		GeoJSON             json.RawMessage `json:"geojson"`
 		Color               string          `json:"color"`
+		SubRegionIDs        []int           `json:"sub_region_ids"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -367,6 +413,18 @@ func (h *Handler) UpdateRegion(w http.ResponseWriter, r *http.Request) {
 	hasNewGeometry := len(req.GeoJSON) > 0 && string(req.GeoJSON) != "null" && string(req.GeoJSON) != ""
 
 	geofenceColor := req.Color
+	if req.RegionTypeID == 3 && req.ParentID != nil {
+		var parentColor string
+		err = db.QueryRow(ctx, `
+			SELECT COALESCE(g.color, '#fba339') 
+			FROM regions r
+			LEFT JOIN geofences g ON r.geofence_id = g.id
+			WHERE r.id = $1
+		`, *req.ParentID).Scan(&parentColor)
+		if err == nil {
+			geofenceColor = parentColor
+		}
+	}
 	if geofenceColor == "" {
 		geofenceColor = "#fba339"
 	}
@@ -419,6 +477,41 @@ func (h *Handler) UpdateRegion(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update region: " + err.Error()})
 		return
+	}
+
+	// Update sub-regions parent relation if region_type_id = 2 (Zone)
+	if req.RegionTypeID == 2 {
+		// First, unlink any Wards that currently point to this Zone ID
+		_, err = db.Exec(ctx, `
+			UPDATE regions SET parent_id = NULL WHERE parent_id = $1 AND region_type_id = 3
+		`, regionID)
+		if err != nil {
+			log.Printf("Warning: failed to clear sub-region associations: %v", err)
+		}
+
+		// Next, link the selected Wards
+		if len(req.SubRegionIDs) > 0 {
+			_, err = db.Exec(ctx, `
+				UPDATE regions SET parent_id = $1 WHERE id = ANY($2) AND region_type_id = 3
+			`, regionID, req.SubRegionIDs)
+			if err != nil {
+				log.Printf("Warning: failed to associate sub-regions on update: %v", err)
+			}
+		}
+
+		// Propagate color update to all Wards that are now connected to this Zone
+		_, err = db.Exec(ctx, `
+			UPDATE geofences 
+			SET color = $1 
+			WHERE id IN (
+				SELECT geofence_id 
+				FROM regions 
+				WHERE parent_id = $2 AND region_type_id = 3 AND geofence_id IS NOT NULL
+			)
+		`, geofenceColor, regionID)
+		if err != nil {
+			log.Printf("Warning: failed to propagate color update to connected Wards: %v", err)
+		}
 	}
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{

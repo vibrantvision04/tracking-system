@@ -24,7 +24,7 @@ func NewServer(cfg *config.Config, rdb *redis.Client, vRepo *repository.VehicleR
 		rdb:       rdb,
 		vRepo:     vRepo,
 		port:      cfg.GPSTCPPort,
-		semaphore: make(chan struct{}, 50), // Limit to 50 concurrent connections
+		semaphore: make(chan struct{}, 10000), // Limit to 10000 concurrent connections
 	}
 }
 

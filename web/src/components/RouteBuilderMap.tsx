@@ -767,7 +767,7 @@ export default function RouteBuilderMap({
 	};
 
 	return (
-		<div className="relative w-full h-full rounded-xl overflow-hidden border border-white/[.05] bg-black/10">
+		<div className="relative w-full h-full rounded-xl overflow-hidden border border-theme-border bg-black/10">
 			<div ref={mapContainerRef} className="w-full h-full min-h-[400px] z-10" />
 
 			{/* Left Top Action Panel */}
@@ -779,8 +779,8 @@ export default function RouteBuilderMap({
 						setIsDrawing(!isDrawing);
 						setActiveOverlay(false);
 					}}
-					className={`p-2 rounded-lg text-white font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs ${
-						isDrawing ? "bg-indigo-600 border border-indigo-400" : "bg-slate-900/80 hover:bg-slate-800 border border-white/[.08]"
+					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs ${
+						isDrawing ? "bg-theme-accent border border-indigo-400" : "bg-theme-surface/80 hover:bg-slate-800 border border-theme-border"
 					}`}
 					title={isDrawing ? "Click on map to draw. Double-click to stop" : "Start drawing route polyline"}
 				>
@@ -810,7 +810,7 @@ export default function RouteBuilderMap({
 								return updated;
 							});
 						}}
-						className="p-2 rounded-lg text-white font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs bg-slate-900/90 hover:bg-slate-800 border border-white/[.08]"
+						className="p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs bg-theme-surface/90 hover:bg-slate-800 border border-theme-border"
 						title="Remove the last placed route point (Undo)"
 					>
 						<span>↩️</span>
@@ -840,7 +840,7 @@ export default function RouteBuilderMap({
 									setShowConfirmClear(false);
 								}
 							}}
-							className={`p-2 rounded-lg text-white font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs border ${
+							className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs border ${
 								showConfirmClear 
 									? "bg-red-600 hover:bg-red-700 border-red-500 animate-pulse" 
 									: "bg-red-950/90 hover:bg-red-900/90 border-red-500/30 hover:border-red-500/50"
@@ -859,7 +859,7 @@ export default function RouteBuilderMap({
 									e.preventDefault();
 									setShowConfirmClear(false);
 								}}
-								className="p-2 rounded-lg text-white font-medium shadow-lg flex items-center transition-colors text-xs bg-slate-900/90 hover:bg-slate-800 border border-white/[.08]"
+								className="p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center transition-colors text-xs bg-theme-surface/90 hover:bg-slate-800 border border-theme-border"
 								title="Cancel clearing"
 							>
 								Cancel
@@ -880,8 +880,8 @@ export default function RouteBuilderMap({
 						setIsDrawing(false);
 					}}
 					disabled={routeCoords.length < 2}
-					className={`p-2 rounded-lg text-white font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs ${
-						activeOverlay ? "bg-blue-600 border border-blue-400" : "bg-slate-900/80 hover:bg-slate-800 border border-white/[.08]"
+					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs ${
+						activeOverlay ? "bg-blue-600 border border-blue-400" : "bg-theme-surface/80 hover:bg-slate-800 border border-theme-border"
 					} ${routeCoords.length < 2 ? "opacity-40 cursor-not-allowed" : ""}`}
 					title={routeCoords.length < 2 ? "Draw route path first to enable lane checkpoints" : "Configure lane checkpoints snapped to route line"}
 				>
@@ -891,41 +891,41 @@ export default function RouteBuilderMap({
 			</div>
 
 			{/* Right Checkbox Layer Overlay */}
-			<div className="absolute top-3 right-3 z-50 bg-slate-950/80 border border-white/[.08] p-3 rounded-lg text-xs text-slate-300 backdrop-blur-md shadow-xl flex flex-col gap-2 min-w-[140px]">
-				<div className="font-semibold text-slate-400 mb-1 tracking-wider uppercase">LAYERS</div>
-				<label className="flex items-center gap-2 cursor-pointer hover:text-white">
+			<div className="absolute top-3 right-3 z-50 bg-theme-surface/80 border border-theme-border p-3 rounded-lg text-xs text-theme-text backdrop-blur-md shadow-xl flex flex-col gap-2 min-w-[140px]">
+				<div className="font-semibold text-theme-text-dim mb-1 tracking-wider uppercase">LAYERS</div>
+				<label className="flex items-center gap-2 cursor-pointer hover:text-theme-text">
 					<input
 						type="checkbox"
 						checked={showRoute}
 						onChange={(e) => setShowRoute(e.target.checked)}
-						className="rounded text-indigo-500 bg-black/40 border-white/[.15] focus:ring-0"
+						className="rounded text-indigo-500 bg-theme-surface border-theme-border focus:ring-0"
 					/>
 					<span>Route</span>
 				</label>
-				<label className="flex items-center gap-2 cursor-pointer hover:text-white">
+				<label className="flex items-center gap-2 cursor-pointer hover:text-theme-text">
 					<input
 						type="checkbox"
 						checked={showStartPoint}
 						onChange={(e) => setShowStartPoint(e.target.checked)}
-						className="rounded text-indigo-500 bg-black/40 border-white/[.15] focus:ring-0"
+						className="rounded text-indigo-500 bg-theme-surface border-theme-border focus:ring-0"
 					/>
 					<span>Start Point</span>
 				</label>
-				<label className="flex items-center gap-2 cursor-pointer hover:text-white">
+				<label className="flex items-center gap-2 cursor-pointer hover:text-theme-text">
 					<input
 						type="checkbox"
 						checked={showEndPoint}
 						onChange={(e) => setShowEndPoint(e.target.checked)}
-						className="rounded text-indigo-500 bg-black/40 border-white/[.15] focus:ring-0"
+						className="rounded text-indigo-500 bg-theme-surface border-theme-border focus:ring-0"
 					/>
 					<span>End Point</span>
 				</label>
-				<label className="flex items-center gap-2 cursor-pointer hover:text-white">
+				<label className="flex items-center gap-2 cursor-pointer hover:text-theme-text">
 					<input
 						type="checkbox"
 						checked={showCollectionPoint}
 						onChange={(e) => setShowCollectionPoint(e.target.checked)}
-						className="rounded text-indigo-500 bg-black/40 border-white/[.15] focus:ring-0"
+						className="rounded text-indigo-500 bg-theme-surface border-theme-border focus:ring-0"
 					/>
 					<span>Collection Point</span>
 				</label>
@@ -933,8 +933,8 @@ export default function RouteBuilderMap({
 
 			{/* Custom Instruction Bar at bottom */}
 			{(isDrawing || activeOverlay) && (
-				<div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 bg-slate-950/90 border border-indigo-500/20 px-4 py-2 rounded-full text-xs text-white font-medium shadow-2xl backdrop-blur-md flex items-center gap-3">
-					<div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+				<div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 bg-theme-surface/90 border border-theme-border px-4 py-2 rounded-full text-xs text-theme-text font-medium shadow-2xl backdrop-blur-md flex items-center gap-3">
+					<div className="w-2 h-2 rounded-full bg-theme-surface-hover0 animate-ping" />
 					<span>
 						{isDrawing
 							? "DRAW MODE: Click on the map to add route coordinates."
@@ -946,7 +946,7 @@ export default function RouteBuilderMap({
 							setIsDrawing(false);
 							setActiveOverlay(false);
 						}}
-						className="px-2 py-0.5 bg-white/10 hover:bg-white/20 rounded font-bold transition-colors"
+						className="px-2 py-0.5 bg-theme-surface/10 hover:bg-theme-surface/20 rounded font-bold transition-colors"
 					>
 						Done
 					</button>
@@ -956,70 +956,70 @@ export default function RouteBuilderMap({
 			{/* Full Screen / Large Lane Modal Prompt */}
 			{showLaneForm && (
 				<div className="absolute inset-0 bg-black/75 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-					<div className="bg-slate-900 border border-white/[.08] rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden">
+					<div className="bg-theme-surface border border-theme-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden">
 						<div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600" />
-						<h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+						<h3 className="text-base font-bold text-theme-text mb-4 flex items-center gap-2">
 							<span>🛣️</span> Add Lane Info
 						</h3>
 
 						<div className="space-y-4">
 							<div>
-								<label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+								<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
 									Lane Order
 								</label>
 								<input
 									type="number"
 									value={laneForm.laneOrder}
 									onChange={(e) => setLaneForm({ ...laneForm, laneOrder: parseInt(e.target.value) || 1 })}
-									className="w-full px-3 py-2 bg-black/40 border border-white/[.08] rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500/40"
+									className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
 								/>
 							</div>
 
 							<div>
-								<label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+								<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
 									Total Distance (meters)
 								</label>
 								<input
 									type="number"
 									value={laneForm.totalDistance}
 									onChange={(e) => setLaneForm({ ...laneForm, totalDistance: parseFloat(e.target.value) || 0 })}
-									className="w-full px-3 py-2 bg-black/40 border border-white/[.08] rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500/40"
+									className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
 								/>
 							</div>
 
 							<div className="grid grid-cols-2 gap-3">
 								<div>
-									<label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+									<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
 										Households
 									</label>
 									<input
 										type="number"
 										value={laneForm.noOfHouseholds}
 										onChange={(e) => setLaneForm({ ...laneForm, noOfHouseholds: parseInt(e.target.value) || 0 })}
-										className="w-full px-3 py-2 bg-black/40 border border-white/[.08] rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500/40"
+										className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
 									/>
 								</div>
 								<div>
-									<label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+									<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
 										Commercials
 									</label>
 									<input
 										type="number"
 										value={laneForm.noOfCommercials}
 										onChange={(e) => setLaneForm({ ...laneForm, noOfCommercials: parseInt(e.target.value) || 0 })}
-										className="w-full px-3 py-2 bg-black/40 border border-white/[.08] rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500/40"
+										className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
 									/>
 								</div>
 							</div>
 
 							<div>
-								<label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+								<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
 									Double Lane
 								</label>
 								<select
 									value={laneForm.doubleLane}
 									onChange={(e) => setLaneForm({ ...laneForm, doubleLane: e.target.value })}
-									className="w-full px-3 py-2 bg-black/40 border border-white/[.08] rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500/40"
+									className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
 								>
 									<option value="No">No</option>
 									<option value="Yes">Yes</option>
@@ -1031,14 +1031,14 @@ export default function RouteBuilderMap({
 							<button
 								type="button"
 								onClick={cancelLaneInfo}
-								className="px-4 py-2 bg-white/[.06] hover:bg-white/[.1] rounded-lg text-xs font-medium text-slate-300 transition-colors"
+								className="px-4 py-2 bg-theme-surface/[.06] hover:bg-theme-surface rounded-lg text-xs font-medium text-theme-text transition-colors"
 							>
 								Cancel
 							</button>
 							<button
 								type="button"
 								onClick={saveLaneInfo}
-								className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-xs font-medium text-white shadow-lg transition-colors"
+								className="px-4 py-2 bg-theme-accent text-white shadow-lg transition-colors"
 							>
 								Save Lane
 							</button>

@@ -1,0 +1,10 @@
+-- Up
+CREATE TABLE IF NOT EXISTS workshops (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(100),
+    address TEXT,
+    geofence_id INT REFERENCES geofences(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

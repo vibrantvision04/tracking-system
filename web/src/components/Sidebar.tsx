@@ -61,6 +61,7 @@ const navData = [
       { label: "Route Type", href: "/iswm/route-type" },
       { label: "Shift", href: "/iswm/shift" },
       { label: "Collection Type", href: "/iswm/vehicle-purpose" },
+      { label: "Reason", href: "/iswm/reason" },
       {
         label: "Assignments",
         children: [
@@ -131,7 +132,7 @@ const navData = [
     label: "Monitor",
     icon: "📺",
     children: [
-      { label: "Vehicle Location", href: "/" },
+      { label: "Vehicle Location", href: "/iswm/vehicle-location" },
       { label: "Employee Location", href: "/iswm/employee-location" },
       { label: "D2D", href: "/iswm/d2d" },
       { label: "Alert Manager", href: "/iswm/alert-manager" },
@@ -284,33 +285,33 @@ export default function Sidebar() {
       {/* Overlay for mobile with glass effect */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[1001] lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-theme-surface backdrop-blur-sm z-[1001] lg:hidden transition-opacity duration-300"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Main Sidebar - Premium dark aesthetic */}
       <aside className={`
-        fixed inset-y-0 left-0 z-[1002] flex flex-col bg-[#0b0f1a] border-r border-white/[.03]
+        fixed inset-y-0 left-0 z-[1002] flex flex-col bg-theme-surface border-r border-theme-border
         transition-all duration-300 ease-in-out lg:relative lg:translate-x-0
         ${sidebarCollapsed ? "w-[64px]" : "w-[160px]"}
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
       `}>
         {/* Brand with subtle glow */}
-        <div className={`flex items-center justify-between px-4 py-4 border-b border-white/[.03] ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
+        <div className={`flex items-center justify-between px-4 py-4 border-b border-theme-border ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-[11px] shadow-lg shadow-indigo-500/30 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 text-white font-bold text-[11px] shadow-lg shadow-emerald-600/20 shrink-0">
               IS
             </div>
             <div className={`transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
-              <div className="text-[11px] font-bold text-white tracking-tight leading-none mb-0.5 whitespace-nowrap">ISWM Jaipur</div>
-              <div className="text-[7px] text-slate-500 uppercase tracking-[.15em] whitespace-nowrap">Heritage</div>
+              <div className="text-[11px] font-bold text-theme-text tracking-tight leading-none mb-0.5 whitespace-nowrap">ISWM Jaipur</div>
+              <div className="text-[7px] text-theme-text-dim uppercase tracking-[.15em] whitespace-nowrap">Heritage</div>
             </div>
           </div>
           {!sidebarCollapsed && (
             <button 
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-slate-500 hover:text-white transition-colors animate-fade-in"
+              className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors animate-fade-in"
             >
               ✕
             </button>
@@ -318,7 +319,7 @@ export default function Sidebar() {
           {sidebarCollapsed && (
             <button 
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-slate-500 hover:text-white transition-colors"
+              className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors"
             >
               ✕
             </button>
@@ -345,8 +346,8 @@ export default function Sidebar() {
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isCurrentPath
-                        ? "bg-gradient-to-r from-indigo-500/[.15] to-transparent text-indigo-400 font-medium"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-white/[.02]"
+                        ? "bg-gradient-to-r from-emerald-500/[.15] to-transparent text-theme-accent font-medium"
+                        : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
                       }`}
                   >
                     <span className="w-4 flex justify-center text-[13px] group-hover:scale-110 transition-transform shrink-0">{category.icon}</span>
@@ -358,8 +359,8 @@ export default function Sidebar() {
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg transition-all duration-200 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isActive 
-                        ? "bg-gradient-to-r from-indigo-500/[.15] to-transparent text-indigo-400 font-medium" 
-                        : "text-slate-400 hover:text-slate-200 hover:bg-white/[.02]"
+                        ? "bg-gradient-to-r from-emerald-500/[.15] to-transparent text-theme-accent font-medium" 
+                        : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
                       }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -367,10 +368,10 @@ export default function Sidebar() {
                       <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                     </div>
                     {hasChildren && !sidebarCollapsed && (
-                      <span className={`text-[7px] transition-transform duration-200 lg:block hidden ${isActive ? "rotate-90 text-indigo-400" : "text-slate-600"}`}>▶</span>
+                      <span className={`text-[7px] transition-transform duration-200 lg:block hidden ${isActive ? "rotate-90 text-theme-accent" : "text-theme-text-dim"}`}>▶</span>
                     )}
                     {hasChildren && sidebarCollapsed && (
-                      <span className={`text-[7px] transition-transform duration-200 lg:hidden block ${isActive ? "rotate-90 text-indigo-400" : "text-slate-600"}`}>▶</span>
+                      <span className={`text-[7px] transition-transform duration-200 lg:hidden block ${isActive ? "rotate-90 text-theme-accent" : "text-theme-text-dim"}`}>▶</span>
                     )}
                   </button>
                 )}
@@ -380,25 +381,25 @@ export default function Sidebar() {
         </nav>
 
         {/* Toggle Collapse Button */}
-        <div className="hidden lg:flex px-3 py-1.5 border-t border-white/[.03] items-center justify-center">
+        <div className="hidden lg:flex px-3 py-1.5 border-t border-theme-border items-center justify-center">
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="w-full py-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/[.03] transition-all flex items-center justify-center text-[10px] font-bold gap-1.5"
+            className="w-full py-1.5 rounded-md text-theme-text-dim hover:text-theme-text hover:bg-theme-surface transition-all flex items-center justify-center text-[10px] font-bold gap-1.5"
             title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             <span>{sidebarCollapsed ? "▶" : "◀"}</span>
-            {!sidebarCollapsed && <span className="uppercase tracking-wider text-[8px] text-slate-400">Collapse</span>}
+            {!sidebarCollapsed && <span className="uppercase tracking-wider text-[8px] text-theme-text-dim">Collapse</span>}
           </button>
         </div>
 
         {/* Footer */}
-        <div className={`px-3 py-3 border-t border-white/[.03] flex items-center gap-2 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+        <div className={`px-3 py-3 border-t border-theme-border flex items-center gap-2 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
+          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-emerald-500 text-white text-[10px] font-bold shrink-0">
             AD
           </div>
           <div className={`min-w-0 transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
-            <div className="text-[11px] font-semibold text-slate-200 truncate whitespace-nowrap">Admin</div>
-            <div className="text-[8px] text-slate-600 truncate whitespace-nowrap">Master Admin</div>
+            <div className="text-[11px] font-semibold text-theme-text truncate whitespace-nowrap">Admin</div>
+            <div className="text-[8px] text-theme-text-dim truncate whitespace-nowrap">Master Admin</div>
           </div>
         </div>
       </aside>
@@ -406,7 +407,7 @@ export default function Sidebar() {
       {/* Flyout Mega Menu - Glassmorphism & Slide-in Animation */}
       <div 
         ref={flyoutRef}
-        className={`fixed inset-y-0 z-[1003] bg-[#0b0f1a]/95 backdrop-blur-xl border-r border-white/[.03] shadow-2xl shadow-black/70 flex flex-col
+        className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
           transition-all duration-300 ease-out
           ${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
           ${activeCategory 
@@ -419,14 +420,14 @@ export default function Sidebar() {
         {currentCategoryData && (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-4 border-b border-white/[.03]">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-theme-border">
               <div className="flex items-center gap-2">
-                <span className="text-indigo-400 font-bold text-xs">{currentCategoryData.label}</span>
-                <span className="text-slate-600 text-[10px] uppercase tracking-wider">Options</span>
+                <span className="text-theme-accent font-bold text-xs">{currentCategoryData.label}</span>
+                <span className="text-theme-text-dim text-[10px] uppercase tracking-wider">Options</span>
               </div>
               <button 
                 onClick={() => setActiveCategory(null)}
-                className="text-slate-600 hover:text-white transition-colors"
+                className="text-theme-text-dim hover:text-theme-text transition-colors"
               >
                 ✕
               </button>
@@ -435,7 +436,7 @@ export default function Sidebar() {
             {/* Content - Grid of Columns */}
             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
               <div className={`grid ${(activeCategory || renderedCategory) === "Reports" ? "grid-cols-3" : "grid-cols-2"} gap-x-6 gap-y-6`}>
-                {currentCategoryData.children?.map((sub) => {
+                {currentCategoryData.children?.map((sub: any) => {
                   const hasSubChildren = sub.children && sub.children.length > 0;
 
                   return (
@@ -448,12 +449,12 @@ export default function Sidebar() {
                             setSidebarOpen(false);
                             setActiveCategory(null);
                           }}
-                          className="text-[11px] font-medium text-white hover:text-indigo-400 transition-colors block"
+                          className="text-[11px] font-medium text-theme-text hover:text-theme-accent transition-colors block"
                         >
                           {sub.label}
                         </Link>
                       ) : (
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+                        <div className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-0.5">
                           {sub.label}
                         </div>
                       )}
@@ -461,7 +462,7 @@ export default function Sidebar() {
                       {/* Level 3 Links */}
                       {hasSubChildren && (
                         <div className="space-y-0.5 flex flex-col">
-                          {sub.children!.map((item) => (
+                          {sub.children!.map((item: any) => (
                             <Link
                               key={item.label}
                               href={item.href}
@@ -472,8 +473,8 @@ export default function Sidebar() {
                               }}
                               className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
                                 ${path === item.href
-                                  ? "text-indigo-400 font-medium"
-                                  : "text-slate-400 hover:text-slate-200"
+                                  ? "text-theme-accent font-medium"
+                                  : "text-theme-text-dim hover:text-theme-text"
                                 }`}
                             >
                               {item.label}

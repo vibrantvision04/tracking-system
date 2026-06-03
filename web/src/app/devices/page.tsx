@@ -1,36 +1,62 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { api, post, put, del } from "@/lib/api";
 import { useStore } from "@/lib/store";
 
+import PageHeader from "@/components/shared/PageHeader";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
+import Button from "@/components/ui/Button";
+import DeleteButton from "@/components/ui/DeleteButton";
+import Table from "@/components/shared/Table";
+
 export default function DevicesPage() {
-  const { devices, vehicles, loaded, loadAll, updateDevice, removeDevice, addOrUpdateVehicle } = useStore();
+  const { devices, vehicles, loaded, loadAll, updateDevice, removeDevice } = useStore();
   const [imei, setImei] = useState("");
   const [serial, setSerial] = useState("");
   const [sim, setSim] = useState("");
   const [mapDev, setMapDev] = useState("");
   const [mapVeh, setMapVeh] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     if (!loaded) loadAll();
   }, [loaded, loadAll]);
 
-  const addDevice = async () => {
-    if (!imei) return;
-    const res = await post<{ data: any }>("/api/devices", { imei, serial_no: serial, sim_no: sim });
-    if (res.data) updateDevice(res.data);
-    setImei(""); setSerial(""); setSim("");
+  const addDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imei.trim()) return;
+    setAdding(true);
+    try {
+      const res = await post<{ data: any }>("/api/devices", { imei, serial_no: serial, sim_no: sim });
+      if (res.data) updateDevice(res.data);
+      setImei(""); 
+      setSerial(""); 
+      setSim("");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAdding(false);
+    }
   };
 
-  const assign = async () => {
+  const assign = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!mapDev || !mapVeh) return;
+    setAssigning(true);
     try {
       await post("/api/map-device", { gps_device_id: Number(mapDev), vehicle_id: Number(mapVeh) });
-      setMapDev(""); setMapVeh("");
+      setMapDev(""); 
+      setMapVeh("");
       // Assignment is complex, so we re-fetch to ensure mapping is correct
       loadAll(true);
     } catch (e: any) {
       alert("Error: " + e.message + "\nMake sure the device or vehicle is not already assigned.");
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -40,99 +66,210 @@ export default function DevicesPage() {
     if (dev) updateDevice({ ...dev, is_active: !currentStatus });
   };
 
-  const unmapDevice = async (id: number) => {
-    if (!confirm("Are you sure you want to unassign this device from the vehicle?")) return;
+  const unmapDevice = async (id: number, devImei: string) => {
+    if (!confirm(`Are you sure you want to unassign device ${devImei} from the vehicle?`)) return;
     await post(`/api/unmap-device/${id}`, {});
     loadAll(true);
   };
 
   const deleteDevice = async (id: number) => {
-    if (!confirm("Are you sure you want to completely delete this GPS device? This will also unassign it if it's assigned to a vehicle.")) return;
     await del(`/api/devices/${id}`);
     removeDevice(id);
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[var(--bg-dark)]">
-      <h1 className="text-lg font-bold mb-6 tracking-tight">📡 GPS Devices</h1>
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-6 lg:p-8">
+      
+      <PageHeader
+        title="GPS Devices Management"
+        description="Monitor, register, and link hardware GPS devices with active municipal fleet vehicles."
+        breadcrumbs={[
+          { label: "Fleet", href: "/vehicles" },
+          { label: "GPS Devices" }
+        ]}
+      />
 
-      {/* Register */}
-      <section className="bg-[var(--bg-card)] border border-white/[.05] rounded-xl p-5 mb-5">
-        <h2 className="text-sm font-semibold mb-3 text-slate-300">Register Device</h2>
-        <div className="flex gap-3 flex-wrap">
-          <input placeholder="IMEI (15 digits)" value={imei} onChange={(e) => setImei(e.target.value)}
-            className="px-3 py-2 bg-black/20 border border-white/5 rounded-lg text-[13px] text-white focus:outline-none focus:border-indigo-500/40 w-52" />
-          <input placeholder="Serial No" value={serial} onChange={(e) => setSerial(e.target.value)}
-            className="px-3 py-2 bg-black/20 border border-white/5 rounded-lg text-[13px] text-white focus:outline-none focus:border-indigo-500/40 w-44" />
-          <input placeholder="SIM No" value={sim} onChange={(e) => setSim(e.target.value)}
-            className="px-3 py-2 bg-black/20 border border-white/5 rounded-lg text-[13px] text-white focus:outline-none focus:border-indigo-500/40 w-44" />
-          <button onClick={addDevice} className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-[13px] font-medium transition-colors">+ Add</button>
+      {/* Main content body */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8">
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          {/* Register Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Register Device</CardTitle>
+              <CardDescription>Configure a new tracking unit. Devices also auto-register when reporting telemetry.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={addDevice} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Input
+                    label="IMEI Number"
+                    placeholder="15 digits"
+                    value={imei}
+                    onChange={(e) => setImei(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="Serial Number"
+                    placeholder="Serial No"
+                    value={serial}
+                    onChange={(e) => setSerial(e.target.value)}
+                  />
+                  <Input
+                    label="SIM Number"
+                    placeholder="SIM No"
+                    value={sim}
+                    onChange={(e) => setSim(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    type="submit"
+                    variant="accent"
+                    loading={adding}
+                    loadingText="Adding..."
+                  >
+                    + Add Device
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Assign Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Assign Device → Vehicle</CardTitle>
+              <CardDescription>Create a hardware mapping. This links live coordinates directly to the vehicle dashboard.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={assign} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Select
+                    label="Select Device"
+                    value={mapDev}
+                    onChange={(e) => setMapDev(e.target.value)}
+                    options={[
+                      { value: "", label: "Select device…" },
+                      ...devices.map((d) => ({
+                        value: d.id,
+                        label: `${d.imei} ${d.vehicle ? `(Assigned: ${d.vehicle.registration_no})` : '(Available)'}`
+                      }))
+                    ]}
+                  />
+                  <Select
+                    label="Select Vehicle"
+                    value={mapVeh}
+                    onChange={(e) => setMapVeh(e.target.value)}
+                    options={[
+                      { value: "", label: "Select vehicle…" },
+                      ...vehicles.map((v) => ({
+                        value: v.id,
+                        label: `${v.registration_no} ${v.gps_device ? `(Assigned)` : '(Available)'}`
+                      }))
+                    ]}
+                  />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    loading={assigning}
+                    loadingText="Assigning..."
+                  >
+                    🔗 Link Device
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
         </div>
-      </section>
 
-      {/* Assign */}
-      <section className="bg-[var(--bg-card)] border border-white/[.05] rounded-xl p-5 mb-5">
-        <h2 className="text-sm font-semibold mb-3 text-slate-300">Assign Device → Vehicle</h2>
-        <div className="flex gap-3 flex-wrap items-end">
-          <div>
-            <label className="block text-[11px] text-slate-500 uppercase tracking-wider mb-1">Device</label>
-            <select value={mapDev} onChange={(e) => setMapDev(e.target.value)} className="px-3 py-2 bg-[#1e293b] border border-white/5 rounded-lg text-[13px] text-white focus:outline-none w-64">
-              <option value="">Select…</option>
-              {devices.map((d) => <option key={d.id} value={d.id}>{d.imei}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[11px] text-slate-500 uppercase tracking-wider mb-1">Vehicle</label>
-            <select value={mapVeh} onChange={(e) => setMapVeh(e.target.value)} className="px-3 py-2 bg-[#1e293b] border border-white/5 rounded-lg text-[13px] text-white focus:outline-none w-64">
-              <option value="">Select…</option>
-              {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registration_no}</option>)}
-            </select>
-          </div>
-          <button onClick={assign} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[13px] font-medium transition-colors">Assign</button>
-        </div>
-      </section>
+        {/* Devices Table Card */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between py-4">
+            <div>
+              <CardTitle>Hardware Registry</CardTitle>
+              <CardDescription>Live tracking devices connected to the TCP telemetry parser server.</CardDescription>
+            </div>
+            <span className="text-[10px] px-2.5 py-1 bg-theme-base text-theme-accent rounded-full border border-theme-border font-bold">
+              {devices.length} Total Units
+            </span>
+          </CardHeader>
+          
+          <CardContent className="p-0">
+            <Table
+              headers={[
+                "IMEI",
+                "Serial",
+                "SIM",
+                "Type",
+                "Assigned Vehicle",
+                "Status",
+                <div key="act" className="text-right pr-4">Actions</div>
+              ]}
+              emptyState={
+                <div className="flex flex-col items-center justify-center gap-1.5 py-6">
+                  <span className="text-xl">📡</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider">No GPS devices registered</span>
+                  <span className="text-[10px] text-theme-text-dim/80">They automatically register when connecting to the TCP server, or can be added manually.</span>
+                </div>
+              }
+            >
+              {devices.map((d, idx) => (
+                <tr key={`${d.id}-${idx}`} className="hover:bg-theme-base/40 border-b border-theme-border transition-colors">
+                  <td className="py-3.5 px-5 font-mono text-indigo-500 font-semibold text-xs tracking-tight">{d.imei}</td>
+                  <td className="py-3.5 px-5 text-theme-text-dim text-xs font-medium">{d.serial_no || "—"}</td>
+                  <td className="py-3.5 px-5 text-theme-text-dim text-xs font-medium">{d.sim_no || "—"}</td>
+                  <td className="py-3.5 px-5 text-theme-text font-medium text-xs">{d.device_type || "Teltonika"}</td>
+                  <td className="py-3.5 px-5">
+                    {d.vehicle ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
+                        {d.vehicle.registration_no}
+                      </span>
+                    ) : (
+                      <span className="text-theme-text-dim text-xs italic">Unassigned</span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-5">
+                    <button
+                      onClick={() => toggleStatus(d.id, d.is_active)}
+                      className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition hover:scale-105 active:scale-95 ${
+                        d.is_active 
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                          : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                      }`}
+                      title="Click to toggle status"
+                    >
+                      {d.is_active ? "Active" : "Inactive"}
+                    </button>
+                  </td>
+                  <td className="py-3.5 px-5 text-right">
+                    <div className="flex justify-end gap-2">
+                      {d.vehicle && (
+                        <Button
+                          onClick={() => unmapDevice(d.id, d.imei)}
+                          variant="outline"
+                          className="px-2.5 py-1 text-[10px] font-semibold h-[28px]"
+                        >
+                          Unassign
+                        </Button>
+                      )}
+                      <DeleteButton
+                        onDelete={() => deleteDevice(d.id)}
+                        confirmMessage={`Are you sure you want to completely delete GPS device "${d.imei}"? This will also unassign it if it's assigned to a vehicle.`}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </CardContent>
+        </Card>
 
-      {/* Table */}
-      <div className="bg-[var(--bg-card)] border border-white/[.05] rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-white/[.06] text-slate-500 text-[11px] uppercase tracking-wider">
-              <th className="text-left px-4 py-3">IMEI</th>
-              <th className="text-left px-4 py-3">Serial</th>
-              <th className="text-left px-4 py-3">SIM</th>
-              <th className="text-left px-4 py-3">Type</th>
-              <th className="text-left px-4 py-3">Assigned Vehicle</th>
-              <th className="text-left px-4 py-3">Status</th>
-              <th className="text-right px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {devices.map((d) => (
-              <tr key={d.id} className="border-b border-white/[.04] hover:bg-white/[.015] transition">
-                <td className="px-4 py-3 font-mono text-indigo-300 text-xs">{d.imei}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs">{d.serial_no || "—"}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs">{d.sim_no || "—"}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs">{d.device_type || "Teltonika"}</td>
-                <td className="px-4 py-3">{d.vehicle ? <span className="text-green-400 font-semibold text-xs">{d.vehicle.registration_no}</span> : <span className="text-slate-600 text-xs">Unassigned</span>}</td>
-                <td className="px-4 py-3 cursor-pointer" onClick={() => toggleStatus(d.id, d.is_active)}>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold transition hover:opacity-80 ${d.is_active ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
-                    {d.is_active ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
-                    {d.vehicle && <button onClick={() => unmapDevice(d.id)} className="text-[11px] text-orange-400 hover:text-orange-300 transition px-2 py-1 bg-orange-500/10 hover:bg-orange-500/20 rounded">Unassign</button>}
-                    <button onClick={() => deleteDevice(d.id)} className="text-[11px] text-red-400 hover:text-red-300 transition px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded">Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {devices.length === 0 && <tr><td colSpan={7} className="text-center py-10 text-slate-600 text-sm">No GPS devices registered. They auto-register when connecting to the TCP server.</td></tr>}
-          </tbody>
-        </table>
       </div>
-
-
     </div>
   );
 }

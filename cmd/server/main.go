@@ -64,8 +64,8 @@ func main() {
 	routeEngine := service.NewRouteEngine(routeRepo, vRepo)
 
 	// 7. Initialize Ingestion Pipeline
-	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond)
-	dispatcher := worker.NewDispatcher(rdb, tService, routeEngine)
+	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond, cfg.BatchBufferCeiling)
+	dispatcher := worker.NewDispatcher(rdb, tService, routeEngine, gpsRepo)
 	pipeline := worker.NewPipeline(cfg, rdb, locCache, dispatcher)
 	pipeline.Start()
 

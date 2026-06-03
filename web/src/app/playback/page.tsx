@@ -25,6 +25,20 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+function findClosestCoordinateIndex(lat: number, lng: number, coords: [number, number][]): number {
+  if (coords.length === 0) return 0;
+  let minDistance = Infinity;
+  let closestIndex = 0;
+  for (let i = 0; i < coords.length; i++) {
+    const dist = haversineDistance(lat, lng, coords[i][0], coords[i][1]);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestIndex = i;
+    }
+  }
+  return closestIndex;
+}
+
 function distanceToSegment(pLat: number, pLng: number, aLat: number, aLng: number, bLat: number, bLng: number): number {
   if (aLat === bLat && aLng === bLng) {
     return haversineDistance(pLat, pLng, aLat, aLng) * 1000;
@@ -61,7 +75,6 @@ function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
 
     if (timeDiffHrs > 0) {
       const speedKmh = distKm / timeDiffHrs;
-      // If speed is > 120km/h and distance is > 0.05km, it's likely a GPS jump
       if (speedKmh > 120 && distKm > 0.05) {
         continue; // Skip outlier
       }
@@ -71,7 +84,7 @@ function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
 
   // 2. Moving Average Smoothing (Window size = 5)
   const smoothed: GpsDataPoint[] = [];
-  const windowSize = 2; // 2 before, 2 after = 5 total
+  const windowSize = 2;
   for (let i = 0; i < filtered.length; i++) {
     const start = Math.max(0, i - windowSize);
     const end = Math.min(filtered.length - 1, i + windowSize);
@@ -103,7 +116,6 @@ function downsampleForOsrm(points: GpsDataPoint[]): GpsDataPoint[] {
     const prev = result[result.length - 1];
     const curr = points[i];
     const dist = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng) * 1000;
-    // Keep points if they are > 30 meters apart to drastically reduce payload
     if (dist > 30) {
       result.push(curr);
     }
@@ -116,7 +128,7 @@ function downsampleForOsrm(points: GpsDataPoint[]): GpsDataPoint[] {
 
 async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, number][]> {
   const downsampled = downsampleForOsrm(points);
-  const CHUNK_SIZE = 90; // OSRM has a limit of 100 coordinates
+  const CHUNK_SIZE = 90;
   const fetchPromises: Promise<[number, number][]>[] = [];
 
   for (let i = 0; i < downsampled.length; i += CHUNK_SIZE) {
@@ -141,7 +153,6 @@ async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, nu
         data.matchings.forEach((m: any) => {
           if (m.geometry && m.geometry.coordinates) {
             m.geometry.coordinates.forEach((coord: [number, number]) => {
-              // OSRM returns [lng, lat], Leaflet wants [lat, lng]
               matchedCoords.push([coord[1], coord[0]]);
             });
           }
@@ -153,7 +164,6 @@ async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, nu
     })
     .catch(err => {
       console.error("OSRM Match failed:", err);
-      // Fallback
       return chunk.map(p => [p.lat, p.lng] as [number, number]);
     });
 
@@ -168,8 +178,8 @@ async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, nu
 
 function detectStoppages(points: GpsDataPoint[]): StoppagePoint[] {
   const stoppages: StoppagePoint[] = [];
-  const minStoppageDuration = 60; // 60 seconds
-  const maxStoppageRadiusKm = 0.03; // 30 meters
+  const minStoppageDuration = 60;
+  const maxStoppageRadiusKm = 0.03;
 
   let startIndex = -1;
 
@@ -277,9 +287,18 @@ function getPopupContent(p: GpsDataPoint) {
 
 export default function PlaybackPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [imei, setImei] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [routeId, setRouteId] = useState("");
+  const [zones, setZones] = useState<any[]>([]);
+  const [regionsList, setRegionsList] = useState<any[]>([]);
+
+  // Filtering States
+  const [selectedZoneId, setSelectedZoneId] = useState<string>("");
+  const [selectedWardId, setSelectedWardId] = useState<string>("");
+  const [selectedShift, setSelectedShift] = useState<string>("Morning");
+  const [selectedImei, setSelectedImei] = useState<string>("");
+  const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(4);
+
+  // Playback States
   const [points, setPoints] = useState<GpsDataPoint[]>([]);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -293,7 +312,13 @@ export default function PlaybackPage() {
   const stoppageMarkersRef = useRef<any[]>([]);
   const checkpointMarkersRef = useRef<any[]>([]);
   const assignedRouteLayerRef = useRef<any>(null);
+  const boundaryLayerRef = useRef<any>(null); // For selected zone/ward boundaries
   const intervalRef = useRef<any>(null);
+
+  const matchedCoordsRef = useRef<[number, number][]>([]);
+  const activeLineRef = useRef<any>(null);
+  const startMarkerRef = useRef<any>(null);
+  const endMarkerRef = useRef<any>(null);
 
   const jumpToKeyframe = useCallback((index: number) => {
     setPlaying(false);
@@ -323,26 +348,42 @@ export default function PlaybackPage() {
     };
   }, [jumpToKeyframe]);
 
+  // Load Initial Metadata
   useEffect(() => {
     api<{ data: Vehicle[] }>("/api/vehicles").then((r) => setVehicles(r.data || [])).catch(() => { });
+    api<{ data: any[] }>("/api/zones").then((res) => setZones(res.data || [])).catch(() => {});
+    api<{ success: boolean; data: any[] }>("/api/regions").then((res) => {
+      if (res.success) setRegionsList(res.data || []);
+    }).catch(() => {});
 
-    // Auto-load from URL parameters if present
+    // Parse URL parameters if present
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const urlImei = params.get("imei");
       const urlDate = params.get("date");
-      const urlRouteId = params.get("route_id");
-      if (urlImei) setImei(urlImei);
+      if (urlImei) setSelectedImei(urlImei);
       if (urlDate) setDate(urlDate);
-      if (urlRouteId) setRouteId(urlRouteId);
     }
   }, []);
 
-  // Init map
+  // Set selected zone and ward when selectedImei is loaded or preset
+  useEffect(() => {
+    if (selectedImei && vehicles.length > 0) {
+      const veh = vehicles.find(v => v.gps_device?.imei === selectedImei);
+      if (veh) {
+        if ((veh as any).zone_id) setSelectedZoneId(String((veh as any).zone_id));
+        if ((veh as any).ward_id) setSelectedWardId(String((veh as any).ward_id));
+      }
+    }
+  }, [selectedImei, vehicles]);
+
+  // Init Leaflet map
   useEffect(() => {
     if (typeof window === "undefined" || !box.current || mapRef.current) return;
     const L = require("leaflet");
-    mapRef.current = L.map(box.current).setView([26.9124, 75.7873], 13);
+
+    mapRef.current = L.map(box.current, { zoomControl: false }).setView([26.9124, 75.7873], 13);
+    L.control.zoom({ position: "bottomright" }).addTo(mapRef.current);
 
     const googleMapLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
       attribution: "© Google Maps", maxZoom: 20, noWrap: true
@@ -357,14 +398,14 @@ export default function PlaybackPage() {
     });
 
     googleMapLayer.addTo(mapRef.current);
+    boundaryLayerRef.current = L.layerGroup().addTo(mapRef.current);
 
     L.control.layers({
       "Google Maps (Default)": googleMapLayer,
-      "Google Satellite + Labels": googleHybridLayer,
+      "Google Satellite": googleHybridLayer,
       "Dark Map": darkLayer
     }, {}, { position: 'topright' }).addTo(mapRef.current);
 
-    // Add cleanup to clear references
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -373,13 +414,71 @@ export default function PlaybackPage() {
     };
   }, []);
 
+  // ─── Render Geofence Boundary overlays on map ───
+  useEffect(() => {
+    const layer = boundaryLayerRef.current;
+    if (!layer || !mapRef.current || regionsList.length === 0) return;
+
+    layer.clearLayers();
+    const L = require("leaflet");
+
+    if (selectedWardId) {
+      // 1. Draw specifically selected Ward
+      const wardRegion = regionsList.find(r => r.region_type_id === 3 && r.id === parseInt(selectedWardId));
+      if (wardRegion && wardRegion.geojson) {
+        try {
+          const wardColor = wardRegion.color || "#fba339";
+          const wardGeoJSON = L.geoJSON(wardRegion.geojson, {
+            style: {
+              color: wardColor,
+              weight: 3.5,
+              fillColor: wardColor,
+              fillOpacity: 0.15,
+            }
+          }).addTo(layer);
+
+          const bounds = wardGeoJSON.getBounds();
+          if (bounds.isValid()) {
+            mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+          }
+        } catch (e) {
+          console.error("Failed to render ward geofence on playback page", e);
+        }
+      }
+    } else if (selectedZoneId) {
+      // 2. Draw selected Zone
+      const zoneRegion = regionsList.find(r => r.region_type_id === 2 && r.id === parseInt(selectedZoneId));
+      if (zoneRegion && zoneRegion.geojson) {
+        try {
+          const zoneColor = zoneRegion.color || "#8b5cf6";
+          const zoneGeoJSON = L.geoJSON(zoneRegion.geojson, {
+            style: {
+              color: zoneColor,
+              weight: 4,
+              fillColor: zoneColor,
+              fillOpacity: 0.1,
+            }
+          }).addTo(layer);
+
+          const bounds = zoneGeoJSON.getBounds();
+          if (bounds.isValid()) {
+            mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+          }
+        } catch (e) {
+          console.error("Failed to render zone geofence on playback page", e);
+        }
+      }
+    }
+  }, [selectedZoneId, selectedWardId, regionsList]);
+
+  // Load Route Playback Trace
   const loadRoute = useCallback(async () => {
-    if (!imei || !date) return;
+    if (!selectedImei || !date) return;
     const from = `${date}T00:00:00.000Z`;
     const to = `${date}T23:59:59.999Z`;
 
     try {
-      const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${imei}?from=${from}&to=${to}`);
+      const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${selectedImei}?from=${from}&to=${to}`);
       const data = r.data || [];
       const validPointsRaw = data.filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number' && p.lat !== 0);
       const validPoints = smoothGpsTrace(validPointsRaw);
@@ -393,7 +492,20 @@ export default function PlaybackPage() {
       if (lineRef.current) map.removeLayer(lineRef.current);
       if (mkRef.current) map.removeLayer(mkRef.current);
 
-      // Clear previous stoppage and checkpoint markers
+      if (activeLineRef.current) {
+        map.removeLayer(activeLineRef.current);
+        activeLineRef.current = null;
+      }
+      if (startMarkerRef.current) {
+        map.removeLayer(startMarkerRef.current);
+        startMarkerRef.current = null;
+      }
+      if (endMarkerRef.current) {
+        map.removeLayer(endMarkerRef.current);
+        endMarkerRef.current = null;
+      }
+      matchedCoordsRef.current = [];
+
       if (stoppageMarkersRef.current) {
         stoppageMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
         stoppageMarkersRef.current = [];
@@ -411,39 +523,175 @@ export default function PlaybackPage() {
 
       if (validPoints.length === 0) return;
 
-      // 1. Get raw/smoothed coordinates to associate with playback index
       const baseCoords = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
-
-      // 2. Fetch Map Matched Polyline for beautiful tracing on the road
       const matchedCoords = await fetchMapMatchedRoute(validPoints);
+      matchedCoordsRef.current = matchedCoords;
 
-      // Draw the beautiful map-matched polyline
-      lineRef.current = L.polyline(matchedCoords, { color: "#8b5cf6", weight: 4, opacity: 0.8 }).addTo(map);
+      // Create custom low-index background pane for the planned route to prevent overlapping redraw flickering
+      if (!map.getPane("backgroundPathPane")) {
+        map.createPane("backgroundPathPane");
+        map.getPane("backgroundPathPane").style.zIndex = "350";
+        map.getPane("backgroundPathPane").style.pointerEvents = "none";
+      }
 
-      // Fit map to bounds
+      // 1. Draw planned path as a faint background dashed polyline in the background pane
+      lineRef.current = L.polyline(matchedCoords, { 
+        color: "#cbd5e1", 
+        weight: 4, 
+        opacity: 0.65, 
+        dashArray: "4, 6",
+        lineCap: "round",
+        lineJoin: "round",
+        pane: "backgroundPathPane"
+      }).addTo(map);
+      lineRef.current.bringToBack();
+
       map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
 
-      mkRef.current = L.circleMarker(baseCoords[0], { radius: 8, fillColor: "#22c55e", fillOpacity: 1, color: "#fff", weight: 2 })
+      // 2. Draw dynamic covered route trail in vibrant solid orange
+      activeLineRef.current = L.polyline([matchedCoords[0], matchedCoords[0]], {
+        color: "#f97316", // Thick vibrant orange path showing dynamic progress
+        weight: 5.5,
+        opacity: 0.95,
+        lineCap: "round",
+        lineJoin: "round"
+      }).addTo(map);
+      activeLineRef.current.bringToFront();
+
+      // 3. Draw Start Marker Badge
+      const startIcon = L.divIcon({
+        html: `
+          <div style="
+            background: #10b981;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            font-size: 8.5px;
+            font-weight: 900;
+            border: 2px solid #ffffff;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            line-height: 1;
+          ">
+            START
+          </div>
+        `,
+        className: "",
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+      startMarkerRef.current = L.marker(baseCoords[0], { icon: startIcon }).addTo(map);
+
+      // 4. Draw End Marker Badge
+      const endIcon = L.divIcon({
+        html: `
+          <div style="
+            background: #ef4444;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            font-size: 8.5px;
+            font-weight: 900;
+            border: 2px solid #ffffff;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            line-height: 1;
+          ">
+            END
+          </div>
+        `,
+        className: "",
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+      endMarkerRef.current = L.marker(baseCoords[baseCoords.length - 1], { icon: endIcon }).addTo(map);
+
+      // 5. Draw Vehicle Marker with premium green-border black circle style
+      const vehicleIcon = L.divIcon({
+        html: `
+          <div style="
+            background: #1e293b;
+            border: 3px solid #10b981;
+            border-radius: 50%;
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+          ">
+            🚚
+          </div>
+        `,
+        className: "",
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+      });
+      mkRef.current = L.marker(baseCoords[0], { icon: vehicleIcon })
         .bindPopup(getPopupContent(validPoints[0]))
         .addTo(map);
 
-      // Detect and add stoppage markers
+      // 6. Detect and draw stoppages using color/gradient & centered duration in minutes
       const detectedStoppages = detectStoppages(validPoints);
       setStoppages(detectedStoppages);
 
       detectedStoppages.forEach((s, i) => {
-        const marker = L.circleMarker([s.lat, s.lng], {
-          radius: 7,
-          fillColor: "#ef4444",
-          fillOpacity: 0.9,
-          color: "#fff",
-          weight: 1.5
-        }).addTo(map);
+        const mins = Math.max(1, Math.round(s.durationSeconds / 60));
+        const isRed = mins >= 10;
+
+        const stopIcon = L.divIcon({
+          html: `
+            <div style="
+              width: 36px;
+              height: 36px;
+              background: ${isRed ? 'rgba(153, 27, 27, 0.22)' : 'rgba(245, 158, 11, 0.22)'};
+              border: 2px solid ${isRed ? 'rgba(153, 27, 27, 0.38)' : 'rgba(245, 158, 11, 0.38)'};
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.12);
+              animation: stop-pulse 2s infinite ease-in-out;
+            ">
+              <div style="
+                width: 22px;
+                height: 22px;
+                background: ${isRed ? '#991b1b' : '#f59e0b'};
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: ${isRed ? '#ffffff' : '#1e293b'};
+                font-family: 'Inter', sans-serif;
+                font-size: 10px;
+                font-weight: 800;
+              ">
+                ${mins}
+              </div>
+            </div>
+          `,
+          className: "",
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+        });
+
+        const marker = L.marker([s.lat, s.lng], { icon: stopIcon }).addTo(map);
 
         const stopPopupContent = `
           <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; min-width: 160px; padding: 2px;">
-            <div style="font-weight: 700; border-bottom: 1px dashed #ef4444; padding-bottom: 6px; margin-bottom: 8px; color: #dc2626; font-size: 14px; display: flex; align-items: center; gap: 4px;">
-              🛑 <span>Stoppage #${i + 1}</span>
+            <div style="font-weight: 700; border-bottom: 1px dashed ${isRed ? '#ef4444' : '#f59e0b'}; padding-bottom: 6px; margin-bottom: 8px; color: ${isRed ? '#dc2626' : '#d97706'}; font-size: 14px; display: flex; align-items: center; gap: 4px;">
+              🛑 <span>Stoppage #${i + 1} (${isRed ? 'Major Stop' : 'Mini Stop'})</span>
             </div>
             <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
               <span style="color: #64748b;">Start:</span>
@@ -455,7 +703,7 @@ export default function PlaybackPage() {
             </div>
             <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
               <span style="color: #64748b;">Duration:</span>
-              <span style="font-weight: 700; color: #dc2626;">${formatStoppageDuration(s.durationSeconds)}</span>
+              <span style="font-weight: 700; color: ${isRed ? '#dc2626' : '#d97706'};">${formatStoppageDuration(s.durationSeconds)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
               <span style="color: #64748b;">Coord:</span>
@@ -464,7 +712,7 @@ export default function PlaybackPage() {
             <div style="border-top: 1px solid #f1f5f9; padding-top: 6px;">
               <button 
                 onclick="window.jumpToKeyframe(${s.startIndex})"
-                style="background: #ef4444; color: #fff; border: none; padding: 6px 8px; font-size: 11px; font-weight: 600; cursor: pointer; border-radius: 6px; width: 100%; transition: background 0.2s;"
+                style="background: ${isRed ? '#991b1b' : '#f59e0b'}; color: ${isRed ? '#fff' : '#1e293b'}; border: none; padding: 6px 8px; font-size: 11px; font-weight: 600; cursor: pointer; border-radius: 6px; width: 100%; transition: background 0.2s;"
               >
                 🔍 Focus on Playback
               </button>
@@ -475,147 +723,45 @@ export default function PlaybackPage() {
         stoppageMarkersRef.current.push(marker);
       });
 
-      // Fetch and plot assigned route and checkpoints
-      if (routeId && routeId !== "undefined" && routeId !== "null" && routeId !== "0") {
-        try {
-          // 1. Fetch checkpoints
-          const cpRes = await api<{ data: any[] }>(`/api/routes/${routeId}/checkpoints`);
-          const cpData = cpRes.data || [];
-          setCheckpoints(cpData);
-
-          // Calculate hits locally based on the raw/smoothed GPS baseCoords
-          // This matches the backend logic and prevents road-snapping from pushing coordinates outside the 10m radius
-          const hitCheckpoints = new Set<number>();
-          cpData.forEach(cp => {
-            const tolerance = 10; // Always 10 meters for all checkpoints
-            
-            // Check the very first point
-            if (validPoints.length > 0) {
-              const firstDist = haversineDistance(validPoints[0].lat, validPoints[0].lng, cp.latitude, cp.longitude) * 1000;
-              if (firstDist <= tolerance) {
-                hitCheckpoints.add(cp.id);
-                return;
-              }
-            }
-
-            // Check segments/points starting from i = 1
-            for (let i = 1; i < validPoints.length; i++) {
-              const prev = validPoints[i - 1];
-              const curr = validPoints[i];
-
-              const timeDiffSec = (new Date(curr.time).getTime() - new Date(prev.time).getTime()) / 1000;
-              const distBetweenPings = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng) * 1000;
-
-              let distMeters: number;
-              if (timeDiffSec > 60 || distBetweenPings > 200) {
-                // Fallback to point check only
-                distMeters = haversineDistance(curr.lat, curr.lng, cp.latitude, cp.longitude) * 1000;
-              } else {
-                distMeters = distanceToSegment(cp.latitude, cp.longitude, prev.lat, prev.lng, curr.lat, curr.lng);
-              }
-
-              if (distMeters <= tolerance) {
-                hitCheckpoints.add(cp.id);
-                break; // Hit found, move to next checkpoint
-              }
-            }
-          });
-
-          cpData.forEach((cp, i) => {
-            const isHit = hitCheckpoints.has(cp.id);
-            const fillColor = isHit ? "#22c55e" : "#ef4444"; // Green for hit, Red for missed
-
-            const cpMarker = L.circleMarker([cp.latitude, cp.longitude], {
-              radius: 6,
-              fillColor: fillColor,
-              fillOpacity: 0.9,
-              color: "#fff",
-              weight: 1.5,
-              dashArray: "2,2"
-            }).addTo(map);
-
-            const cpPopup = `
-              <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; padding: 2px;">
-                <div style="font-weight: 700; border-bottom: 1px dashed ${fillColor}; padding-bottom: 6px; margin-bottom: 8px; color: ${fillColor}; font-size: 14px; display: flex; align-items: center; gap: 4px;">
-                  📍 <span>Checkpoint ${cp.sequence_order > 0 ? '#' + cp.sequence_order : ''}</span>
-                </div>
-                <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
-                  <span style="color: #64748b;">Name:</span>
-                  <span style="font-weight: 600; color: #1e293b;">${cp.checkpoint_name}</span>
-                </div>
-                <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
-                  <span style="color: #64748b;">Radius:</span>
-                  <span style="font-weight: 600; color: #1e293b;">10m</span>
-                </div>
-                <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
-                  <span style="color: #64748b;">Status:</span>
-                  <span style="font-weight: 700; color: ${fillColor};">${isHit ? 'COVERED' : 'MISSED'}</span>
-                </div>
-              </div>
-            `;
-            cpMarker.bindPopup(cpPopup);
-            checkpointMarkersRef.current.push(cpMarker);
-          });
-
-          // 2. Fetch route geometry
-          const routesRes = await api<{ data: any[] }>("/api/routes");
-          const assignedRoute = (routesRes.data || []).find((r: any) => r.id === parseInt(routeId));
-          if (assignedRoute) {
-            if (assignedRoute.geojson) {
-              try {
-                const geoData = JSON.parse(assignedRoute.geojson);
-                assignedRouteLayerRef.current = L.geoJSON(geoData, {
-                  style: {
-                    color: "#3b82f6", // Blue for planned route
-                    weight: 5,
-                    opacity: 0.6
-                  }
-                }).addTo(map);
-              } catch (e) {
-                console.error("Failed to parse route geojson", e);
-              }
-            } else if (assignedRoute.lanes && Array.isArray(assignedRoute.lanes)) {
-              // Fallback to dotted line if no geojson is present
-              const pts: [number, number][] = [];
-              assignedRoute.lanes.forEach((lane: any) => {
-                if (lane.startLat && lane.startLng) pts.push([lane.startLat, lane.startLng]);
-                if (lane.endLat && lane.endLng) pts.push([lane.endLat, lane.endLng]);
-              });
-              if (pts.length > 0) {
-                assignedRouteLayerRef.current = L.polyline(pts, {
-                  color: "#eab308",
-                  weight: 4,
-                  opacity: 0.8,
-                  dashArray: "8, 8"
-                }).addTo(map);
-              }
-            }
-          }
-
-        } catch (err) {
-          console.error("Failed to load checkpoints or route", err);
-        }
-      }
-
     } catch (err) {
       console.error("Playback load error:", err);
     }
-  }, [imei, date, routeId]);
+  }, [selectedImei, date]);
 
-  // Auto-load route if imei and date were set from URL parameters
-  const hasAutoLoaded = useRef(false);
-  useEffect(() => {
-    if (imei && date && mapRef.current && !hasAutoLoaded.current) {
-      if (typeof window !== "undefined" && window.location.search.includes(imei)) {
-        hasAutoLoaded.current = true;
-        loadRoute();
-      }
+  // Dynamic active trail updating helper
+  const updateActiveCoveredLine = useCallback((currentIndex: number) => {
+    const L = require("leaflet");
+    const map = mapRef.current;
+    if (!map || matchedCoordsRef.current.length === 0 || !points[currentIndex]) return;
+
+    const currentPoint = points[currentIndex];
+    
+    // Locate the closest OSRM map-matched point index
+    const closestIdx = findClosestCoordinateIndex(currentPoint.lat, currentPoint.lng, matchedCoordsRef.current);
+    
+    // Slice matched road coords up to the closest index
+    const coveredCoords = matchedCoordsRef.current.slice(0, Math.max(2, closestIdx + 1));
+
+    if (activeLineRef.current) {
+      activeLineRef.current.setLatLngs(coveredCoords);
+      activeLineRef.current.bringToFront();
+    } else {
+      activeLineRef.current = L.polyline(coveredCoords, {
+        color: "#f97316", // Thick vibrant orange path showing dynamic progress
+        weight: 5.5,
+        opacity: 0.95,
+        lineCap: "round",
+        lineJoin: "round"
+      }).addTo(map);
+      activeLineRef.current.bringToFront();
     }
-  }, [imei, date, loadRoute]);
+  }, [points]);
 
-  // Playback animation
+  // Handle Playback Intervals (Adjusted by Speed Multiplier)
   useEffect(() => {
     if (!playing || idx >= points.length - 1 || !mapRef.current || !mkRef.current) return;
+
+    const intervalDuration = Math.max(10, 150 / speedMultiplier);
 
     intervalRef.current = setInterval(() => {
       setIdx((prev) => {
@@ -627,100 +773,258 @@ export default function PlaybackPage() {
         const p = points[next];
         mkRef.current.setLatLng([p.lat, p.lng]);
         mkRef.current.setPopupContent(getPopupContent(p));
+        updateActiveCoveredLine(next);
         return next;
       });
-    }, 150);
-    return () => clearInterval(intervalRef.current);
-  }, [playing, points]);
+    }, intervalDuration);
 
-  // Scrub
+    return () => clearInterval(intervalRef.current);
+  }, [playing, points, speedMultiplier, idx, updateActiveCoveredLine]);
+
+  // Scrub Scrubbed Point Sync
   useEffect(() => {
     if (points[idx] && mkRef.current) {
       const p = points[idx];
       mkRef.current.setLatLng([p.lat, p.lng]);
       mkRef.current.setPopupContent(getPopupContent(p));
+      updateActiveCoveredLine(idx);
     }
-  }, [idx, points]);
+  }, [idx, points, updateActiveCoveredLine]);
+
+  // Filter Dropdowns Lists
+  const filteredWards = selectedZoneId
+    ? regionsList.filter(r => r.region_type_id === 3 && r.parent_id === parseInt(selectedZoneId))
+    : regionsList.filter(r => r.region_type_id === 3);
+
+  const filteredVehicles = vehicles.filter(v => {
+    if (selectedZoneId && (v as any).zone_id !== parseInt(selectedZoneId)) return false;
+    if (selectedWardId && (v as any).ward_id !== parseInt(selectedWardId)) return false;
+    return true;
+  });
 
   const p = points[idx];
 
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="hidden md:flex h-14 bg-[var(--bg-card)] px-6 items-center border-b border-white/[.05] shrink-0">
-        <h1 className="text-sm font-semibold tracking-tight">⏪ Route Playback</h1>
-        {points.length > 0 && <span className="ml-auto text-xs text-slate-500">{points.length} GPS points loaded</span>}
-      </header>
-      <div className="flex-1 relative flex flex-col">
-        <div ref={box} className="flex-1 w-full h-full" />
+  // Helper format time
+  const formatTimeStr = (t?: string) => {
+    if (!t) return "00:00:00";
+    return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  };
 
-        {/* Control Panel */}
-        <div className="absolute top-4 left-4 right-4 sm:right-auto sm:w-[300px] bg-[rgba(15,21,37,.95)] backdrop-blur-2xl rounded-xl border border-white/[.06] z-[1000] p-4 shadow-2xl">
-          <div className="space-y-2 mb-3">
-            <select value={imei} onChange={(e) => setImei(e.target.value)}
-              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-[13px] text-white outline-none">
-              <option value="">Select vehicle…</option>
-              {vehicles.filter((v) => v.gps_device).map((v) => (
-                <option key={v.id} value={v.gps_device!.imei}>{v.registration_no} — {v.vehicle_type?.name || ""}</option>
-              ))}
-            </select>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-[13px] text-white outline-none" />
-            <input type="text" placeholder="Route ID (optional)" value={routeId} onChange={(e) => setRouteId(e.target.value)}
-              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-[13px] text-white outline-none" />
-            <button onClick={loadRoute} className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium transition">▶ Load Route</button>
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-white text-slate-800 font-sans">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes stop-pulse {
+          0% { transform: scale(0.95); opacity: 0.9; }
+          50% { transform: scale(1.05); opacity: 1; }
+          100% { transform: scale(0.95); opacity: 0.9; }
+        }
+      `}} />
+      
+      {/* Dynamic Master Header */}
+      <header className="flex h-14 bg-[#e2e8f0] px-6 items-center border-b border-slate-300 shrink-0 justify-between w-full">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold tracking-wide text-slate-800">ISWM - NAGAR NIGAM JAIPUR</h1>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Language Selection */}
+          <div className="relative flex items-center bg-white border border-slate-300 rounded px-3 py-1 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-50 transition">
+            <span>English</span>
+            <svg className="w-3.5 h-3.5 ml-1.5 fill-current text-slate-500" viewBox="0 0 20 20">
+              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+            </svg>
+          </div>
+          {/* Circular user profile silhouette */}
+          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-white shrink-0 shadow-sm">
+            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+          </div>
+        </div>
+      </header>
+
+      {/* Sub-header / Playback Title with Green Line */}
+      <div className="bg-white px-6 py-2 border-b border-slate-200 shrink-0">
+        <h2 className="text-base font-bold text-slate-700">Playback</h2>
+        <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+      </div>
+
+      {/* HORIZONTAL CONTROLS PANEL */}
+      <section className="bg-[#f1f5f9] border-b border-slate-200 px-6 py-3.5 z-10 shrink-0 w-full flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3.5 w-full">
+          
+          {/* Date Picker */}
+          <div className="relative min-w-[130px]">
+            <input 
+              type="date" 
+              value={date} 
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium" 
+            />
           </div>
 
-          {points.length > 0 && (
-            <div className="border-t border-white/[.05] pt-3 space-y-2">
-              <div className="text-xs text-slate-400">
-                {p ? <><b>{new Date(p.time).toLocaleTimeString()}</b> — {p.speed} km/h — Pt {idx + 1}/{points.length}</> : ""}
-              </div>
-              <input type="range" min={0} max={points.length - 1} value={idx}
-                onChange={(e) => { setPlaying(false); setIdx(Number(e.target.value)); }}
-                className="w-full accent-indigo-500" />
-              <div className="flex gap-2">
-                <button onClick={() => { setPlaying(false); setIdx(Math.max(0, idx - 1)); }}
-                  className="flex-1 py-1.5 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-xs text-white hover:bg-indigo-600 transition">⏮</button>
-                <button onClick={() => setPlaying(!playing)}
-                  className="flex-[2] py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition">
-                  {playing ? "⏸ Pause" : "▶ Play"}
-                </button>
-                <button onClick={() => { setPlaying(false); setIdx(Math.min(points.length - 1, idx + 1)); }}
-                  className="flex-1 py-1.5 bg-[var(--bg-surface)] border border-white/[.06] rounded-lg text-xs text-white hover:bg-indigo-600 transition">⏭</button>
-              </div>
-            </div>
-          )}
+          {/* Select Zone */}
+          <div className="min-w-[150px]">
+            <select
+              value={selectedZoneId}
+              onChange={(e) => {
+                setSelectedZoneId(e.target.value);
+                setSelectedWardId("");
+                setSelectedImei("");
+              }}
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
+            >
+              <option value="">Select Zone</option>
+              {zones.map((z, idx) => (
+                <option key={`zone-${z.id}-${idx}`} value={z.id}>{z.region_name}</option>
+              ))}
+            </select>
+          </div>
 
-          {/* Stoppages List */}
-          {stoppages.length > 0 && (
-            <div className="border-t border-white/[.05] pt-3 mt-3 max-h-[180px] overflow-y-auto pr-1">
-              <h3 className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1.5">
-                🛑 Stoppage Points ({stoppages.length})
-              </h3>
-              <div className="space-y-1.5">
-                {stoppages.map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => jumpToKeyframe(s.startIndex)}
-                    className="w-full text-left px-2 py-1.5 bg-[var(--bg-surface)] hover:bg-red-500/10 border border-white/[.05] hover:border-red-500/30 rounded-lg text-xs transition flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="font-semibold text-red-400">Stop #{i + 1}</span>
-                      <span className="text-[10px] text-slate-400 ml-2">
-                        {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded font-medium">
-                      {formatStoppageDuration(s.durationSeconds)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Select Ward */}
+          <div className="min-w-[150px]">
+            <select
+              value={selectedWardId}
+              onChange={(e) => {
+                setSelectedWardId(e.target.value);
+                setSelectedImei("");
+              }}
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
+            >
+              <option value="">Select Ward</option>
+              {filteredWards.map((w, idx) => (
+                <option key={`ward-${w.id}-${idx}`} value={w.id}>{w.region_name}</option>
+              ))}
+            </select>
+          </div>
 
-          {points.length === 0 && imei && <p className="text-xs text-slate-600 mt-2">No data for this date.</p>}
+          {/* Select Shift */}
+          <div className="min-w-[120px]">
+            <select
+              value={selectedShift}
+              onChange={(e) => setSelectedShift(e.target.value)}
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
+            >
+              <option value="Morning">Morning</option>
+              <option value="Evening">Evening</option>
+              <option value="Night">Night</option>
+            </select>
+          </div>
+
+          {/* Select Vehicle */}
+          <div className="min-w-[170px]">
+            <select
+              value={selectedImei}
+              onChange={(e) => setSelectedImei(e.target.value)}
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
+            >
+              <option value="">Select Vehicle</option>
+              {filteredVehicles.filter(v => v.gps_device).map((v, idx) => (
+                <option key={`veh-${v.id}-${idx}`} value={v.gps_device!.imei}>
+                  {v.registration_no} ({v.vehicle_type?.name || "Tipper"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Speed Selector */}
+          <div className="min-w-[80px]">
+            <select
+              value={speedMultiplier}
+              onChange={(e) => setSpeedMultiplier(Number(e.target.value))}
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-800 focus:border-emerald-500 outline-none transition cursor-pointer font-bold"
+            >
+              <option value={1}>1X</option>
+              <option value={2}>2X</option>
+              <option value={4}>4X</option>
+              <option value={8}>8X</option>
+            </select>
+          </div>
+
+          {/* Play/Pause Green Circle Button */}
+          <button
+            onClick={() => {
+              if (points.length === 0) {
+                loadRoute();
+              } else {
+                setPlaying(!playing);
+              }
+            }}
+            className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-500/20 transition-all shrink-0 cursor-pointer"
+            title={playing ? "Pause Playback" : "Start Playback"}
+          >
+            {playing ? (
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            ) : (
+              <svg className="w-3.5 h-3.5 fill-current translate-x-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            )}
+          </button>
         </div>
+
+        {/* Playback Progress timeline scrub slider - Always visible */}
+        <div className="w-full flex items-center gap-3 mt-1">
+          <span className="text-xs font-semibold font-mono text-slate-500 w-14 shrink-0 text-left">
+            {points.length > 0 ? formatTimeStr(p?.time) : "00:00:00"}
+          </span>
+          <input 
+            type="range" 
+            min={0} 
+            max={points.length > 0 ? points.length - 1 : 100} 
+            value={points.length > 0 ? idx : 0}
+            disabled={points.length === 0}
+            onChange={(e) => { 
+              if (points.length > 0) {
+                setPlaying(false); 
+                setIdx(Number(e.target.value)); 
+              }
+            }}
+            className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-200 accent-sky-500 appearance-none outline-none"
+          />
+          <span className="text-xs font-semibold font-mono text-slate-500 w-14 shrink-0 text-right">
+            {points.length > 0 ? formatTimeStr(points[points.length - 1]?.time) : "00:00:00"}
+          </span>
+        </div>
+      </section>
+
+      {/* Split map layout */}
+      <div className="flex-1 relative flex flex-col md:flex-row overflow-hidden">
+        
+        {/* Leaflet Map takes full size */}
+        <div ref={box} className="flex-1 w-full h-full z-0 bg-theme-base" />
+
+        {/* Custom Orange Map Indication Button matching screenshot */}
+        <div className="absolute top-3 right-16 z-[1000] flex items-center">
+          <div className="bg-[#f59e0b] hover:bg-amber-600 text-white px-3 py-1.5 text-xs font-bold uppercase rounded shadow-md tracking-wider flex items-center gap-1 cursor-pointer transition select-none">
+            <span>Map Indication</span>
+          </div>
+        </div>
+
+        {/* Floating stoppages sidebar if stoppages exist */}
+        {stoppages.length > 0 && (
+          <div className="absolute top-4 right-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl max-h-[calc(100%-32px)] overflow-y-auto custom-scrollbar flex flex-col">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center gap-1.5 shrink-0 border-b border-slate-100 pb-2">
+              🛑 Stoppages ({stoppages.length})
+            </h3>
+            <div className="space-y-2 flex-1 overflow-y-auto pr-0.5">
+              {stoppages.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={() => jumpToKeyframe(s.startIndex)}
+                  className="w-full text-left p-2.5 bg-slate-50 hover:bg-red-50 border border-slate-100 hover:border-red-200 rounded-xl text-xs transition flex items-center justify-between group active:scale-98"
+                >
+                  <div className="space-y-0.5">
+                    <span className="font-extrabold text-red-500 block">Stoppage #{i + 1}</span>
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black bg-red-100 text-red-600 group-hover:bg-red-200 px-2 py-0.5 rounded-lg transition duration-200">
+                    {formatStoppageDuration(s.durationSeconds)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

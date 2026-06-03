@@ -61,6 +61,7 @@ ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS altitude FLOAT;
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS satellites INT;
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS ignition BOOLEAN DEFAULT false;
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS io JSONB;
+ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS signal SMALLINT DEFAULT 0;
 
 -- 5. Final mapping check
 CREATE TABLE IF NOT EXISTS vehicle_gps_map (
@@ -70,3 +71,6 @@ CREATE TABLE IF NOT EXISTS vehicle_gps_map (
     unassigned_at TIMESTAMPTZ,
     PRIMARY KEY (vehicle_id, device_id, assigned_at)
 );
+
+-- 6. Add shift_id to routes if missing
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS shift_id INT REFERENCES shifts(id) ON DELETE SET NULL;

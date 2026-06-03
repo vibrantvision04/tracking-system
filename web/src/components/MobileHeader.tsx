@@ -20,20 +20,20 @@ export default function MobileHeader() {
   };
 
   return (
-    <header className="lg:hidden h-14 bg-[var(--bg-card)] px-4 flex items-center justify-between border-b border-white/[.05] shrink-0 z-[1000]">
+    <header className="lg:hidden h-14 bg-[var(--bg-card)] px-4 flex items-center justify-between border-b border-theme-border shrink-0 z-[1000]">
       <div className="flex items-center gap-3">
         <button 
           onClick={() => setSidebarOpen(true)}
-          className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-white"
+          className="w-10 h-10 flex items-center justify-center text-theme-text-dim hover:text-theme-text"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <h1 className="text-sm font-bold tracking-tight text-white">{getTitle()}</h1>
+        <h1 className="text-sm font-bold tracking-tight text-theme-text">{getTitle()}</h1>
       </div>
       
-      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-[10px]">
+      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 text-white font-bold text-[10px]">
         IS
       </div>
     </header>

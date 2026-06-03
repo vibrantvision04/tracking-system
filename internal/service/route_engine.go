@@ -19,11 +19,12 @@ type RouteEngine struct {
 
 	// In-memory cache for fast geofence lookups to avoid DB hit per GPS ping
 	mu               sync.RWMutex
-	assignments      map[int]int                          // vehicleID -> routeID
+	assignments      map[int]int                          // vehicleID -> routeID (0 means no route assigned today)
 	routeCheckpoints map[int][]repository.RouteCheckpoint // routeID -> checkpoints
 	visited          map[int]map[int]bool                 // vehicleID -> checkpointID -> visited today
 	onRoute          map[int]bool                         // vehicleID -> is currently actively on route
 	lastPositions    map[int]decoder.AVLData              // vehicleID -> last processed coordinate
+	imeiVehicles     map[string]*repository.Vehicle       // imei -> vehicle metadata cache (nil indicates unassigned/unknown device)
 
 	lastRefresh time.Time
 }
@@ -37,6 +38,7 @@ func NewRouteEngine(routeRepo *repository.RouteRepository, vehicleRepo *reposito
 		visited:          make(map[int]map[int]bool),
 		onRoute:          make(map[int]bool),
 		lastPositions:    make(map[int]decoder.AVLData),
+		imeiVehicles:     make(map[string]*repository.Vehicle),
 		lastRefresh:      time.Now(),
 	}
 }
@@ -50,20 +52,33 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		return // Ignore extreme outlier jumps
 	}
 
-	// Look up Vehicle ID first
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+	// 1. Look up Vehicle ID in memory cache first
+	e.mu.RLock()
+	vehicle, hasVehicle := e.imeiVehicles[data.IMEI]
+	e.mu.RUnlock()
 
-	vehicle, err := e.vehicleRepo.GetByIMEI(ctx, data.IMEI)
-	if err != nil || vehicle == nil {
-		return // Unknown vehicle
+	if !hasVehicle {
+		// Cache miss: Load from DB once
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		var err error
+		vehicle, err = e.vehicleRepo.GetByIMEI(ctx, data.IMEI)
+		if err != nil {
+			log.Error().Err(err).Str("imei", data.IMEI).Msg("Failed to fetch vehicle by IMEI inside RouteEngine")
+		}
+		
+		e.mu.Lock()
+		// Cache the result even if nil to prevent database query stampede for unrecognized/unassigned IMEIs
+		e.imeiVehicles[data.IMEI] = vehicle
+		e.mu.Unlock()
+	}
+
+	if vehicle == nil {
+		return // Unknown vehicle or unassigned device, bypass geofence check safely!
 	}
 	vehicleID := vehicle.ID
 
-	// If the cache is old, this might be a new day or missed an assignment,
-	// ideally we reload the cache periodically or via pub/sub.
-	// For simplicity, let's do a basic time-based eviction or just fetch on demand if missing.
-
+	// 2. Look up assigned route in cache (0 indicates no route assigned today)
 	e.mu.RLock()
 	routeID, hasAssignedRoute := e.assignments[vehicleID]
 	e.mu.RUnlock()
@@ -75,14 +90,21 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 
 		today := time.Now().Truncate(24 * time.Hour)
 		assignment, err := e.routeRepo.GetAssignedRoute(ctx, vehicleID, today)
+		
+		e.mu.Lock()
 		if err != nil || assignment == nil {
-			return // No route assigned today
+			// Cache the negative result (0) to avoid hitting database on every subsequent ping today
+			e.assignments[vehicleID] = 0
+			e.mu.Unlock()
+			return
 		}
 
 		routeID = assignment.RouteID
+		e.assignments[vehicleID] = routeID
 
 		// Load checkpoints
 		checkpoints, _ := e.routeRepo.GetCheckpointsByRoute(ctx, routeID)
+		e.routeCheckpoints[routeID] = checkpoints
 
 		// Load visited
 		visitedIDs, _ := e.routeRepo.GetVisitedCheckpoints(ctx, vehicleID, routeID, today)
@@ -90,12 +112,12 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		for _, vid := range visitedIDs {
 			visitedMap[vid] = true
 		}
-
-		e.mu.Lock()
-		e.assignments[vehicleID] = routeID
-		e.routeCheckpoints[routeID] = checkpoints
 		e.visited[vehicleID] = visitedMap
 		e.mu.Unlock()
+	}
+
+	if routeID == 0 {
+		return // Vehicle has no active route assigned today, bypass geofence check!
 	}
 
 	e.mu.RLock()
@@ -195,6 +217,7 @@ func (e *RouteEngine) RefreshCache() {
 	e.visited = make(map[int]map[int]bool)
 	e.onRoute = make(map[int]bool)
 	e.lastPositions = make(map[int]decoder.AVLData)
+	e.imeiVehicles = make(map[string]*repository.Vehicle)
 }
 
 func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {
@@ -226,4 +249,10 @@ func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {
 	cLng := aLng + t*(bLng-aLng)
 
 	return utils.Haversine(pLat, pLng, cLat, cLng) * 1000.0
+}
+
+func (e *RouteEngine) GetCachedVehicle(imei string) *repository.Vehicle {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.imeiVehicles[imei]
 }

@@ -159,3 +159,68 @@ func (r *GPSRepository) GetAllByTimeWindow(ctx context.Context, start, end time.
 	return result, nil
 }
 
+func (r *GPSRepository) UpdateLatestGPS(ctx context.Context, data []decoder.AVLData) error {
+	if len(data) == 0 {
+		return nil
+	}
+
+	// Filter and find the latest record per IMEI in this batch
+	latest := make(map[string]decoder.AVLData)
+	for _, d := range data {
+		if d.Lat == 0 && d.Lng == 0 {
+			continue
+		}
+		existing, found := latest[d.IMEI]
+		if !found || d.Time.After(existing.Time) {
+			latest[d.IMEI] = d
+		}
+	}
+
+	if len(latest) == 0 {
+		return nil
+	}
+
+	// Execute batch upserts
+	// We'll use a transaction with a prepared statement or pgx batch for optimal bulk execution
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		INSERT INTO latest_gps_data (imei, captured_at, lat, lng, speed, heading, altitude, satellites, ignition, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+		ON CONFLICT (imei) DO UPDATE SET
+			captured_at = EXCLUDED.captured_at,
+			lat = EXCLUDED.lat,
+			lng = EXCLUDED.lng,
+			speed = EXCLUDED.speed,
+			heading = EXCLUDED.heading,
+			altitude = EXCLUDED.altitude,
+			satellites = EXCLUDED.satellites,
+			ignition = EXCLUDED.ignition,
+			updated_at = NOW()
+		WHERE EXCLUDED.captured_at >= latest_gps_data.captured_at
+	`
+
+	for _, d := range latest {
+		_, err := tx.Exec(ctx, query,
+			d.IMEI,
+			d.Time,
+			d.Lat,
+			d.Lng,
+			d.Speed,
+			d.Heading,
+			d.Altitude,
+			d.Satellites,
+			d.Ignition,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+

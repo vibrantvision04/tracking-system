@@ -1,0 +1,140 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type DesignationResponse struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	IsActive  bool   `json:"is_active"`
+	CreatedAt string `json:"created_at"`
+}
+
+// GetDesignations returns all active designations from the database.
+func (h *Handler) GetDesignations(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	rows, err := db.Query(ctx, `
+		SELECT id, name, COALESCE(is_active, true), TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS')
+		FROM designations
+		ORDER BY id ASC
+	`)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query designations: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var list []DesignationResponse = []DesignationResponse{}
+	for rows.Next() {
+		var des DesignationResponse
+		if err := rows.Scan(&des.ID, &des.Name, &des.IsActive, &des.CreatedAt); err == nil {
+			list = append(list, des)
+		}
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    list,
+	})
+}
+
+// CreateDesignation inserts a new designation.
+func (h *Handler) CreateDesignation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+		return
+	}
+	if req.Name == "" {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Designation name is required"})
+		return
+	}
+
+	var desID int
+	err := db.QueryRow(ctx, `
+		INSERT INTO designations (name)
+		VALUES ($1)
+		RETURNING id
+	`, req.Name).Scan(&desID)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create designation: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusCreated, map[string]interface{}{
+		"success": true,
+		"id":      desID,
+	})
+}
+
+// UpdateDesignation updates a designation's name.
+func (h *Handler) UpdateDesignation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+		return
+	}
+	if req.Name == "" {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Designation name is required"})
+		return
+	}
+
+	_, err = db.Exec(ctx, `
+		UPDATE designations
+		SET name = $1
+		WHERE id = $2
+	`, req.Name, id)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update designation: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+
+// DeleteDesignation removes a designation from the database.
+func (h *Handler) DeleteDesignation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+
+	_, err = db.Exec(ctx, "DELETE FROM designations WHERE id = $1", id)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete designation: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}

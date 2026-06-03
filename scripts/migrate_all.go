@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -21,7 +22,19 @@ func main() {
 	}
 
 	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, dsn)
+	var conn *pgx.Conn
+	var err error
+	
+	// Retry database connection with backoff to handle container boot delays
+	for i := 0; i < 15; i++ {
+		conn, err = pgx.Connect(ctx, dsn)
+		if err == nil {
+			break
+		}
+		fmt.Printf("Database connection failed (attempt %d/15): %v. Retrying in 2 seconds...\n", i+1, err)
+		time.Sleep(2 * time.Second)
+	}
+	
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)

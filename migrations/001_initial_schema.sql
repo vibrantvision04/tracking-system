@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS vehicles (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     plate_number TEXT UNIQUE NOT NULL,
+    registration_no TEXT UNIQUE,
+    chassis_no TEXT,
+    is_owned BOOLEAN DEFAULT true,
+    vehicle_type_id INT,
+    is_active BOOLEAN DEFAULT true,
     vehicle_type TEXT, -- car/truck/bus/motorcycle
     owner_id INT REFERENCES users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -24,6 +29,10 @@ CREATE TABLE IF NOT EXISTS gps_devices (
     model TEXT,
     firmware_version TEXT,
     sim_number TEXT,
+    serial_no TEXT,
+    sim_no TEXT,
+    device_type TEXT,
+    is_active BOOLEAN DEFAULT true,
     status TEXT DEFAULT 'active', -- active/inactive/maintenance
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

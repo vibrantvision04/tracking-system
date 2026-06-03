@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 
+import StatCard from "@/components/shared/StatCard";
+
 const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false });
 
 export default function HomePage() {
@@ -60,7 +62,7 @@ export default function HomePage() {
       value: zonesCount,
       link: "/zones",
       icon: (
-        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
         </svg>
       ),
@@ -71,7 +73,7 @@ export default function HomePage() {
       value: wardsCount,
       link: "/zones",
       icon: (
-        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
         </svg>
       ),
@@ -82,7 +84,7 @@ export default function HomePage() {
       value: loading ? "..." : vehicles.length,
       link: "/vehicles",
       icon: (
-        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
       ),
@@ -93,7 +95,7 @@ export default function HomePage() {
       value: loading ? "..." : devices.length,
       link: "/devices",
       icon: (
-        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
         </svg>
       ),
@@ -104,7 +106,7 @@ export default function HomePage() {
       value: loading ? "..." : liveVehiclesCount,
       link: "/reports",
       icon: (
-        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       ),
@@ -115,7 +117,7 @@ export default function HomePage() {
       value: routesCount,
       link: "/iswm/route",
       icon: (
-        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 7a2 2 0 100-4 2 2 0 000 4zM8.5 8h4.5a1.5 1.5 0 011.5 1.5v3a1.5 1.5 0 001.5 1.5h1.5" />
         </svg>
       ),
@@ -126,7 +128,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
       ),
@@ -137,7 +139,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
@@ -149,7 +151,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       ),
@@ -160,7 +162,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
         </svg>
       ),
@@ -171,7 +173,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
         </svg>
       ),
@@ -182,7 +184,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
       ),
@@ -193,7 +195,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
       ),
@@ -204,7 +206,7 @@ export default function HomePage() {
       value: "N/A",
       link: null,
       icon: (
-        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-theme-text-dim/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
       ),
@@ -213,44 +215,44 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f4f6fa] text-slate-800 overflow-hidden select-none">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans">
       {/* Premium light-grey header bar */}
-      <header className="h-16 bg-white px-6 flex items-center justify-between border-b border-slate-200 shrink-0 shadow-sm z-10">
+      <header className="h-16 bg-theme-surface px-6 flex items-center justify-between border-b border-theme-border shrink-0 shadow-sm z-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-[13px] shadow-md shadow-emerald-500/20 shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-theme-accent text-white font-bold text-[13px] shadow-md shadow-emerald-500/20 shrink-0 flex items-center justify-center">
             JN
           </div>
           <div>
-            <h1 className="text-sm font-extrabold text-slate-800 tracking-tight leading-none uppercase">
+            <h1 className="text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase">
               ISWM - Nagar Nigam Jaipur
             </h1>
-            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+            <span className="text-[9px] text-theme-text-dim font-bold uppercase tracking-wider">
               Integrated Solid Waste Management Dashboard
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 select-none">
-            <span className="text-[10px] text-slate-400 uppercase font-extrabold mr-1.5">Lang:</span>
+          <div className="flex items-center bg-theme-surface border border-theme-border rounded-lg px-2 py-1 select-none">
+            <span className="text-[10px] text-theme-text-dim uppercase font-extrabold mr-1.5">Lang:</span>
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="bg-transparent text-xs text-slate-600 font-bold outline-none cursor-pointer pr-1"
+              className="bg-transparent text-xs text-theme-text-dim font-bold outline-none cursor-pointer pr-1"
             >
               <option value="en">English</option>
               <option value="hi">हिन्दी</option>
             </select>
           </div>
 
-          <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+          <div className="flex items-center gap-2 border-l border-theme-border pl-4">
             <div className="text-right hidden sm:block">
-              <div className="text-[11px] font-bold text-slate-700 leading-none">Admin User</div>
-              <span className="text-[8px] font-semibold text-emerald-600 uppercase tracking-wider">
+              <div className="text-[11px] font-bold text-theme-text leading-none">Admin User</div>
+              <span className="text-[8px] font-semibold text-theme-accent uppercase tracking-wider">
                 Online
               </span>
             </div>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xs font-black shadow-md shadow-emerald-500/20">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-black shadow-md shadow-emerald-500/20 flex items-center justify-center">
               AD
             </div>
           </div>
@@ -259,15 +261,15 @@ export default function HomePage() {
 
       {/* Main split container */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 relative">
-        
+
         {/* Left Grid: ISWM Dashboard */}
-        <div className="w-full lg:w-[50%] xl:w-[55%] flex flex-col h-full overflow-y-auto custom-scrollbar p-6 bg-[#f4f6fa] border-r border-slate-200">
+        <div className="w-full lg:w-[50%] xl:w-[55%] flex flex-col h-full overflow-y-auto custom-scrollbar p-6 bg-theme-base border-r border-theme-border">
           <div className="mb-5 flex justify-between items-center shrink-0">
             <div>
-              <h2 className="text-lg font-extrabold text-slate-800 tracking-tight">ISWM Overview</h2>
-              <p className="text-xs text-slate-500">Corporate statistical indicators & operational monitoring</p>
+              <h2 className="text-lg font-extrabold text-theme-text tracking-tight">ISWM Overview</h2>
+              <p className="text-xs text-theme-text-dim">Corporate statistical indicators & operational monitoring</p>
             </div>
-            <div className="text-xs text-emerald-600 font-bold bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 flex items-center gap-1.5 shadow-sm">
+            <div className="text-xs text-theme-accent font-bold bg-theme-surface border border-theme-border px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               Live Telemetry Active
             </div>
@@ -276,69 +278,48 @@ export default function HomePage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
             {cards.map((card, i) => {
               const isNA = card.value === "N/A";
-              return (
-                <div
+              const statCardNode = (
+                <StatCard
                   key={i}
-                  className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between h-[125px] group"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="max-w-[70%]">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider leading-none block mb-1">
-                        {card.title}
-                      </span>
-                      <div className="text-[10px] text-slate-400 truncate leading-none group-hover:text-slate-500 transition-colors">
-                        {card.description}
-                      </div>
-                    </div>
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-300 ${isNA ? "bg-slate-50" : "bg-emerald-50 group-hover:bg-emerald-100"}`}>
-                      {card.icon}
-                    </div>
-                  </div>
+                  title={card.title}
+                  value={card.value}
+                  icon={card.icon}
+                  description={card.description}
+                  className={`h-[125px] cursor-pointer ${isNA ? "opacity-75" : ""}`}
+                />
+              );
 
-                  <div className="flex justify-between items-end mt-2">
-                    <div className={`text-2xl font-black tracking-tight leading-none ${isNA ? "text-slate-400" : "text-slate-800"}`}>
-                      {card.value}
-                    </div>
-                    
-                    {card.link ? (
-                      <Link
-                        href={card.link}
-                        className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 transition flex items-center gap-0.5"
-                      >
-                        See Details <span className="text-[8px] transform group-hover:translate-x-0.5 transition-transform">▶</span>
-                      </Link>
-                    ) : (
-                      <span className="text-[9px] font-bold text-slate-300 uppercase tracking-wider select-none">
-                        N/A
-                      </span>
-                    )}
-                  </div>
-                </div>
+              return card.link ? (
+                <Link key={i} href={card.link} className="block transition duration-200">
+                  {statCardNode}
+                </Link>
+              ) : (
+                statCardNode
               );
             })}
           </div>
         </div>
 
         {/* Right Panel: Live Tracking Map */}
-        <div className="w-full lg:w-[50%] xl:w-[45%] flex flex-col p-6 h-[500px] lg:h-full shrink-0 lg:shrink bg-[#f4f6fa]">
-          <div className="flex-1 bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm flex flex-col relative group">
+        <div className="w-full lg:w-[50%] xl:w-[45%] flex flex-col p-6 h-[500px] lg:h-full shrink-0 lg:shrink bg-theme-base">
+          <div className="flex-1 bg-theme-surface rounded-3xl border border-theme-border overflow-hidden shadow-md flex flex-col relative group">
             {/* Map Header Overlay */}
-            <div className="absolute top-4 left-4 z-[1000] bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-200 shadow-sm pointer-events-none select-none flex items-center gap-2">
+            <div className="absolute top-4 left-4 z-[1000] bg-theme-surface/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-theme-border shadow-sm pointer-events-none select-none flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider leading-none">
+              <span className="text-[10px] font-bold text-theme-text uppercase tracking-wider leading-none">
                 Live Map View
               </span>
             </div>
 
             {loading ? (
-              <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 gap-3">
-                <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-emerald-600 animate-spin" />
-                <div className="text-slate-400 text-xs font-semibold animate-pulse">
+              <div className="flex-1 flex flex-col items-center justify-center bg-theme-surface gap-3">
+                <div className="w-8 h-8 rounded-full border-4 border-theme-border border-t-emerald-600 animate-spin" />
+                <div className="text-theme-text-dim text-xs font-semibold animate-pulse">
                   Connecting to Leaflet telemetry...
                 </div>
               </div>
             ) : (
-              <LiveMap vehicles={vehicles} />
+              <LiveMap vehicles={vehicles} showMenu={false} />
             )}
           </div>
         </div>

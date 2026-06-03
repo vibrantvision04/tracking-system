@@ -5,12 +5,18 @@ import "leaflet/dist/leaflet.css";
 import type { Vehicle, LivePosition } from "@/lib/types";
 import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
+import * as turf from "@turf/turf";
 
-interface Props { vehicles: Vehicle[] }
+interface Props { 
+  vehicles: Vehicle[];
+  showMenu?: boolean;
+}
 
-export default function LiveMap({ vehicles }: Props) {
+export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const markers = useRef<Record<string, L.Marker>>({});
+  const wardsLayerRef = useRef<L.LayerGroup | null>(null);
+  const facilitiesLayerRef = useRef<L.LayerGroup | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -24,15 +30,72 @@ export default function LiveMap({ vehicles }: Props) {
     return "all";
   });
   const [zones, setZones] = useState<any[]>([]);
+  const [regionsList, setRegionsList] = useState<any[]>([]);
   const hasFitBounds = useRef(false);
 
+  const [parkingSpots, setParkingSpots] = useState<any[]>([]);
+  const [transferStations, setTransferStations] = useState<any[]>([]);
+  const [fuelStations, setFuelStations] = useState<any[]>([]);
+  const [workshops, setWorkshops] = useState<any[]>([]);
+
+  // SWR: Load static elements instantly from localStorage cache on mount
   useEffect(() => {
-    api<{ data: any[] }>("/api/zones").then((res) => {
-      setZones(res.data || []);
-    });
+    if (typeof window !== "undefined") {
+      try {
+        const cachedZones = localStorage.getItem("live_zones");
+        const cachedRegions = localStorage.getItem("live_regions");
+        const cachedParking = localStorage.getItem("live_parking_spots");
+        const cachedTransfer = localStorage.getItem("live_transfer_stations");
+        const cachedFuel = localStorage.getItem("live_fuel_stations");
+        const cachedWorkshops = localStorage.getItem("live_workshops");
+
+        if (cachedZones) setZones(JSON.parse(cachedZones));
+        if (cachedRegions) setRegionsList(JSON.parse(cachedRegions));
+        if (cachedParking) setParkingSpots(JSON.parse(cachedParking));
+        if (cachedTransfer) setTransferStations(JSON.parse(cachedTransfer));
+        if (cachedFuel) setFuelStations(JSON.parse(cachedFuel));
+        if (cachedWorkshops) setWorkshops(JSON.parse(cachedWorkshops));
+      } catch (e) {
+        console.warn("Failed to load cached LiveMap layers:", e);
+      }
+    }
   }, []);
 
-
+  useEffect(() => {
+    Promise.all([
+      api<{ data: any[] }>("/api/zones").then((res) => {
+        setZones(res.data || []);
+        localStorage.setItem("live_zones", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load zones:", err)),
+      
+      api<{ success: boolean; data: any[] }>("/api/regions").then((res) => {
+        if (res.success) {
+          setRegionsList(res.data || []);
+          localStorage.setItem("live_regions", JSON.stringify(res.data || []));
+        }
+      }).catch(err => console.error("LiveMap failed to load regions:", err)),
+      
+      api<{ data: any[] }>("/api/parking-spots").then((res) => {
+        setParkingSpots(res.data || []);
+        localStorage.setItem("live_parking_spots", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load parking spots:", err)),
+      
+      api<{ data: any[] }>("/api/transfer-stations").then((res) => {
+        setTransferStations(res.data || []);
+        localStorage.setItem("live_transfer_stations", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load transfer stations:", err)),
+      
+      api<{ data: any[] }>("/api/fuel-stations").then((res) => {
+        setFuelStations(res.data || []);
+        localStorage.setItem("live_fuel_stations", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load fuel stations:", err)),
+      
+      api<{ data: any[] }>("/api/workshops").then((res) => {
+        setWorkshops(res.data || []);
+        localStorage.setItem("live_workshops", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load workshops:", err))
+    ]).catch(err => console.error("LiveMap SWR revalidation failed:", err));
+  }, []);
 
   const livePosAccumulator = useRef<Record<string, LivePosition>>({});
 
@@ -70,7 +133,7 @@ export default function LiveMap({ vehicles }: Props) {
   useEffect(() => {
     if (!box.current || mapRef.current) return;
     const m = L.map(box.current, { 
-      zoomControl: true,
+      zoomControl: false,
       minZoom: 5,
       maxBounds: [[6.0, 68.0], [38.0, 98.0]],
       maxBoundsViscosity: 1.0,
@@ -91,6 +154,13 @@ export default function LiveMap({ vehicles }: Props) {
     });
 
     googleMapLayer.addTo(m); // Default layer
+    
+    // Initialize Wards layer group
+    wardsLayerRef.current = L.layerGroup().addTo(m);
+    facilitiesLayerRef.current = L.layerGroup().addTo(m);
+    
+    // Add zoom control manually in the bottom right corner
+    L.control.zoom({ position: 'bottomright' }).addTo(m);
 
     L.control.layers({
       "Google Maps (Default)": googleMapLayer,
@@ -103,8 +173,326 @@ export default function LiveMap({ vehicles }: Props) {
       m.remove(); 
       mapRef.current = null; 
       markers.current = {}; 
+      wardsLayerRef.current = null;
+      facilitiesLayerRef.current = null;
     };
   }, []);
+
+  // ─── Render Facilities (Parking Spots, Transfer Stations) ───
+  useEffect(() => {
+    const layer = facilitiesLayerRef.current;
+    if (!layer) return;
+
+    layer.clearLayers();
+
+    const renderFacility = (item: any, typeName: string, iconSymbol: string, defaultColor: string) => {
+      if (!item.geojson) return;
+      try {
+        let feature = item.geojson;
+        if (typeof feature === "string") {
+          try {
+            feature = JSON.parse(feature);
+          } catch (e) {
+            console.error("Failed to parse geojson string for facility:", e);
+            return;
+          }
+        }
+        const center = turf.centroid(feature);
+        if (!center || !center.geometry || !center.geometry.coordinates) return;
+        const coords = center.geometry.coordinates;
+        const latLng = [coords[1], coords[0]] as [number, number];
+        
+        const color = item.color || defaultColor;
+
+        // Draw Polygon Fencing Border
+        L.geoJSON(feature, {
+          style: {
+            color: color,
+            weight: 2,
+            fillColor: color,
+            fillOpacity: 0.15,
+            dashArray: "3, 3"
+          }
+        }).addTo(layer);
+
+        const iconHtml = `<div style="background-color: ${color}; width: 28px; height: 28px; border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${iconSymbol}</div>`;
+
+        const icon = L.divIcon({
+          html: iconHtml,
+          className: "facility-marker",
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+
+        const m = L.marker(latLng, { icon }).addTo(layer);
+        m.bindPopup(`
+          <div style="font-family:Inter,sans-serif;font-size:12px;padding:4px;color:#1e293b;text-align:center;">
+            <b style="font-size:14px;color:${color};">${item.name}</b><br/>
+            <span style="color:#64748b;font-weight:bold;">${typeName}</span><br/>
+            ${item.address ? `<span style="color:#64748b;">${item.address}</span>` : ''}
+          </div>
+        `);
+      } catch (err) {
+        console.error("Failed to render facility:", err);
+      }
+    };
+
+    parkingSpots.forEach(p => renderFacility(p, "Parking Spot", "P", "#000000"));
+    transferStations.forEach(t => renderFacility(t, "Transfer Station", "T", "#000000"));
+    fuelStations.forEach(f => renderFacility(f, "Fuel Station", "F", "#000000"));
+    workshops.forEach(w => renderFacility(w, "Workshop", "W", "#000000"));
+
+  }, [parkingSpots, transferStations, fuelStations, workshops]);
+
+  // ─── Render Ward Boundaries overlay on map ───
+  useEffect(() => {
+    const layer = wardsLayerRef.current;
+    if (!layer || !mapRef.current) return;
+
+    layer.clearLayers();
+
+    const isAllJaipur = !selectedZone || selectedZone === "all";
+
+    if (isAllJaipur) {
+      // Draw all zones and their wards
+      const realZones = zones.filter(z => z.id !== -1);
+      realZones.forEach((z) => {
+        const zoneWards = regionsList.filter(r => 
+          r.region_type_id === 3 && 
+          r.parent_id === z.id
+        );
+
+        const zoneRegion = regionsList.find(r => r.region_type_id === 2 && r.id === z.id);
+        const zoneColor = zoneRegion && zoneRegion.color ? zoneRegion.color : "#8b5cf6";
+
+        // Draw Combined Zone boundary for this zone
+        if (zoneRegion && zoneRegion.geojson) {
+          try {
+            const zoneBoundaryLayer = L.geoJSON(zoneRegion.geojson, {
+              style: {
+                color: zoneColor,
+                weight: 4.5,
+                fillColor: zoneColor,
+                fillOpacity: 0.15,
+              }
+            });
+
+            zoneBoundaryLayer.bindPopup(`
+              <div style="font-family:Inter,sans-serif;font-size:12px;padding:6px;color:#1e293b;">
+                <b style="font-size:14px;color:#4f46e5;">${z.region_name || z.name || `Zone ${z.id}`}</b><br/>
+                <span style="color:#64748b;font-weight:bold;">Combined Zone Boundary</span><br/>
+                <span style="color:#64748b;">Wards: ${zoneWards.length} Total</span>
+              </div>
+            `);
+
+            zoneBoundaryLayer.on("mouseover", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: 0.25,
+                weight: 5.5,
+              });
+            });
+
+            zoneBoundaryLayer.on("mouseout", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: 0.15,
+                weight: 4.5,
+              });
+            });
+
+            layer.addLayer(zoneBoundaryLayer);
+          } catch (err) {
+            console.error("Failed to render zone boundary", err);
+          }
+        }
+
+        // Draw all individual Wards of this zone as thin dividers
+        zoneWards.forEach((w) => {
+          if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+            try {
+              const regionGeoJSON = L.geoJSON(w.geojson, {
+                style: {
+                  color: w.color || zoneColor,
+                  weight: 1.0,
+                  dashArray: "3, 4",
+                  fillColor: w.color || zoneColor,
+                  fillOpacity: 0.0,
+                },
+              });
+
+              regionGeoJSON.bindPopup(`
+                <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
+                  <b style="font-size:12px;color:#4f46e5;">${w.region_name}</b><br/>
+                  <span style="color:#64748b;font-weight:bold;">Vidhansabha: ${z.region_name || z.name}</span><br/>
+                  <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
+                </div>
+              `);
+
+              regionGeoJSON.on("mouseover", function (e) {
+                const layerObj = e.target;
+                layerObj.setStyle({
+                  fillOpacity: 0.2,
+                  weight: 2.2,
+                  dashArray: undefined,
+                });
+              });
+
+              regionGeoJSON.on("mouseout", function (e) {
+                const layerObj = e.target;
+                layerObj.setStyle({
+                  fillOpacity: 0.0,
+                  weight: 1.0,
+                  dashArray: "3, 4",
+                });
+              });
+
+              layer.addLayer(regionGeoJSON);
+            } catch (err) {
+              console.error("Failed to render ward boundary in LiveMap Jaipur view", err);
+            }
+          }
+        });
+      });
+
+      // Fit map to show all wards
+      if (regionsList.length > 0) {
+        try {
+          const boundsGroup = L.featureGroup();
+          regionsList.forEach(w => {
+            if (w.region_type_id === 3 && w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+              const g = L.geoJSON(w.geojson);
+              boundsGroup.addLayer(g);
+            }
+          });
+          const bounds = boundsGroup.getBounds();
+          if (bounds.isValid()) {
+            mapRef.current.fitBounds(bounds, { padding: [30, 30] });
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    } else {
+      const activeZoneId = parseInt(selectedZone);
+      const activeWards = regionsList.filter(r => 
+        r.region_type_id === 3 && 
+        r.parent_id === activeZoneId
+      );
+
+      const activeZone = zones.find(z => z.id === activeZoneId);
+      const zoneName = activeZone ? (activeZone.region_name || activeZone.name) : `Zone ${activeZoneId}`;
+
+      const selectedZoneRegion = regionsList.find(r => r.region_type_id === 2 && r.id === activeZoneId);
+      const zoneColor = selectedZoneRegion && selectedZoneRegion.color ? selectedZoneRegion.color : "#8b5cf6";
+
+      // 1. Draw Combined Zone Boundary
+      if (selectedZoneRegion && selectedZoneRegion.geojson) {
+        try {
+          const zoneBoundaryLayer = L.geoJSON(selectedZoneRegion.geojson, {
+            style: {
+              color: zoneColor,
+              weight: 4.5,
+              fillColor: zoneColor,
+              fillOpacity: 0.18,
+            }
+          });
+
+          zoneBoundaryLayer.bindPopup(`
+            <div style="font-family:Inter,sans-serif;font-size:12px;padding:6px;color:#1e293b;">
+              <b style="font-size:14px;color:#4f46e5;">${zoneName}</b><br/>
+              <span style="color:#64748b;font-weight:bold;">Combined Zone Boundary</span><br/>
+              <span style="color:#64748b;">Wards: 1 to ${activeWards.length} (${activeWards.length} Total)</span>
+            </div>
+          `);
+
+          zoneBoundaryLayer.on("mouseover", function (e) {
+            const layerObj = e.target;
+            layerObj.setStyle({
+              fillOpacity: 0.28,
+              weight: 5.5,
+            });
+          });
+
+          zoneBoundaryLayer.on("mouseout", function (e) {
+            const layerObj = e.target;
+            layerObj.setStyle({
+              fillOpacity: 0.18,
+              weight: 4.5,
+            });
+          });
+
+          layer.addLayer(zoneBoundaryLayer);
+        } catch (err) {
+          console.error("Failed to render pre-calculated combined zone boundary", err);
+        }
+      }
+
+      // 2. Draw individual Wards inside
+      activeWards.forEach((w) => {
+        if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+          try {
+            const regionGeoJSON = L.geoJSON(w.geojson, {
+              style: {
+                color: w.color || zoneColor,
+                weight: 1.2,
+                dashArray: "3, 4",
+                fillColor: w.color || zoneColor,
+                fillOpacity: 0.0, // transparent inside when displaying combined boundary to avoid overlap
+              },
+            });
+
+            regionGeoJSON.bindPopup(`
+              <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
+                <b style="font-size:12px;color:#4f46e5;">${w.region_name}</b><br/>
+                <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
+              </div>
+            `);
+
+            regionGeoJSON.on("mouseover", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: 0.25,
+                weight: 2.5,
+                dashArray: undefined,
+              });
+            });
+
+            regionGeoJSON.on("mouseout", function (e) {
+              const layerObj = e.target;
+              layerObj.setStyle({
+                fillOpacity: 0.0,
+                weight: 1.2,
+                dashArray: "3, 4",
+              });
+            });
+
+            layer.addLayer(regionGeoJSON);
+          } catch (err) {
+            console.error("Failed to render live map ward polygon", err);
+          }
+        }
+      });
+
+      if (activeWards.length > 0) {
+        try {
+          const boundsGroup = L.featureGroup();
+          activeWards.forEach(w => {
+            if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+              const g = L.geoJSON(w.geojson);
+              boundsGroup.addLayer(g);
+            }
+          });
+          const bounds = boundsGroup.getBounds();
+          if (bounds.isValid()) {
+            mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  }, [selectedZone, regionsList, zones]);
 
   // ─── Marker helper ───
   const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string, isLive: boolean, lastTime?: string | null) => {
@@ -347,87 +735,89 @@ export default function LiveMap({ vehicles }: Props) {
       <div ref={box} className="flex-1 w-full" />
 
       {/* Overlay Panel */}
-      <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[300px] max-h-[calc(100%-32px)] bg-[rgba(15,21,37,.92)] backdrop-blur-2xl rounded-xl border border-white/[.06] z-[1000] flex flex-col shadow-2xl shadow-black/40">
-        {/* Stats Row */}
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[.05] text-[11px] font-semibold">
-          <span className="text-green-400">● {counts.running}</span>
-          <span className="text-amber-400">● {counts.idle}</span>
-          <span className="text-red-400">● {counts.stopped}</span>
-          <span className="text-slate-500 ml-auto">{filteredByZone.length} visible</span>
-        </div>
+      {showMenu && (
+        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[300px] max-h-[calc(100%-32px)] bg-[rgba(15,21,37,.92)] backdrop-blur-2xl rounded-xl border border-theme-border z-[1000] flex flex-col shadow-2xl shadow-black/40">
+          {/* Stats Row */}
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-theme-border text-[11px] font-semibold">
+            <span className="text-green-400">● {counts.running}</span>
+            <span className="text-amber-400">● {counts.idle}</span>
+            <span className="text-red-400">● {counts.stopped}</span>
+            <span className="text-theme-text-dim ml-auto">{filteredByZone.length} visible</span>
+          </div>
 
-        {/* Zone Selector */}
-        <div className="p-3 border-b border-white/[.05]">
-          <select
-            value={selectedZone || "all"}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSelectedZone(val);
-              localStorage.setItem("selectedZone", val);
-            }}
-            className="w-full px-3 py-2 bg-black/25 border border-white/[.06] rounded-lg text-[13px] text-white placeholder:text-slate-600 outline-none focus:border-indigo-500/40 transition"
-          >
-            <option value="all">All Zones</option>
-            {zones.map((z) => (
-              <option key={z.id} value={z.id}>{z.region_name}</option>
-            ))}
-          </select>
-        </div>
+          {/* Zone Selector */}
+          <div className="p-3 border-b border-theme-border">
+            <select
+              value={selectedZone || "all"}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedZone(val);
+                localStorage.setItem("selectedZone", val);
+              }}
+              className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-[13px] text-theme-text placeholder:text-theme-text-dim outline-none focus:border-emerald-500 transition"
+            >
+              <option value="all">Jaipur Heritage (All Zones)</option>
+              {zones.map((z, idx) => (
+                <option key={`zone-${z.id}-${idx}`} value={z.id}>{z.region_name}</option>
+              ))}
+            </select>
+          </div>
 
-        {/* Search */}
-        <div className="p-3 border-b border-white/[.05]">
-          <input
-            placeholder="Search reg no, type…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-3 py-2 bg-black/25 border border-white/[.06] rounded-lg text-[13px] text-white placeholder:text-slate-600 outline-none focus:border-indigo-500/40 transition"
-          />
-        </div>
+          {/* Search */}
+          <div className="p-3 border-b border-theme-border">
+            <input
+              placeholder="Search reg no, type…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-[13px] text-theme-text placeholder:text-theme-text-dim outline-none focus:border-emerald-500 transition"
+            />
+          </div>
 
-        {/* List */}
-        <div className="flex-1 overflow-y-auto">
-          {filtered.map((v) => {
-            const imei = v.gps_device?.imei || "";
-            const pos = livePos[imei];
-            const sel = selected === imei;
-            const dotColor = v.realStatus === "running" ? "#22c55e" : v.realStatus === "idle" ? "#f59e0b" : v.realStatus === "stopped" ? "#ef4444" : "#475569";
-            return (
-              <div
-                key={v.id}
-                onClick={() => {
-                  setSelected(imei);
-                  if (markers.current[imei] && mapRef.current) {
-                    mapRef.current.setView(markers.current[imei].getLatLng(), 16);
-                    markers.current[imei].openPopup();
-                  }
-                }}
-                className={`flex items-center gap-3 px-4 py-3 border-b border-white/[.04] cursor-pointer transition
-                  ${sel ? "bg-indigo-500/[.1] border-l-[3px] border-l-indigo-500" : "hover:bg-white/[.02]"}`}
-              >
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.realStatus === "running" ? `0 0 6px ${dotColor}` : "none" }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="text-[13px] font-semibold text-slate-200 truncate">{v.registration_no}</div>
-                      {statuses[imei] === "connected" && (
-                        <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded-full border border-green-500/20 font-medium">CONNECTED</span>
+          {/* List */}
+          <div className="flex-1 overflow-y-auto">
+            {filtered.map((v, idx) => {
+              const imei = v.gps_device?.imei || "";
+              const pos = livePos[imei];
+              const sel = selected === imei;
+              const dotColor = v.realStatus === "running" ? "#22c55e" : v.realStatus === "idle" ? "#f59e0b" : v.realStatus === "stopped" ? "#ef4444" : "#475569";
+              return (
+                <div
+                  key={`vehicle-${v.id}-${idx}`}
+                  onClick={() => {
+                    setSelected(imei);
+                    if (markers.current[imei] && mapRef.current) {
+                      mapRef.current.setView(markers.current[imei].getLatLng(), 16);
+                      markers.current[imei].openPopup();
+                    }
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 border-b border-theme-border cursor-pointer transition
+                    ${sel ? "bg-theme-surface-hover border-l-[3px] border-l-indigo-500" : "hover:bg-theme-surface"}`}
+                >
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.realStatus === "running" ? `0 0 6px ${dotColor}` : "none" }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="text-[13px] font-semibold text-theme-text truncate">{v.registration_no}</div>
+                        {statuses[imei] === "connected" && (
+                          <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded-full border border-green-500/20 font-medium">CONNECTED</span>
+                        )}
+                      </div>
+                      {pos && (
+                        <div className={`text-[9px] px-1.5 py-0.5 rounded border ${pos.ignition ? "text-green-400 border-green-400/30" : "text-red-400 border-red-400/30"}`}>
+                          IGN {pos.ignition ? "ON" : "OFF"}
+                        </div>
                       )}
                     </div>
-                    {pos && (
-                      <div className={`text-[9px] px-1.5 py-0.5 rounded border ${pos.ignition ? "text-green-400 border-green-400/30" : "text-red-400 border-red-400/30"}`}>
-                        IGN {pos.ignition ? "ON" : "OFF"}
-                      </div>
-                    )}
+                    <div className="text-[11px] text-theme-text-dim truncate">{v.vehicle_type?.name || "—"}</div>
+                    {pos && <div className="text-[10px] text-theme-accent mt-0.5">{pos.speed} km/h</div>}
                   </div>
-                  <div className="text-[11px] text-slate-500 truncate">{v.vehicle_type?.name || "—"}</div>
-                  {pos && <div className="text-[10px] text-indigo-400 mt-0.5">{pos.speed} km/h</div>}
                 </div>
-              </div>
-            );
-          })}
-          {filtered.length === 0 && <div className="text-center py-8 text-slate-600 text-sm">No vehicles</div>}
+              );
+            })}
+            {filtered.length === 0 && <div className="text-center py-8 text-theme-text-dim text-sm">No vehicles</div>}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

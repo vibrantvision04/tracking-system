@@ -11,23 +11,25 @@ import (
 )
 
 type BatchWriter struct {
-	repo         *repository.GPSRepository
-	batchSize    int
-	timeout      time.Duration
-	buffer       []decoder.AVLData
-	mu           sync.Mutex
-	lastFlush    time.Time
-	flushChannel chan struct{}
+	repo          *repository.GPSRepository
+	batchSize     int
+	bufferCeiling int
+	timeout       time.Duration
+	buffer        []decoder.AVLData
+	mu            sync.Mutex
+	lastFlush     time.Time
+	flushChannel  chan struct{}
 }
 
-func NewBatchWriter(repo *repository.GPSRepository, size int, timeout time.Duration) *BatchWriter {
+func NewBatchWriter(repo *repository.GPSRepository, size int, timeout time.Duration, ceiling int) *BatchWriter {
 	bw := &BatchWriter{
-		repo:         repo,
-		batchSize:    size,
-		timeout:      timeout,
-		buffer:       make([]decoder.AVLData, 0, size),
-		lastFlush:    time.Now(),
-		flushChannel: make(chan struct{}, 1),
+		repo:          repo,
+		batchSize:     size,
+		bufferCeiling: ceiling,
+		timeout:       timeout,
+		buffer:        make([]decoder.AVLData, 0, size),
+		lastFlush:     time.Now(),
+		flushChannel:  make(chan struct{}, 1),
 	}
 	go bw.run()
 	return bw
@@ -37,7 +39,7 @@ func (bw *BatchWriter) Add(data decoder.AVLData) {
 	bw.mu.Lock()
 	
 	// HARD CEILING: Prevent buffer from growing infinitely if DB is slow
-	if len(bw.buffer) >= 1000 {
+	if len(bw.buffer) >= bw.bufferCeiling {
 		bw.mu.Unlock()
 		log.Warn().Str("imei", data.IMEI).Msg("Batch writer buffer full, dropping record to prevent OOM")
 		return
@@ -87,5 +89,11 @@ func (bw *BatchWriter) flush() {
 		log.Error().Err(err).Int("count", len(dataToInsert)).Msg("Failed to bulk insert GPS data")
 	} else {
 		log.Debug().Int("count", len(dataToInsert)).Msg("Successfully bulk inserted GPS data")
+	}
+
+	// Upsert the latest active tracking points to latest_gps_data table in batch
+	err = bw.repo.UpdateLatestGPS(context.Background(), dataToInsert)
+	if err != nil {
+		log.Error().Err(err).Int("count", len(dataToInsert)).Msg("Failed to batch update latest GPS data in DB")
 	}
 }

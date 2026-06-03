@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"gps-tracking-system/internal/repository"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -42,18 +44,80 @@ type CreateRouteRequest struct {
 	Lanes          json.RawMessage `json:"lanes"`
 }
 
+// GetRouteTypes returns all route types from the database.
 func (h *Handler) GetRouteTypes(w http.ResponseWriter, r *http.Request) {
-	types := []map[string]interface{}{
-		{"id": 1, "name": "D2D"},
-		{"id": 2, "name": "SWEEPING"},
-		{"id": 3, "name": "DUSTBIN"},
-		{"id": 4, "name": "COMMERCIAL"},
+	types, err := h.routeRepo.GetAllRouteTypes(r.Context())
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch route types: " + err.Error()})
+		return
+	}
+	if types == nil {
+		types = []repository.RouteType{}
 	}
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success":     true,
 		"status_code": 200,
 		"data":        types,
 	})
+}
+
+// CreateRouteType creates a new route type.
+func (h *Handler) CreateRouteType(w http.ResponseWriter, r *http.Request) {
+	var rt repository.RouteType
+	if err := json.NewDecoder(r.Body).Decode(&rt); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+		return
+	}
+	if rt.Name == "" {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Route type name is required"})
+		return
+	}
+	if err := h.routeRepo.CreateRouteType(r.Context(), &rt); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create route type: " + err.Error()})
+		return
+	}
+	sendJSON(w, http.StatusCreated, map[string]interface{}{"success": true, "data": rt})
+}
+
+// UpdateRouteType updates a route type name.
+func (h *Handler) UpdateRouteType(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+		return
+	}
+	if body.Name == "" {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Name is required"})
+		return
+	}
+	if err := h.routeRepo.UpdateRouteType(r.Context(), id, body.Name); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update route type: " + err.Error()})
+		return
+	}
+	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+}
+
+// DeleteRouteType deletes a route type (and nullifies FK on routes).
+func (h *Handler) DeleteRouteType(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+	if err := h.routeRepo.DeleteRouteType(r.Context(), id); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete route type: " + err.Error()})
+		return
+	}
+	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 
 func (h *Handler) GetShifts(w http.ResponseWriter, r *http.Request) {
@@ -156,19 +220,22 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 			COALESCE(r.distance, 0.0), 
 			COALESCE(r.route_type_id, 1), 
 			r.geometry_id, 
-			r.ward_id, 
+			rw.ward_id, 
 			r.shift_id, 
-			r.lanes, 
+			'[]'::jsonb as lanes, 
 			COALESCE(r.is_active, true),
 			COALESCE(r.created_at, NOW()),
 			COALESCE(w.region_name, ''),
 			COALESCE(s.shift_name, ''),
 			COALESCE(g.polygon::text, ''),
-			COALESCE(g.color, '')
+			COALESCE(g.color, ''),
+			COALESCE(rt.name, 'D2D')
 		FROM routes r
-		LEFT JOIN regions w ON r.ward_id = w.id
+		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
+		LEFT JOIN regions w ON rw.ward_id = w.id
 		LEFT JOIN shifts s ON r.shift_id = s.id
 		LEFT JOIN geofences g ON r.geometry_id = g.id
+		LEFT JOIN route_types_iswm rt ON r.route_type_id = rt.id
 		ORDER BY r.id DESC
 	`
 
@@ -179,13 +246,6 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	routeTypeNames := map[int]string{
-		1: "D2D",
-		2: "SWEEPING",
-		3: "DUSTBIN",
-		4: "COMMERCIAL",
-	}
-
 	routes := []RouteResponse{}
 	for rows.Next() {
 		var r RouteResponse
@@ -193,12 +253,8 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(
 			&r.ID, &r.RouteName, &r.Identification, &r.Distance, &r.RouteTypeID,
 			&r.GeometryID, &r.WardID, &r.ShiftID, &lanes, &r.IsActive, &r.UpdatedAt,
-			&r.WardName, &r.ShiftName, &r.GeoJSON, &r.Color,
+			&r.WardName, &r.ShiftName, &r.GeoJSON, &r.Color, &r.RouteTypeName,
 		); err == nil {
-			r.RouteTypeName = routeTypeNames[r.RouteTypeID]
-			if r.RouteTypeName == "" {
-				r.RouteTypeName = "D2D"
-			}
 			if len(lanes) > 0 {
 				r.Lanes = json.RawMessage(lanes)
 			} else {

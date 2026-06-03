@@ -96,14 +96,14 @@ export default function ReportsPage() {
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-[#f8fafc]">
       <div className="max-w-[1600px] mx-auto">
-        <h1 className="text-xl font-bold text-slate-800 mb-6">ISWM - NAGAR NIGAM JAIPUR</h1>
+        <h1 className="text-xl font-bold text-theme-text mb-6">ISWM - NAGAR NIGAM JAIPUR</h1>
 
         {/* Filters Grid */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+        <div className="bg-theme-surface rounded-xl border border-theme-border p-6 mb-6 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Zone</label>
-              <select className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500">
+              <label className="block text-xs font-medium text-theme-text-dim mb-2">Zone</label>
+              <select className="w-full px-3 py-2.5 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500">
                 <option>Select Zone</option>
                 {zones.map((z) => (
                   <option key={z.id} value={z.id}>{z.region_name}</option>
@@ -111,8 +111,8 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Ward</label>
-              <select className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500">
+              <label className="block text-xs font-medium text-theme-text-dim mb-2">Ward</label>
+              <select className="w-full px-3 py-2.5 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500">
                 <option>Select Ward</option>
                 {wards.map((w) => (
                   <option key={w.id} value={w.id}>{w.region_name}</option>
@@ -120,11 +120,11 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Vehicle(s) RTO</label>
+              <label className="block text-xs font-medium text-theme-text-dim mb-2">Vehicle(s) RTO</label>
               <select 
                 value={selectedVehicle}
                 onChange={(e) => setSelectedVehicle(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2.5 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500"
               >
                 <option value="">All Vehicles</option>
                 {vehicles.map((v) => (
@@ -136,19 +136,19 @@ export default function ReportsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">From Date</label>
+              <label className="block text-xs font-medium text-theme-text-dim mb-2">From Date</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500" />
+                className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">To Date</label>
+              <label className="block text-xs font-medium text-theme-text-dim mb-2">To Date</label>
               <input type="date" value={date} readOnly
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 bg-slate-100 cursor-not-allowed" />
+                className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500 bg-slate-100 cursor-not-allowed" />
             </div>
             <div>
               <button 
                 onClick={() => load(date, 1, selectedVehicle)}
-                className="px-6 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition shadow-sm shadow-green-600/20"
+                className="px-6 py-2.5 bg-green-600 text-theme-text text-sm font-medium rounded-lg hover:bg-green-700 transition shadow-sm shadow-green-600/20"
               >
                 Load
               </button>
@@ -157,10 +157,10 @@ export default function ReportsPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-theme-surface rounded-xl border border-theme-border shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[10px]">
-              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase tracking-tighter">
+              <thead className="bg-theme-surface text-theme-text-dim border-b border-theme-border uppercase tracking-tighter">
                 <tr>
                   <th className="px-3 py-3 font-bold">S. NO.</th>
                   <th className="px-3 py-3 font-bold">DATE</th>
@@ -182,18 +182,18 @@ export default function ReportsPage() {
                   <th className="px-3 py-3 font-bold text-center">STOPPAGES</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-slate-100 text-theme-text">
                 {loading ? (
                   <tr>
-                    <td colSpan={18} className="px-4 py-8 text-center text-slate-400">Loading reports...</td>
+                    <td colSpan={18} className="px-4 py-8 text-center text-theme-text-dim">Loading reports...</td>
                   </tr>
                 ) : reports.length === 0 ? (
                   <tr>
-                    <td colSpan={18} className="px-4 py-8 text-center text-slate-400">No reports found for this date.</td>
+                    <td colSpan={18} className="px-4 py-8 text-center text-theme-text-dim">No reports found for this date.</td>
                   </tr>
                 ) : (
                   reports.map((r, i) => (
-                    <tr key={r.id} className="hover:bg-slate-50 transition">
+                    <tr key={r.id} className="hover:bg-theme-surface transition">
                       <td className="px-3 py-3">{(page - 1) * limit + i + 1}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{new Date(r.report_date).toLocaleDateString()}</td>
                       <td className="px-3 py-3 font-bold text-slate-900 whitespace-nowrap">{r.registration_no}</td>
@@ -220,22 +220,22 @@ export default function ReportsPage() {
           </div>
 
           {/* Pagination */}
-          <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between bg-slate-50">
-            <div className="text-xs text-slate-500">
-              Page <span className="font-medium text-slate-700">{page}</span> of <span className="font-medium text-slate-700">{totalPages}</span>
+          <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between bg-theme-surface">
+            <div className="text-xs text-theme-text-dim">
+              Page <span className="font-medium text-theme-text">{page}</span> of <span className="font-medium text-theme-text">{totalPages}</span>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1 || loading}
-                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-medium bg-theme-surface hover:bg-theme-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Previous
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages || loading}
-                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-medium bg-theme-surface hover:bg-theme-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Next
               </button>
