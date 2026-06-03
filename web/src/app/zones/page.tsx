@@ -378,9 +378,64 @@ export default function RegionManager() {
       {/* Wards Assignment Multi-Select for Zones */}
       {Number(form.region_type_id) === 2 && (
         <div className="pt-2 border-t border-slate-100 space-y-2">
-          <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
-            Wards Assignment ({form.sub_region_ids.length} Selected)
-          </label>
+          <div className="flex justify-between items-end">
+            <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
+              Wards Assignment ({form.sub_region_ids.length} Selected)
+            </label>
+            <button
+              type="button"
+              onClick={async () => {
+                const selectedWards = regions.filter(r => r.region_type_id === 3 && form.sub_region_ids.includes(r.id) && r.geojson && r.geojson !== "null");
+                if (selectedWards.length === 0) {
+                  alert("No wards selected or selected wards have no geometry.");
+                  return;
+                }
+                try {
+                  const turf = await import("@turf/turf");
+                  let features: any[] = [];
+                  for (const ward of selectedWards) {
+                    try {
+                      const geom = typeof ward.geojson === 'string' ? JSON.parse(ward.geojson) : ward.geojson;
+                      if (!geom) continue;
+                      if (geom.type === "FeatureCollection" && geom.features) {
+                        features.push(...geom.features);
+                      } else if (geom.type === "Feature") {
+                        features.push(geom);
+                      } else if (geom.type === "Polygon" || geom.type === "MultiPolygon") {
+                        features.push(turf.feature(geom));
+                      }
+                    } catch (e) {
+                      console.warn("Failed to parse geometry for ward", ward.id);
+                    }
+                  }
+                  if (features.length === 0) {
+                    alert("No valid geometries found in the selected wards.");
+                    return;
+                  }
+                  
+                  let unioned = features[0];
+                  for (let i = 1; i < features.length; i++) {
+                    try {
+                      unioned = turf.union(turf.featureCollection([unioned, features[i]]));
+                    } catch(e) {
+                      console.error(`Failed to union ward ${i}:`, e);
+                    }
+                  }
+                  if (unioned) {
+                    const fc = turf.featureCollection([unioned]);
+                    setForm(prev => ({ ...prev, geojson: JSON.stringify(fc, null, 2) }));
+                  }
+                } catch(e) {
+                  console.error("Failed to generate union:", e);
+                  alert("Failed to auto-generate boundary from wards.");
+                }
+              }}
+              className="text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 px-2 py-1 rounded transition"
+              title="Automatically combine the boundaries of the selected wards"
+            >
+              Auto-Generate Boundary
+            </button>
+          </div>
           <div className="bg-theme-surface border border-theme-border rounded-xl p-3 space-y-2 shadow-inner">
             <input
               type="text"

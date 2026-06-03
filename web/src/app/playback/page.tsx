@@ -109,71 +109,35 @@ function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
   return smoothed;
 }
 
-function downsampleForOsrm(points: GpsDataPoint[]): GpsDataPoint[] {
-  if (points.length < 2) return points;
-  const result: GpsDataPoint[] = [points[0]];
-  for (let i = 1; i < points.length; i++) {
-    const prev = result[result.length - 1];
-    const curr = points[i];
-    const dist = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng) * 1000;
-    if (dist > 30) {
-      result.push(curr);
+import * as turf from "@turf/turf";
+
+function fetchMapMatchedRouteTurf(points: GpsDataPoint[], checkpoints: any[], toleranceMeters: number = 10): [number, number][] {
+  if (points.length === 0) return [];
+  if (!checkpoints || checkpoints.length < 2) {
+    return points.map(p => [p.lat, p.lng] as [number, number]);
+  }
+
+  // Create a Turf LineString from the checkpoints (longitude, latitude)
+  const coords = checkpoints.sort((a, b) => a.sequence_order - b.sequence_order).map(cp => [cp.longitude, cp.latitude]);
+  if (coords.length < 2) {
+    return points.map(p => [p.lat, p.lng] as [number, number]);
+  }
+  
+  const routeLine = turf.lineString(coords);
+  const matchedCoords: [number, number][] = [];
+
+  points.forEach(p => {
+    const pt = turf.point([p.lng, p.lat]);
+    const snapped = turf.nearestPointOnLine(routeLine, pt, { units: 'meters' });
+    const dist = (snapped.properties?.dist || 0); // Distance is returned in the requested units
+    if (dist <= toleranceMeters) {
+      matchedCoords.push([snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]]);
+    } else {
+      matchedCoords.push([p.lat, p.lng]);
     }
-  }
-  if (result[result.length - 1] !== points[points.length - 1]) {
-    result.push(points[points.length - 1]);
-  }
-  return result;
-}
+  });
 
-async function fetchMapMatchedRoute(points: GpsDataPoint[]): Promise<[number, number][]> {
-  const downsampled = downsampleForOsrm(points);
-  const CHUNK_SIZE = 90;
-  const fetchPromises: Promise<[number, number][]>[] = [];
-
-  for (let i = 0; i < downsampled.length; i += CHUNK_SIZE) {
-    const chunk = downsampled.slice(i, i + CHUNK_SIZE);
-    if (chunk.length < 2) {
-      if (chunk.length === 1) fetchPromises.push(Promise.resolve([[chunk[0].lat, chunk[0].lng]]));
-      continue;
-    }
-
-    const coordsStr = chunk.map(p => `${p.lng},${p.lat}`).join(';');
-
-    const p = fetch(
-      `https://router.project-osrm.org/match/v1/driving/${coordsStr}?geometries=geojson&overview=full`
-    )
-    .then(res => {
-      if (!res.ok) throw new Error("OSRM Error");
-      return res.json();
-    })
-    .then(data => {
-      const matchedCoords: [number, number][] = [];
-      if (data.code === 'Ok' && data.matchings && data.matchings.length > 0) {
-        data.matchings.forEach((m: any) => {
-          if (m.geometry && m.geometry.coordinates) {
-            m.geometry.coordinates.forEach((coord: [number, number]) => {
-              matchedCoords.push([coord[1], coord[0]]);
-            });
-          }
-        });
-      } else {
-        chunk.forEach(p => matchedCoords.push([p.lat, p.lng]));
-      }
-      return matchedCoords;
-    })
-    .catch(err => {
-      console.error("OSRM Match failed:", err);
-      return chunk.map(p => [p.lat, p.lng] as [number, number]);
-    });
-
-    fetchPromises.push(p);
-  }
-
-  const results = await Promise.all(fetchPromises);
-  const matchedCoordinates: [number, number][] = [];
-  results.forEach(res => matchedCoordinates.push(...res));
-  return matchedCoordinates;
+  return matchedCoords;
 }
 
 function detectStoppages(points: GpsDataPoint[]): StoppagePoint[] {
@@ -524,7 +488,25 @@ export default function PlaybackPage() {
       if (validPoints.length === 0) return;
 
       const baseCoords = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
-      const matchedCoords = await fetchMapMatchedRoute(validPoints);
+      
+      // Fetch the assigned route for this vehicle today to snap against
+      let routeCheckpoints: any[] = [];
+      try {
+        const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
+        if (vehicle) {
+          const cov = await api<any>(`/api/vehicles/${vehicle.id}/route-coverage?date=${date}`);
+          if (cov.success && cov.route_id) {
+            const cpRes = await api<any>(`/api/routes/${cov.route_id}/checkpoints`);
+            if (cpRes.success && cpRes.data) {
+              routeCheckpoints = cpRes.data;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load assigned route for snapping", err);
+      }
+
+      const matchedCoords = fetchMapMatchedRouteTurf(validPoints, routeCheckpoints, 10);
       matchedCoordsRef.current = matchedCoords;
 
       // Create custom low-index background pane for the planned route to prevent overlapping redraw flickering

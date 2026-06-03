@@ -134,6 +134,15 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 	minDist := 9999999.0
 	anyHitNow := false
 
+	// Determine the next expected checkpoint in sequence
+	var nextExpectedCP *repository.RouteCheckpoint
+	for i := range routeCheckpoints {
+		if !visitedMap[routeCheckpoints[i].ID] {
+			nextExpectedCP = &routeCheckpoints[i]
+			break
+		}
+	}
+
 	for _, cp := range routeCheckpoints {
 		// Haversine returns distance in km, convert to meters
 		distKm := utils.Haversine(data.Lat, data.Lng, cp.Latitude, cp.Longitude)
@@ -160,6 +169,26 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		if distMeters <= tolerance {
 			anyHitNow = true
 			if !visitedMap[cp.ID] {
+				// Speed validation: must be <= 3 km/h
+				if data.Speed > 3.0 {
+					log.Warn().
+						Int("vehicle_id", vehicleID).
+						Int("checkpoint_id", cp.ID).
+						Float64("speed", data.Speed).
+						Msg("Checkpoint skipped: Speed Limit Exceeded ( > 3 km/h)")
+					continue
+				}
+
+				// Sequential validation: must be the next expected checkpoint
+				if nextExpectedCP != nil && cp.ID != nextExpectedCP.ID {
+					log.Warn().
+						Int("vehicle_id", vehicleID).
+						Int("checkpoint_id", cp.ID).
+						Int("expected_checkpoint_id", nextExpectedCP.ID).
+						Msg("Checkpoint skipped: Out of sequence")
+					continue
+				}
+
 				// Hit!
 				log.Info().Int("vehicle_id", vehicleID).Int("checkpoint_id", cp.ID).Msg("Checkpoint hit!")
 
@@ -179,6 +208,10 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 				}
 				e.visited[vehicleID][cp.ID] = true
 				e.mu.Unlock()
+				
+				// Since we hit the expected one, we could advance nextExpectedCP,
+				// but breaking/continuing is fine since we only want one hit per GPS ping anyway.
+				nextExpectedCP = nil // Prevent hitting multiple in one ping just in case
 			}
 		}
 	}
@@ -195,12 +228,6 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		e.mu.Lock()
 		e.onRoute[vehicleID] = newActiveStatus
 		e.mu.Unlock()
-	}
-
-	// Check for speed alert while on route (Max 3 km/h)
-	if newActiveStatus && data.Speed > 3.0 {
-		log.Warn().Int("vehicle_id", vehicleID).Float64("speed", data.Speed).Msg("Route Speed Limit Exceeded ( > 3 km/h)")
-		// TODO: Trigger actual alert in DB or PubSub here if needed, but logging for now
 	}
 
 	// Update last position processed
