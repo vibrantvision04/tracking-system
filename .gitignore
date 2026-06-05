@@ -72,10 +72,17 @@ Thumbs.db
 *.sln
 *.lsu
 
-# ==========================================
 # Logs & Temporary Files
 # ==========================================
 *.log
 backend.log
 server_local.log
 logs/
+
+# ==========================================
+# Scratch / Temp / Data files
+# ==========================================
+scratch/
+*.csv
+*.kmz
+

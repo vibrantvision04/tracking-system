@@ -111,13 +111,13 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 	var err error
 	var totalCount int
 
-	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, v.registration_no, vt.vehicle_type_name, r.report_date, r.average_speed, r.total_distance, r.start_point, r.end_point, 
-			  r.start_time, r.end_time, r.alert, r.total_active_duration, r.total_idle_duration, 
-			  r.total_stoppage_duration, r.in_parking_duration, r.actual_ignition_on_duration, 
-			  r.total_ignition_on_duration, r.total_running_duration, r.total_running_time, 
-			  r.day_running_time, r.night_running_time, r.fuel_in_ltr, r.fuel_consumption, 
-			  r.speed_limit, r.max_speed, r.min_speed, r.overspeed_distance, r.overspeed_count, r.overspeed_time,
-			  COALESCE(r.zone, ''), COALESCE(r.ward, ''), r.stoppages_count
+	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, COALESCE(v.registration_no, ''), COALESCE(vt.vehicle_type_name, ''), r.report_date, COALESCE(r.average_speed, 0.0), COALESCE(r.total_distance, 0.0), COALESCE(r.start_point::text, '{}'), COALESCE(r.end_point::text, '{}'), 
+			  COALESCE(r.start_time, '1970-01-01 00:00:00+00'::timestamptz), COALESCE(r.end_time, '1970-01-01 00:00:00+00'::timestamptz), COALESCE(r.alert, 0), COALESCE(r.total_active_duration, ''), COALESCE(r.total_idle_duration, ''), 
+			  COALESCE(r.total_stoppage_duration, ''), COALESCE(r.in_parking_duration, ''), COALESCE(r.actual_ignition_on_duration, ''), 
+			  COALESCE(r.total_ignition_on_duration, ''), COALESCE(r.total_running_duration, ''), COALESCE(r.total_running_time, ''), 
+			  COALESCE(r.day_running_time, ''), COALESCE(r.night_running_time, ''), COALESCE(r.fuel_in_ltr, 0.0), COALESCE(r.fuel_consumption, 0.0), 
+			  COALESCE(r.speed_limit, 0.0), COALESCE(r.max_speed, 0.0), COALESCE(r.min_speed, 0.0), COALESCE(r.overspeed_distance, 0.0), COALESCE(r.overspeed_count, '0'), COALESCE(r.overspeed_time, '0'),
+			  COALESCE(r.zone, ''), COALESCE(r.ward, ''), COALESCE(r.stoppages_count, 0)
 			  FROM movement_reports r
 			  JOIN vehicles v ON r.vehicle_id = v.id
 			  LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id `

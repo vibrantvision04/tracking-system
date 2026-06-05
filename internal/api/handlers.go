@@ -172,31 +172,49 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 
 	// Trigger real-time report generation/caching asynchronously in the background.
 	// This immediately loads the pre-computed reports from DB and prevents the HTTP request from blocking/timing out.
-	if vehicleID > 0 {
-		go func(vID int, startD, endD time.Time) {
-			// Create a background context for report generation
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer cancel()
+	go func(vID int, startD, endD time.Time) {
+		// Create a background context for report generation
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
 
+		var targetVehicles []*repository.Vehicle
+		if vID > 0 {
 			vehicle, err := h.vRepo.GetByID(ctx, vID)
 			if err == nil {
-				zone := ""
-				ward := ""
-				if vehicle.VehicleType != nil {
-					ward = vehicle.VehicleType.Name
-				}
-
-				curr := startD
-				daysCount := 0
-				// Limit to a maximum of 31 days to protect the background worker
-				for !curr.After(endD) && daysCount < 31 {
-					_ = h.rService.GenerateDailyReport(ctx, vID, curr, zone, ward)
-					curr = curr.AddDate(0, 0, 1)
-					daysCount++
+				targetVehicles = append(targetVehicles, vehicle)
+			}
+		} else {
+			vehicles, err := h.vRepo.GetAll(ctx)
+			if err == nil {
+				for i := range vehicles {
+					targetVehicles = append(targetVehicles, &vehicles[i])
 				}
 			}
-		}(vehicleID, from, to)
-	}
+		}
+
+		for _, vehicle := range targetVehicles {
+			if vehicle.GpsDevice == nil {
+				continue
+			}
+			zone := ""
+			ward := ""
+			if vehicle.VehicleType != nil {
+				ward = vehicle.VehicleType.Name
+			}
+
+			curr := startD
+			daysCount := 0
+			// Limit to a maximum of 31 days to protect the background worker
+			for !curr.After(endD) && daysCount < 31 {
+				err := h.rService.GenerateDailyReport(ctx, vehicle.ID, curr, zone, ward)
+				if err != nil {
+					fmt.Printf("Background report generation failed for vehicle %d on %s: %v\n", vehicle.ID, curr.Format("2006-01-02"), err)
+				}
+				curr = curr.AddDate(0, 0, 1)
+				daysCount++
+			}
+		}
+	}(vehicleID, from, to)
 
 	reports, total, err := h.rService.GetReports(r.Context(), vehicleID, from, to, limit, offset)
 	if err != nil {

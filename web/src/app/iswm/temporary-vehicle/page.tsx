@@ -38,6 +38,7 @@ interface Shift {
 interface Route {
   id: number;
   route_name: string;
+  shift_id?: number;
 }
 
 interface Vehicle {
@@ -534,7 +535,7 @@ export default function TemporaryVehiclePage() {
               </div>
 
               {/* Load Button */}
-              <Button onClick={loadAssignments} variant="accent" size="sm">
+              <Button onClick={loadAssignments} variant="accent" className="px-3.5 py-1.5 text-xs">
                 Load
               </Button>
 
@@ -607,7 +608,7 @@ export default function TemporaryVehiclePage() {
                           ✏️
                         </button>
                         <DeleteButton
-                          onDelete={() => handleDelete(a)}
+                          onDelete={() => handleDelete(a.id)}
                           confirmMessage={`Delete temporary override for ${a.route_name}?`}
                         />
                       </div>

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Alert } from "@/lib/types";
-import PageHeader from "@/components/ui/PageHeader";
+import PageHeader from "@/components/shared/PageHeader";
 import Select from "@/components/ui/Select";
 
 export default function AlertsPage() {
@@ -25,32 +25,32 @@ export default function AlertsPage() {
       <PageHeader
         title="Alerts & Notifications"
         description="Monitor system events, violations, and real-time notifications."
-        icon="🔔"
-      >
-        <div className="flex gap-2 w-[400px]">
-          <Select
-            value={typeF}
-            onChange={(e) => setTypeF(e.target.value)}
-            options={[
-              { value: "", label: "All Types" },
-              { value: "overspeed", label: "Overspeed" },
-              { value: "stoppage", label: "Stoppage" },
-              { value: "geofence", label: "Geofence" },
-              { value: "unauthorized", label: "Unauthorized" }
-            ]}
-          />
-          <Select
-            value={sevF}
-            onChange={(e) => setSevF(e.target.value)}
-            options={[
-              { value: "", label: "All Severity" },
-              { value: "high", label: "High" },
-              { value: "medium", label: "Medium" },
-              { value: "low", label: "Low" }
-            ]}
-          />
-        </div>
-      </PageHeader>
+        actions={
+          <div className="flex gap-2 w-[400px]">
+            <Select
+              value={typeF}
+              onChange={(e) => setTypeF(e.target.value)}
+              options={[
+                { value: "", label: "All Types" },
+                { value: "overspeed", label: "Overspeed" },
+                { value: "stoppage", label: "Stoppage" },
+                { value: "geofence", label: "Geofence" },
+                { value: "unauthorized", label: "Unauthorized" }
+              ]}
+            />
+            <Select
+              value={sevF}
+              onChange={(e) => setSevF(e.target.value)}
+              options={[
+                { value: "", label: "All Severity" },
+                { value: "high", label: "High" },
+                { value: "medium", label: "Medium" },
+                { value: "low", label: "Low" }
+              ]}
+            />
+          </div>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-3 max-w-4xl mx-auto w-full">
         {filtered.map((a, idx) => (

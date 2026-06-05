@@ -284,8 +284,9 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 	// Fetch historical GPS data
 	gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, dayStart, dayEnd)
 	if err != nil || len(gpsData) == 0 {
-		// Clear any buggy logs in the DB to heal it
+		// Clear any buggy logs and miss reasons in the DB to heal it
 		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
 		return
 	}
 
@@ -293,6 +294,7 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 	gpsData = smoothGpsData(gpsData)
 	if len(gpsData) == 0 {
 		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
 		return
 	}
 
@@ -302,22 +304,40 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		return
 	}
 
-	// Calculate which checkpoints were actually hit and at what time using line segments
-	physicalHits := make(map[int]time.Time)
+	// Initialize all checkpoints as missed with reason "Never Reached"
+	missReasons := make(map[int]string)
 	for _, cp := range checkpoints {
-		// First check the very first point
-		if len(gpsData) > 0 {
-			dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
-			if dist <= 10.0 {
+		missReasons[cp.ID] = "Never Reached"
+	}
+
+	physicalHits := make(map[int]time.Time)
+	expectedIdx := 0 // index of the checkpoint we are currently looking for
+
+	// First check the very first point
+	if len(gpsData) > 0 && expectedIdx < len(checkpoints) {
+		cp := checkpoints[expectedIdx]
+		dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
+		if dist <= 10.0 {
+			if gpsData[0].Speed <= 3.0 {
 				physicalHits[cp.ID] = gpsData[0].Time
-				continue
+				delete(missReasons, cp.ID)
+				expectedIdx++
+			} else {
+				missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(gpsData[0].Speed, 'f', 1, 64) + " km/h)"
 			}
 		}
+	}
 
-		// Now check segments between consecutive points
-		for i := 1; i < len(gpsData); i++ {
-			prev := gpsData[i-1]
-			curr := gpsData[i]
+	// Now check segments and points chronologically
+	for i := 1; i < len(gpsData); i++ {
+		prev := gpsData[i-1]
+		curr := gpsData[i]
+
+		// For each checkpoint that is not yet hit, check if the vehicle got close
+		for cpIdx, cp := range checkpoints {
+			if _, hit := physicalHits[cp.ID]; hit {
+				continue
+			}
 
 			// Only do segment matching if the pings are close in time and space to avoid teleport ghost hits
 			timeDiffSec := curr.Time.Sub(prev.Time).Seconds()
@@ -332,8 +352,23 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 			}
 
 			if distMeters <= 10.0 {
-				physicalHits[cp.ID] = curr.Time
-				break // Hit found, move to next checkpoint
+				if cpIdx == expectedIdx {
+					// Expected checkpoint! Check speed limit
+					if curr.Speed <= 3.0 {
+						physicalHits[cp.ID] = curr.Time
+						delete(missReasons, cp.ID)
+						expectedIdx++
+					} else {
+						missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
+					}
+				} else if cpIdx > expectedIdx {
+					// Out of sequence!
+					if curr.Speed <= 3.0 {
+						missReasons[cp.ID] = "Out of Sequence (Expected Checkpoint #" + strconv.Itoa(expectedIdx+1) + ")"
+					} else {
+						missReasons[cp.ID] = "Out of Sequence & Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
+					}
+				}
 			}
 		}
 	}
@@ -371,6 +406,22 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to update checkpoint hit time during reconciliation")
 			}
+		}
+
+		// Clean up any miss reason since the checkpoint was hit
+		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND checkpoint_id = $3 AND report_date = $4", vehicleID, routeID, cpID, dateStr)
+	}
+
+	// 3. Upsert miss reasons
+	for cpID, reason := range missReasons {
+		_, err = gpsRepo.Pool().Exec(ctx, `
+			INSERT INTO route_coverage_miss_reasons (vehicle_id, route_id, checkpoint_id, report_date, reason)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date)
+			DO UPDATE SET reason = EXCLUDED.reason
+		`, vehicleID, routeID, cpID, dateStr, reason)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to upsert checkpoint miss reason during reconciliation")
 		}
 	}
 }

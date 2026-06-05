@@ -28,6 +28,24 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	end := start.Add(24 * time.Hour)
 
+	// Auto-lookup zone and ward if not provided
+	var zoneName, wardName string
+	err := s.gRepo.Pool().QueryRow(ctx, `
+		SELECT COALESCE(z.region_name, ''), COALESCE(w.region_name, '')
+		FROM vehicles v
+		LEFT JOIN regions z ON v.zone_id = z.id
+		LEFT JOIN regions w ON v.ward_id = w.id
+		WHERE v.id = $1
+	`, vehicleID).Scan(&zoneName, &wardName)
+	if err == nil {
+		if zone == "" {
+			zone = zoneName
+		}
+		if ward == "" {
+			ward = wardName
+		}
+	}
+
 	// Fetch GPS data for the day
 	data, err := s.gRepo.GetByVehicle(ctx, vehicleID, start, end)
 	if err != nil {

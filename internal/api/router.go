@@ -58,6 +58,7 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 		r.Get("/wards", h.GetWards)
 		r.Get("/d2d/dashboard", h.GetD2DDashboard)
 		r.Get("/routes", h.GetRoutes)
+		r.Get("/routes/{id}", h.GetRouteByID)
 		r.Get("/routes/{id}/checkpoints", h.GetRouteCheckpoints)
 		r.Post("/routes", h.CreateRoute)
 		r.Put("/routes/{id}", h.UpdateRoute)
@@ -149,6 +150,8 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 		r.Get("/reports/lane-monitoring", h.GetLaneMonitoringReport)
 		r.Get("/reports/active-vehicle-summary", h.GetActiveVehicleSummaryReport)
 		r.Get("/reports/geofence-event", h.GetGeofenceEventReport)
+		r.Get("/reports/ward-geofence", h.GetWardGeofenceReport)
+		r.Get("/reports/gts-trips", h.GetGTSTripReport)
 
 
 

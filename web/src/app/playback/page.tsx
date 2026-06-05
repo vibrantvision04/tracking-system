@@ -111,28 +111,51 @@ function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
 
 import * as turf from "@turf/turf";
 
-function fetchMapMatchedRouteTurf(points: GpsDataPoint[], checkpoints: any[], toleranceMeters: number = 10): [number, number][] {
+function fetchMapMatchedRouteTurf(points: GpsDataPoint[], routeGeoJSON: any, toleranceMeters: number = 15): [number, number][] {
   if (points.length === 0) return [];
-  if (!checkpoints || checkpoints.length < 2) {
+  if (!routeGeoJSON) {
     return points.map(p => [p.lat, p.lng] as [number, number]);
   }
 
-  // Create a Turf LineString from the checkpoints (longitude, latitude)
-  const coords = checkpoints.sort((a, b) => a.sequence_order - b.sequence_order).map(cp => [cp.longitude, cp.latitude]);
-  if (coords.length < 2) {
+  let routeLine: any = null;
+  try {
+    const geom = typeof routeGeoJSON === "string" ? JSON.parse(routeGeoJSON) : routeGeoJSON;
+    if (geom.type === "FeatureCollection") {
+      const feature = geom.features.find((f: any) => f.geometry && (f.geometry.type === "LineString" || f.geometry.type === "MultiLineString"));
+      if (feature) {
+        routeLine = feature;
+      } else if (geom.features.length > 0) {
+        routeLine = geom.features[0];
+      }
+    } else if (geom.type === "Feature" && geom.geometry && (geom.geometry.type === "LineString" || geom.geometry.type === "MultiLineString")) {
+      routeLine = geom;
+    } else if (geom.type === "LineString" || geom.type === "MultiLineString") {
+      routeLine = turf.feature(geom);
+    } else if (geom.geometry && (geom.geometry.type === "LineString" || geom.geometry.type === "MultiLineString")) {
+      routeLine = turf.feature(geom.geometry);
+    }
+  } catch (e) {
+    console.error("Error parsing routeGeoJSON in fetchMapMatchedRouteTurf:", e);
     return points.map(p => [p.lat, p.lng] as [number, number]);
   }
-  
-  const routeLine = turf.lineString(coords);
+
+  if (!routeLine) {
+    return points.map(p => [p.lat, p.lng] as [number, number]);
+  }
+
   const matchedCoords: [number, number][] = [];
 
   points.forEach(p => {
     const pt = turf.point([p.lng, p.lat]);
-    const snapped = turf.nearestPointOnLine(routeLine, pt, { units: 'meters' });
-    const dist = (snapped.properties?.dist || 0); // Distance is returned in the requested units
-    if (dist <= toleranceMeters) {
-      matchedCoords.push([snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]]);
-    } else {
+    try {
+      const snapped = turf.nearestPointOnLine(routeLine, pt, { units: 'meters' });
+      const dist = (snapped.properties?.dist || 0);
+      if (dist <= toleranceMeters) {
+        matchedCoords.push([snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]]);
+      } else {
+        matchedCoords.push([p.lat, p.lng]);
+      }
+    } catch (err) {
       matchedCoords.push([p.lat, p.lng]);
     }
   });
@@ -249,6 +272,16 @@ function getPopupContent(p: GpsDataPoint) {
   `;
 }
 
+function formatCheckpointName(name: string, seq: number): string {
+  if (name.includes("_Lane") && (name.includes("_Start") || name.includes("_End"))) {
+    const match = name.match(/_Lane(\d+)_(Start|End)/);
+    if (match) {
+      return `Lane ${match[1]} ${match[2]}`;
+    }
+  }
+  return name;
+}
+
 export default function PlaybackPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [zones, setZones] = useState<any[]>([]);
@@ -261,6 +294,7 @@ export default function PlaybackPage() {
   const [selectedImei, setSelectedImei] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(4);
+  const [routeIdParam, setRouteIdParam] = useState<string | null>(null);
 
   // Playback States
   const [points, setPoints] = useState<GpsDataPoint[]>([]);
@@ -275,6 +309,7 @@ export default function PlaybackPage() {
   const mkRef = useRef<any>(null);
   const stoppageMarkersRef = useRef<any[]>([]);
   const checkpointMarkersRef = useRef<any[]>([]);
+  const checkpointMarkersMapRef = useRef<Record<number, any>>({});
   const assignedRouteLayerRef = useRef<any>(null);
   const boundaryLayerRef = useRef<any>(null); // For selected zone/ward boundaries
   const intervalRef = useRef<any>(null);
@@ -325,8 +360,10 @@ export default function PlaybackPage() {
       const params = new URLSearchParams(window.location.search);
       const urlImei = params.get("imei");
       const urlDate = params.get("date");
+      const urlRouteId = params.get("route_id");
       if (urlImei) setSelectedImei(urlImei);
       if (urlDate) setDate(urlDate);
+      if (urlRouteId) setRouteIdParam(urlRouteId);
     }
   }, []);
 
@@ -478,6 +515,7 @@ export default function PlaybackPage() {
         checkpointMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
         checkpointMarkersRef.current = [];
       }
+      checkpointMarkersMapRef.current = {};
       if (assignedRouteLayerRef.current) {
         map.removeLayer(assignedRouteLayerRef.current);
         assignedRouteLayerRef.current = null;
@@ -491,22 +529,40 @@ export default function PlaybackPage() {
       
       // Fetch the assigned route for this vehicle today to snap against
       let routeCheckpoints: any[] = [];
-      try {
-        const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
-        if (vehicle) {
-          const cov = await api<any>(`/api/vehicles/${vehicle.id}/route-coverage?date=${date}`);
-          if (cov.success && cov.route_id) {
-            const cpRes = await api<any>(`/api/routes/${cov.route_id}/checkpoints`);
-            if (cpRes.success && cpRes.data) {
-              routeCheckpoints = cpRes.data;
+      let assignedRouteData: any = null;
+      let visitedCheckpointsList: any[] = [];
+      if (routeIdParam) {
+        try {
+          const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
+          if (vehicle) {
+            const cov = await api<any>(`/api/vehicles/${vehicle.id}/route-coverage?date=${date}&route_id=${routeIdParam}`);
+            if (cov.success && cov.route_id) {
+              // Get Route details (geometry)
+              const rRes = await api<any>(`/api/routes/${cov.route_id}`);
+              if (rRes.success && rRes.data) {
+                assignedRouteData = rRes.data;
+              }
+
+              const cpRes = await api<any>(`/api/routes/${cov.route_id}/checkpoints`);
+              if (cpRes.success && cpRes.data) {
+                routeCheckpoints = cpRes.data;
+              }
+
+              if (cov.details) {
+                visitedCheckpointsList = cov.details;
+              }
             }
           }
+        } catch (err) {
+          console.error("Failed to load assigned route for snapping", err);
         }
-      } catch (err) {
-        console.error("Failed to load assigned route for snapping", err);
       }
 
-      const matchedCoords = fetchMapMatchedRouteTurf(validPoints, routeCheckpoints, 10);
+      const matchedCoords = fetchMapMatchedRouteTurf(
+        validPoints,
+        assignedRouteData ? assignedRouteData.geojson : null,
+        15
+      );
       matchedCoordsRef.current = matchedCoords;
 
       // Create custom low-index background pane for the planned route to prevent overlapping redraw flickering
@@ -705,10 +761,162 @@ export default function PlaybackPage() {
         stoppageMarkersRef.current.push(marker);
       });
 
+      // 7. Draw the planned assigned route geometry if it exists
+      if (assignedRouteData && assignedRouteData.geojson) {
+        try {
+          const parsedGeoJSON = JSON.parse(assignedRouteData.geojson);
+          
+          if (!map.getPane("assignedRoutePane")) {
+            map.createPane("assignedRoutePane");
+            map.getPane("assignedRoutePane").style.zIndex = "340";
+            map.getPane("assignedRoutePane").style.pointerEvents = "none";
+          }
+
+          const routeColor = assignedRouteData.color || "#3b82f6";
+          assignedRouteLayerRef.current = L.geoJSON(parsedGeoJSON, {
+            style: {
+              color: routeColor,
+              weight: 5,
+              opacity: 0.7,
+              lineCap: "round",
+              lineJoin: "round"
+            },
+            pane: "assignedRoutePane"
+          }).addTo(map);
+          
+          assignedRouteLayerRef.current.bindPopup(`
+            <div style="font-family: sans-serif; font-size: 13px; color: #0f172a; padding: 2px;">
+              <span style="font-weight: 700; color: ${routeColor};">Planned Route:</span> ${assignedRouteData.route_name}
+            </div>
+          `);
+        } catch (e) {
+          console.error("Failed to parse and render assigned route geometry:", e);
+        }
+      }
+
+      // 8. Draw Checkpoints on map
+      const checkpointMarkers: any[] = [];
+      const markersMap: Record<number, any> = {};
+      routeCheckpoints.forEach((cp, idx) => {
+        const visitedDetail = visitedCheckpointsList.find(vd => vd.checkpoint_id === cp.id);
+        const visited = visitedDetail ? visitedDetail.visited : false;
+
+        const isLaneStart = cp.checkpoint_name.includes("_Lane") && cp.checkpoint_name.includes("_Start");
+        const isLaneEnd = cp.checkpoint_name.includes("_Lane") && cp.checkpoint_name.includes("_End");
+        
+        let cpIcon;
+        if (isLaneStart || isLaneEnd) {
+          const type = isLaneStart ? "start" : "end";
+          const match = cp.checkpoint_name.match(/_Lane(\d+)_/);
+          const laneNum = match ? match[1] : String(idx + 1);
+          
+          const color = type === "start" ? (visited ? "#10b981" : "#22c55e") : (visited ? "#ef4444" : "#dc2626");
+          const strokeColor = type === "start" ? "#15803d" : "#b91c1c";
+          
+          cpIcon = L.divIcon({
+            html: `
+              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 28px; height: 36px; opacity: ${visited ? 1.0 : 0.75};">
+                <svg width="28" height="36" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.4));">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>
+                  <circle cx="12" cy="12" r="7.5" fill="white"/>
+                  <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-family="'Inter', sans-serif" font-weight="900" font-size="8.5" fill="${strokeColor}">${laneNum}</text>
+                </svg>
+              </div>
+            `,
+            className: "",
+            iconSize: [28, 36],
+            iconAnchor: [14, 36],
+          });
+        } else {
+          cpIcon = L.divIcon({
+            html: `
+              <div style="
+                width: 28px;
+                height: 28px;
+                background: ${visited ? 'rgba(16, 185, 129, 0.22)' : 'rgba(239, 68, 68, 0.22)'};
+                border: 2px solid ${visited ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+              ">
+                <div style="
+                  width: 18px;
+                  height: 18px;
+                  background: ${visited ? '#10b981' : '#ef4444'};
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  color: #ffffff;
+                  font-family: 'Inter', sans-serif;
+                  font-size: 9px;
+                  font-weight: 800;
+                ">
+                  ${idx + 1}
+                </div>
+              </div>
+            `,
+            className: "",
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          });
+        }
+
+        const marker = L.marker([cp.latitude, cp.longitude], { icon: cpIcon }).addTo(map);
+        markersMap[cp.id] = marker;
+        const reason = visitedDetail ? visitedDetail.reason : "";
+
+        marker.bindPopup(`
+          <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; padding: 2px; min-width: 150px;">
+            <div style="font-weight: 700; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px; margin-bottom: 8px; color: ${visited ? '#10b981' : '#ef4444'}; font-size: 14px;">
+              📍 ${formatCheckpointName(cp.checkpoint_name, cp.sequence_order)} (Point #${cp.sequence_order})
+            </div>
+            <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
+              <span style="color: #64748b;">Status:</span>
+              <span style="font-weight: 700; color: ${visited ? '#10b981' : '#ef4444'};">${visited ? '✅ Visited (Hit)' : '❌ Not Visited'}</span>
+            </div>
+            ${!visited && reason ? `
+            <div style="margin-bottom: 4.5px; display: flex; flex-direction: column; gap: 2px; background: #fef2f2; border: 1px solid #fee2e2; border-radius: 6px; padding: 6px 8px; margin-top: 4px;">
+              <span style="color: #dc2626; font-size: 10px; font-weight: 800; text-transform: uppercase; tracking-wider: 0.05em;">⚠️ Miss Reason:</span>
+              <span style="font-weight: 700; color: #991b1b; font-size: 11px;">${reason}</span>
+            </div>
+            ` : ''}
+            <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px; margin-top: 6px;">
+              <span style="color: #64748b;">Radius:</span>
+              <span style="font-weight: 600; color: #1e293b;">${cp.radius_meters || 100} meters</span>
+            </div>
+          </div>
+        `);
+        
+        // Also draw the checkpoint radius circle
+        const circle = L.circle([cp.latitude, cp.longitude], {
+          radius: cp.radius_meters || 100,
+          color: visited ? '#10b981' : '#ef4444',
+          weight: 1,
+          fillColor: visited ? '#10b981' : '#ef4444',
+          fillOpacity: 0.05
+        }).addTo(map);
+
+        checkpointMarkers.push(marker);
+        checkpointMarkers.push(circle);
+      });
+      checkpointMarkersRef.current = checkpointMarkers;
+      checkpointMarkersMapRef.current = markersMap;
+      setCheckpoints(routeCheckpoints.map(cp => {
+        const visitedDetail = visitedCheckpointsList.find(vd => vd.checkpoint_id === cp.id);
+        return {
+          ...cp,
+          visited: visitedDetail ? visitedDetail.visited : false,
+          reason: visitedDetail ? visitedDetail.reason : ""
+        };
+      }));
+
     } catch (err) {
       console.error("Playback load error:", err);
     }
-  }, [selectedImei, date]);
+  }, [selectedImei, date, routeIdParam, vehicles]);
 
   // Dynamic active trail updating helper
   const updateActiveCoveredLine = useCallback((currentIndex: number) => {
@@ -800,6 +1008,14 @@ export default function PlaybackPage() {
           50% { transform: scale(1.05); opacity: 1; }
           100% { transform: scale(0.95); opacity: 0.9; }
         }
+        @keyframes highlight-pulse-anim {
+          0% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(99, 102, 241, 0.8)); }
+          50% { transform: scale(1.4); filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.95)); }
+          100% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(99, 102, 241, 0)); }
+        }
+        .highlight-pulse {
+          animation: highlight-pulse-anim 1.5s ease-in-out;
+        }
       `}} />
       
       {/* Dynamic Master Header */}
@@ -839,7 +1055,10 @@ export default function PlaybackPage() {
             <input 
               type="date" 
               value={date} 
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setRouteIdParam(null);
+              }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium" 
             />
           </div>
@@ -852,6 +1071,7 @@ export default function PlaybackPage() {
                 setSelectedZoneId(e.target.value);
                 setSelectedWardId("");
                 setSelectedImei("");
+                setRouteIdParam(null);
               }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             >
@@ -869,6 +1089,7 @@ export default function PlaybackPage() {
               onChange={(e) => {
                 setSelectedWardId(e.target.value);
                 setSelectedImei("");
+                setRouteIdParam(null);
               }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             >
@@ -883,7 +1104,10 @@ export default function PlaybackPage() {
           <div className="min-w-[120px]">
             <select
               value={selectedShift}
-              onChange={(e) => setSelectedShift(e.target.value)}
+              onChange={(e) => {
+                setSelectedShift(e.target.value);
+                setRouteIdParam(null);
+              }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             >
               <option value="Morning">Morning</option>
@@ -896,7 +1120,10 @@ export default function PlaybackPage() {
           <div className="min-w-[170px]">
             <select
               value={selectedImei}
-              onChange={(e) => setSelectedImei(e.target.value)}
+              onChange={(e) => {
+                setSelectedImei(e.target.value);
+                setRouteIdParam(null);
+              }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             >
               <option value="">Select Vehicle</option>
@@ -980,6 +1207,65 @@ export default function PlaybackPage() {
           </div>
         </div>
 
+        {/* Floating checkpoints sidebar if checkpoints exist */}
+        {checkpoints.length > 0 && (
+          <div className="absolute top-4 left-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl max-h-[calc(100%-32px)] overflow-y-auto custom-scrollbar flex flex-col">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center gap-1.5 shrink-0 border-b border-slate-100 pb-2">
+              📍 Checkpoints ({checkpoints.filter(cp => cp.visited).length}/{checkpoints.length} Hit)
+            </h3>
+            <div className="space-y-2 flex-1 overflow-y-auto pr-0.5">
+              {checkpoints.sort((a, b) => a.sequence_order - b.sequence_order).map((cp, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    const map = mapRef.current;
+                    if (!map) return;
+                    map.panTo([cp.latitude, cp.longitude]);
+                    const marker = checkpointMarkersMapRef.current[cp.id];
+                    if (marker) {
+                      marker.openPopup();
+                      const el = marker.getElement();
+                      if (el) {
+                        const child = el.firstElementChild;
+                        if (child) {
+                          child.classList.add("highlight-pulse");
+                          setTimeout(() => child.classList.remove("highlight-pulse"), 1500);
+                        }
+                      }
+                    }
+                  }}
+                  className={`w-full text-left p-2.5 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${
+                    cp.visited 
+                      ? 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100 hover:border-emerald-200' 
+                      : 'bg-rose-50/30 hover:bg-rose-50/70 border-rose-100 hover:border-rose-200'
+                  }`}
+                >
+                  <div className="space-y-0.5 max-w-[70%]">
+                    <span className={`font-extrabold block truncate ${cp.visited ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
+                    </span>
+                    <span className="text-[9px] text-slate-400 block font-normal">
+                      Radius: {cp.radius_meters || 100}m
+                    </span>
+                    {!cp.visited && cp.reason && (
+                      <span className="text-[9.5px] text-rose-600 font-semibold block mt-1.5 leading-tight italic bg-rose-50/70 border border-rose-100 px-1.5 py-0.5 rounded">
+                        ⚠️ {cp.reason}
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 ${
+                    cp.visited 
+                      ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-200' 
+                      : 'bg-rose-100 text-rose-600 group-hover:bg-rose-200'
+                  }`}>
+                    {cp.visited ? 'HIT' : 'MISSED'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Floating stoppages sidebar if stoppages exist */}
         {stoppages.length > 0 && (
           <div className="absolute top-4 right-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl max-h-[calc(100%-32px)] overflow-y-auto custom-scrollbar flex flex-col">
@@ -1000,7 +1286,7 @@ export default function PlaybackPage() {
                     </span>
                   </div>
                   <span className="text-[10px] font-black bg-red-100 text-red-600 group-hover:bg-red-200 px-2 py-0.5 rounded-lg transition duration-200">
-                    {formatStoppageDuration(s.durationSeconds)}
+                     {formatStoppageDuration(s.durationSeconds)}
                   </span>
                 </button>
               ))}

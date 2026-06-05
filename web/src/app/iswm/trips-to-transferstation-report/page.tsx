@@ -1,0 +1,330 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
+import { toast } from "react-toastify";
+import Button from "@/components/ui/Button";
+import Table from "@/components/shared/Table";
+import { Card, CardContent } from "@/components/ui/Card";
+
+interface GTSTripRow {
+	vehicle_id: number;
+	registration_no: string;
+	zone_name: string;
+	ward_name: string;
+	trip_count: number;
+}
+
+export default function GTSTripReportPage() {
+	const [data, setData] = useState<GTSTripRow[]>([]);
+	const [loading, setLoading] = useState(false);
+
+	// Dropdown option lists
+	const [zones, setZones] = useState<any[]>([]);
+	const [wards, setWards] = useState<any[]>([]);
+	const [routeTypes, setRouteTypes] = useState<any[]>([]);
+	const [vehicles, setVehicles] = useState<any[]>([]);
+
+	// Filter states
+	const [selectedZone, setSelectedZone] = useState("");
+	const [selectedWard, setSelectedWard] = useState("");
+	const [selectedRouteType, setSelectedRouteType] = useState("");
+	const [selectedVehicle, setSelectedVehicle] = useState("");
+	const [selectedDate, setSelectedDate] = useState<string>(() => {
+		const today = new Date();
+		return today.toISOString().split("T")[0];
+	});
+
+	// Fetch option lists on mount
+	useEffect(() => {
+		api("/api/zones")
+			.then((d: any) => d.success && setZones(d.data || []))
+			.catch(console.error);
+		api("/api/wards")
+			.then((d: any) => d.success && setWards(d.data || []))
+			.catch(console.error);
+		api("/api/route-types")
+			.then((d: any) => d.success && setRouteTypes(d.data || []))
+			.catch(console.error);
+		api("/api/vehicles")
+			.then((d: any) => d.success && setVehicles(d.data || []))
+			.catch(console.error);
+	}, []);
+
+	const loadReport = async () => {
+		setLoading(true);
+		try {
+			const params = new URLSearchParams();
+			if (selectedDate) params.append("date", selectedDate);
+			if (selectedZone) params.append("zone_id", selectedZone);
+			if (selectedWard) params.append("ward_id", selectedWard);
+			if (selectedRouteType) params.append("route_type_id", selectedRouteType);
+			if (selectedVehicle) params.append("vehicle_id", selectedVehicle);
+
+			const res = await api<{ success: boolean; data: GTSTripRow[] }>(
+				`/api/reports/gts-trips?${params.toString()}`
+			);
+			if (res.success && res.data) {
+				setData(res.data);
+				toast.success("Data loaded successfully!");
+			} else {
+				setData([]);
+			}
+		} catch (err) {
+			console.error(err);
+			toast.error("Failed to load report data.");
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleExportCSV = () => {
+		if (data.length === 0) {
+			toast.warning("No data to export");
+			return;
+		}
+		const headers = ["S. NO.", "VEHICLE REG. NO.", "ZONE", "WARD", "TRIPS TO TRANSFER STATION"];
+		const rows = data.map((row, idx) => [
+			idx + 1,
+			`"${row.registration_no.replace(/"/g, '""')}"`,
+			`"${row.zone_name.replace(/"/g, '""')}"`,
+			`"${row.ward_name.replace(/"/g, '""')}"`,
+			row.trip_count,
+		]);
+		const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+		const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		link.setAttribute("href", url);
+		link.setAttribute("download", `gts_trip_report_${selectedDate}.csv`);
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+	};
+
+	// Filter wards based on selected zone if selected
+	const filteredWards = selectedZone
+		? wards.filter((w) => String(w.parent_id) === selectedZone)
+		: wards;
+
+	return (
+		<div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 overflow-hidden font-sans">
+			{/* Header */}
+			<header className="flex h-14 bg-[#e2e8f0] px-6 items-center border-b border-slate-300 shrink-0 justify-between w-full print:hidden">
+				<div className="flex items-center gap-2">
+					<h1 className="text-xl font-bold tracking-wide text-slate-800">ISWM - NAGAR NIGAM JAIPUR</h1>
+				</div>
+				<div className="flex items-center gap-4">
+					<div className="relative flex items-center bg-white border border-slate-300 rounded px-3 py-1 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-50 transition">
+						<span>English</span>
+						<svg className="w-3.5 h-3.5 ml-1.5 fill-current text-slate-500" viewBox="0 0 20 20">
+							<path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+						</svg>
+					</div>
+					<div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-white shrink-0 shadow-sm">
+						<svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+							<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+						</svg>
+					</div>
+				</div>
+			</header>
+
+			{/* Sub-header / Playback Title with Green Line */}
+			<div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+				<div>
+					<h2 className="text-base font-bold text-slate-700">Trips To GTS (Transfer Station) Report</h2>
+					<div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+				</div>
+				<div className="flex gap-2 print:hidden">
+					<Button
+						onClick={() => window.print()}
+						variant="outline"
+						className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200"
+					>
+						PDF
+					</Button>
+					<Button
+						onClick={handleExportCSV}
+						variant="outline"
+						className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200"
+					>
+						CSV
+					</Button>
+				</div>
+			</div>
+
+			<div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
+				{/* Filter Form Card */}
+				<Card className="border border-slate-200 bg-white rounded-xl shadow-sm print:hidden">
+					<CardContent className="p-6">
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+							{/* Zone Filter */}
+							<div className="flex flex-col">
+								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+									Zone
+								</span>
+								<select
+									value={selectedZone}
+									onChange={(e) => {
+										setSelectedZone(e.target.value);
+										setSelectedWard(""); // Reset ward when zone changes
+									}}
+									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
+								>
+									<option value="">Select Zone</option>
+									{zones.map((z) => (
+										<option key={z.id} value={z.id}>
+											{z.region_name}
+										</option>
+									))}
+								</select>
+							</div>
+
+							{/* Ward Filter */}
+							<div className="flex flex-col">
+								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+									Ward
+								</span>
+								<select
+									value={selectedWard}
+									onChange={(e) => setSelectedWard(e.target.value)}
+									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
+								>
+									<option value="">Select Ward</option>
+									{filteredWards.map((w) => (
+										<option key={w.id} value={w.id}>
+											{w.region_name}
+										</option>
+									))}
+								</select>
+							</div>
+
+							{/* Route Type Filter */}
+							<div className="flex flex-col">
+								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+									Route Type
+								</span>
+								<select
+									value={selectedRouteType}
+									onChange={(e) => setSelectedRouteType(e.target.value)}
+									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
+								>
+									<option value="">Select Route Type</option>
+									{routeTypes.map((rt) => (
+										<option key={rt.id} value={rt.id}>
+											{rt.name}
+										</option>
+									))}
+								</select>
+							</div>
+
+							{/* Vehicle RTO Filter */}
+							<div className="flex flex-col">
+								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+									Vehicle(s) RTO
+								</span>
+								<select
+									value={selectedVehicle}
+									onChange={(e) => setSelectedVehicle(e.target.value)}
+									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
+								>
+									<option value="">Select Vehicle</option>
+									{vehicles.map((v) => (
+										<option key={v.id} value={v.id}>
+											{v.registration_no}
+										</option>
+									))}
+								</select>
+							</div>
+
+							{/* Date Filter */}
+							<div className="flex flex-col">
+								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+									Date
+								</span>
+								<input
+									type="date"
+									value={selectedDate}
+									onChange={(e) => setSelectedDate(e.target.value)}
+									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px]"
+								/>
+							</div>
+						</div>
+
+						<div className="flex justify-start pt-4 border-t border-slate-100">
+							<Button
+								onClick={loadReport}
+								variant="accent"
+								loading={loading}
+								loadingText="Loading..."
+								className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-lg text-xs transition"
+							>
+								Load
+							</Button>
+						</div>
+					</CardContent>
+				</Card>
+
+				{/* Results Table Card */}
+				<Card className="border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
+					<CardContent className="p-0 flex-1 flex flex-col justify-between overflow-hidden">
+						<div className="flex-1 overflow-x-auto">
+							<Table
+								headers={[
+									<div
+										key="s"
+										className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider"
+									>
+										S. NO.
+									</div>,
+									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+										VEHICLE REG. NO.
+									</span>,
+									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+										ZONE
+									</span>,
+									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+										WARD
+									</span>,
+									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+										TRIPS TO TRANSFER STATION
+									</span>,
+								]}
+								isLoading={loading}
+								emptyState="No data to display"
+							>
+								{data.map((row, idx) => (
+									<tr
+										key={row.vehicle_id}
+										className="hover:bg-slate-50/50 border-b border-slate-100 transition-colors print:border-black"
+									>
+										<td className="py-3 px-5 text-center text-slate-400 font-mono text-[11px] print:text-black">
+											{idx + 1}
+										</td>
+										<td className="py-3 px-5 font-bold text-slate-800 text-[12px] print:text-black">
+											{row.registration_no}
+										</td>
+										<td className="py-3 px-5 text-slate-600 text-[12px] print:text-black">
+											{row.zone_name || "—"}
+										</td>
+										<td className="py-3 px-5 text-slate-600 text-[12px] print:text-black">
+											{row.ward_name || "—"}
+										</td>
+										<td className="py-3 px-5 text-slate-800 font-bold text-[12px] print:text-black">
+											{row.trip_count}
+										</td>
+									</tr>
+								))}
+							</Table>
+						</div>
+
+						{/* Total Count Footer */}
+						<div className="bg-slate-100 border-t border-slate-200 px-5 py-3 text-xs font-bold text-slate-500 select-none uppercase tracking-wider shrink-0">
+							{data.length} total vehicles listed
+						</div>
+					</CardContent>
+				</Card>
+			</div>
+		</div>
+	);
+}

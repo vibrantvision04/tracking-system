@@ -117,16 +117,28 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 		targetDate = parsedDate
 	}
 
-	assignment, err := h.routeRepo.GetAssignedRoute(r.Context(), vehicleID, targetDate)
-	if err != nil || assignment == nil {
-		sendJSON(w, http.StatusOK, map[string]interface{}{
-			"success": false,
-			"error": "No route assigned to this vehicle for the given date",
-		})
-		return
+	routeIDStr := r.URL.Query().Get("route_id")
+	var routeID int
+	if routeIDStr != "" {
+		var err error
+		routeID, err = strconv.Atoi(routeIDStr)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid route ID"})
+			return
+		}
+	} else {
+		assignment, err := h.routeRepo.GetAssignedRoute(r.Context(), vehicleID, targetDate)
+		if err != nil || assignment == nil {
+			sendJSON(w, http.StatusOK, map[string]interface{}{
+				"success": false,
+				"error":   "No route assigned to this vehicle for the given date",
+			})
+			return
+		}
+		routeID = assignment.RouteID
 	}
 
-	checkpoints, err := h.routeRepo.GetCheckpointsByRoute(r.Context(), assignment.RouteID)
+	checkpoints, err := h.routeRepo.GetCheckpointsByRoute(r.Context(), routeID)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to load checkpoints"})
 		return
@@ -135,19 +147,40 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 	totalCheckpoints := len(checkpoints)
 	if totalCheckpoints == 0 {
 		sendJSON(w, http.StatusOK, map[string]interface{}{
-			"success": true,
-			"route_id": assignment.RouteID,
-			"total_checkpoints": 0,
+			"success":             true,
+			"route_id":            routeID,
+			"total_checkpoints":   0,
 			"visited_checkpoints": 0,
 			"coverage_percentage": 0,
 		})
 		return
 	}
 
-	visitedIDs, err := h.routeRepo.GetVisitedCheckpoints(r.Context(), vehicleID, assignment.RouteID, targetDate)
+	// Trigger sequential and speed-limit validation calculation retroactively for this date
+	recalculateCoverage(r.Context(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDate.Format("2006-01-02"))
+
+	visitedIDs, err := h.routeRepo.GetVisitedCheckpoints(r.Context(), vehicleID, routeID, targetDate)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to load coverage"})
 		return
+	}
+	
+	// Fetch miss reasons from database
+	missMap := make(map[int]string)
+	missRows, err := h.gpsRepo.Pool().Query(r.Context(), `
+		SELECT checkpoint_id, reason 
+		FROM route_coverage_miss_reasons 
+		WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3
+	`, vehicleID, routeID, targetDate.Format("2006-01-02"))
+	if err == nil {
+		defer missRows.Close()
+		for missRows.Next() {
+			var cpID int
+			var reason string
+			if err := missRows.Scan(&cpID, &reason); err == nil {
+				missMap[cpID] = reason
+			}
+		}
 	}
 	
 	// Count unique hits
@@ -164,21 +197,31 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 		if hit {
 			visitedCount++
 		}
+		
+		reason := ""
+		if !hit {
+			reason = missMap[cp.ID]
+			if reason == "" {
+				reason = "Never Reached"
+			}
+		}
+		
 		visitedDetails = append(visitedDetails, map[string]interface{}{
 			"checkpoint_id": cp.ID,
-			"name": cp.CheckpointName,
-			"visited": hit,
+			"name":          cp.CheckpointName,
+			"visited":       hit,
+			"reason":        reason,
 		})
 	}
 
 	coveragePct := float64(visitedCount) / float64(totalCheckpoints) * 100.0
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"route_id": assignment.RouteID,
-		"total_checkpoints": totalCheckpoints,
+		"success":             true,
+		"route_id":            routeID,
+		"total_checkpoints":   totalCheckpoints,
 		"visited_checkpoints": visitedCount,
 		"coverage_percentage": coveragePct,
-		"details": visitedDetails,
+		"details":             visitedDetails,
 	})
 }

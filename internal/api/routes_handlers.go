@@ -222,7 +222,7 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 			r.geometry_id, 
 			rw.ward_id, 
 			r.shift_id, 
-			'[]'::jsonb as lanes, 
+			COALESCE(r.lanes, '[]'::jsonb) as lanes, 
 			COALESCE(r.is_active, true),
 			COALESCE(r.created_at, NOW()),
 			COALESCE(w.region_name, ''),
@@ -273,6 +273,71 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) GetRouteByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	idStr := chi.URLParam(r, "id")
+	routeID, err := strconv.Atoi(idStr)
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid route ID"})
+		return
+	}
+
+	query := `
+		SELECT 
+			r.id, 
+			COALESCE(r.route_name, ''), 
+			COALESCE(r.identification, ''), 
+			COALESCE(r.distance, 0.0), 
+			COALESCE(r.route_type_id, 1), 
+			r.geometry_id, 
+			rw.ward_id, 
+			r.shift_id, 
+			COALESCE(r.lanes, '[]'::jsonb) as lanes, 
+			COALESCE(r.is_active, true),
+			COALESCE(r.created_at, NOW()),
+			COALESCE(w.region_name, ''),
+			COALESCE(s.shift_name, ''),
+			COALESCE(g.polygon::text, ''),
+			COALESCE(g.color, ''),
+			COALESCE(rt.name, 'D2D')
+		FROM routes r
+		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
+		LEFT JOIN regions w ON rw.ward_id = w.id
+		LEFT JOIN shifts s ON r.shift_id = s.id
+		LEFT JOIN geofences g ON r.geometry_id = g.id
+		LEFT JOIN route_types_iswm rt ON r.route_type_id = rt.id
+		WHERE r.id = $1
+	`
+
+	var route RouteResponse
+	var lanes []byte
+	var updatedAt time.Time
+	var color string
+	err = h.gpsRepo.Pool().QueryRow(ctx, query, routeID).Scan(
+		&route.ID, &route.RouteName, &route.Identification, &route.Distance, &route.RouteTypeID,
+		&route.GeometryID, &route.WardID, &route.ShiftID, &lanes, &route.IsActive, &updatedAt,
+		&route.WardName, &route.ShiftName, &route.GeoJSON, &color, &route.RouteTypeName,
+	)
+	if err != nil {
+		sendJSON(w, http.StatusNotFound, map[string]string{"error": "Route not found: " + err.Error()})
+		return
+	}
+	route.Color = color
+	route.UpdatedAt = updatedAt
+
+	if len(lanes) > 0 {
+		route.Lanes = json.RawMessage(lanes)
+	} else {
+		route.Lanes = json.RawMessage("[]")
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    route,
+	})
+}
+
+
 func (h *Handler) CreateRoute(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req CreateRouteRequest
@@ -303,14 +368,21 @@ func (h *Handler) CreateRoute(w http.ResponseWriter, r *http.Request) {
 
 	var routeID int
 	err := h.gpsRepo.Pool().QueryRow(ctx, `
-		INSERT INTO routes (route_name, identification, distance, route_type_id, geometry_id, ward_id, shift_id, lanes, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, true)
+		INSERT INTO routes (route_name, identification, distance, route_type_id, geometry_id, shift_id, lanes, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true)
 		RETURNING id
-	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.WardID, req.ShiftID, lanesJSON).Scan(&routeID)
+	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON).Scan(&routeID)
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create route: " + err.Error()})
 		return
+	}
+
+	// Insert into route_wards if WardID is provided
+	if req.WardID != nil {
+		_, _ = h.gpsRepo.Pool().Exec(ctx, `
+			INSERT INTO route_wards (route_id, ward_id) VALUES ($1, $2)
+		`, routeID, *req.WardID)
 	}
 
 	// Sync lanes to route_checkpoints
@@ -388,14 +460,22 @@ func (h *Handler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 	_, err = h.gpsRepo.Pool().Exec(ctx, `
 		UPDATE routes 
 		SET route_name = $1, identification = $2, distance = $3, 
-		    route_type_id = $4, geometry_id = $5, ward_id = $6, 
-		    shift_id = $7, lanes = $8::jsonb
-		WHERE id = $9
-	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.WardID, req.ShiftID, lanesJSON, routeID)
+		    route_type_id = $4, geometry_id = $5, 
+		    shift_id = $6, lanes = $7::jsonb
+		WHERE id = $8
+	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, routeID)
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update route: " + err.Error()})
 		return
+	}
+
+	// 4. Update route_wards
+	_, _ = h.gpsRepo.Pool().Exec(ctx, "DELETE FROM route_wards WHERE route_id = $1", routeID)
+	if req.WardID != nil {
+		_, _ = h.gpsRepo.Pool().Exec(ctx, `
+			INSERT INTO route_wards (route_id, ward_id) VALUES ($1, $2)
+		`, routeID, *req.WardID)
 	}
 
 	// Sync lanes to route_checkpoints

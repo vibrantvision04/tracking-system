@@ -119,3 +119,85 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 		"data":    data,
 	})
 }
+
+type WardGeofenceReportRow struct {
+	ID             int       `json:"id"`
+	RegistrationNo string    `json:"registration_no"`
+	WardName       string    `json:"ward_name"`
+	EventType      string    `json:"event_type"`
+	EventTime      time.Time `json:"event_time"`
+}
+
+func (h *Handler) GetWardGeofenceReport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
+	// Parse from_date and to_date filters, defaulting to today
+	fromDateStr := r.URL.Query().Get("from_date")
+	toDateStr := r.URL.Query().Get("to_date")
+
+	var fromDate, toDate time.Time
+	var err error
+
+	if fromDateStr != "" {
+		fromDate, err = time.Parse("2006-01-02", fromDateStr)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid from_date format, use YYYY-MM-DD"})
+			return
+		}
+	} else {
+		fromDate = time.Now()
+	}
+
+	if toDateStr != "" {
+		toDate, err = time.Parse("2006-01-02", toDateStr)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid to_date format, use YYYY-MM-DD"})
+			return
+		}
+	} else {
+		toDate = time.Now()
+	}
+
+	query := `
+		SELECT 
+			ge.id,
+			v.registration_no,
+			COALESCE(rg.region_name, '') AS ward_name,
+			ge.event_type,
+			ge.captured_at
+		FROM geofence_events ge
+		JOIN vehicles v ON ge.vehicle_id = v.id
+		JOIN geofences g ON ge.geofence_id = g.id
+		JOIN regions rg ON rg.geofence_id = g.id
+		WHERE rg.region_type_id = 3
+		  AND DATE(ge.captured_at) >= $1
+		  AND DATE(ge.captured_at) <= $2
+		ORDER BY ge.captured_at ASC
+	`
+
+	rows, err := db.Query(ctx, query, fromDate.Format("2006-01-02"), toDate.Format("2006-01-02"))
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query ward geofence report: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var data []WardGeofenceReportRow = []WardGeofenceReportRow{}
+	for rows.Next() {
+		var row WardGeofenceReportRow
+		err := rows.Scan(
+			&row.ID, &row.RegistrationNo, &row.WardName,
+			&row.EventType, &row.EventTime,
+		)
+		if err == nil {
+			data = append(data, row)
+		}
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    data,
+	})
+}
+

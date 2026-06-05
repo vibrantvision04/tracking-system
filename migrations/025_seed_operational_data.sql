@@ -43,44 +43,6 @@ UPDATE vehicles SET vehicle_type_id = 4 WHERE id = 6;
 UPDATE vehicles SET vehicle_type_id = 5 WHERE id = 7;
 UPDATE vehicles SET vehicle_type_id = 6 WHERE id = 8;
 
--- 8. Vehicle Route Assignments for today
-INSERT INTO vehicle_route_assignments (vehicle_id, route_id, assigned_date, is_active)
-VALUES
-  (1, 1, CURRENT_DATE, true),
-  (2, 2, CURRENT_DATE, true),
-  (3, 3, CURRENT_DATE, true),
-  (4, 4, CURRENT_DATE, true),
-  (5, 5, CURRENT_DATE, true),
-  (6, 6, CURRENT_DATE, true),
-  (7, 7, CURRENT_DATE, true),
-  (8, 8, CURRENT_DATE, true)
-ON CONFLICT (vehicle_id, assigned_date) DO NOTHING;
-
--- 9. Sample alerts for today
-INSERT INTO alerts (alert_type, imei, vehicle_id, registration_no, ward_no, driver, alert_detail, time_reported, status, snooze_duration, reason, lat, lng)
-SELECT
-  CASE (row_number() OVER ())::int % 4
-    WHEN 0 THEN 'Overspeed'
-    WHEN 1 THEN 'Stoppage'
-    WHEN 2 THEN 'Geofence Exit'
-    ELSE 'Idle'
-  END,
-  d.imei,
-  v.id,
-  v.registration_no,
-  w.region_name,
-  'Driver-' || v.id::text,
-  'Auto-generated alert for testing',
-  NOW() - ((random() * 120)::int || ' minutes')::interval,
-  'pending',
-  0,
-  '',
-  26.9124 + (random() * 0.1),
-  75.7873 + (random() * 0.1)
-FROM vehicles v
-JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
-JOIN gps_devices d ON m.device_id = d.id
-LEFT JOIN regions w ON v.ward_id = w.id;
 
 -- 10. Route checkpoints (using correct column names: latitude/longitude/sequence_order)
 INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
