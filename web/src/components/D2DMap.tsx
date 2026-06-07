@@ -1187,13 +1187,13 @@ export default function D2DMap() {
           }`}>
             
             {/* Tab selection triggers */}
-            <div className="flex h-10 border-b border-theme-border bg-theme-surface px-4 items-center justify-between cursor-pointer select-none" onClick={(e) => {
+            <div className="flex h-10 border-b border-theme-border bg-theme-surface px-4 items-center justify-between cursor-pointer select-none gap-4" onClick={(e) => {
               // Click the tab bar itself to toggle
               if ((e.target as HTMLElement).tagName === 'DIV' || (e.target as HTMLElement).tagName === 'HEADER') {
                 setBottomPanelOpen(!bottomPanelOpen);
               }
             }}>
-              <div className="flex gap-2 h-full">
+              <div className="flex gap-2 h-full overflow-x-auto custom-scrollbar flex-1 whitespace-nowrap">
                 <button
                   onClick={() => {
                     if (activeTab === "alerts") {
@@ -1279,7 +1279,7 @@ export default function D2DMap() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0 ml-auto">
                 {loading && <span className="text-[10px] text-theme-text-dim animate-pulse">Syncing database data...</span>}
                 <button
                   onClick={() => setBottomPanelOpen(!bottomPanelOpen)}

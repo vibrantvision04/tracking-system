@@ -415,27 +415,38 @@ export default function Sidebar() {
       {/* Flyout Mega Menu - Glassmorphism & Slide-in Animation */}
       <div 
         ref={flyoutRef}
-        className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
+        className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl lg:border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
           transition-all duration-300 ease-out
-          ${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
+          left-0 lg:${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
+          w-full
+          ${['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "lg:w-[600px]" : "lg:w-[350px]"}
           ${activeCategory 
             ? "opacity-100 translate-x-0" 
-            : "opacity-0 -translate-x-4 pointer-events-none"
+            : "opacity-0 -translate-x-full lg:-translate-x-4 pointer-events-none"
           }
         `}
-        style={{ width: ['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "600px" : "350px" }}
       >
         {currentCategoryData && (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-4 border-b border-theme-border">
-              <div className="flex items-center gap-2">
-                <span className="text-theme-accent font-bold text-xs">{currentCategoryData.label}</span>
-                <span className="text-theme-text-dim text-[10px] uppercase tracking-wider">Options</span>
+            <div className="flex items-center justify-between px-4 py-4 border-b border-theme-border bg-theme-surface">
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setActiveCategory(null)}
+                  className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-theme-surface-hover border border-theme-border text-theme-text hover:text-theme-accent transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-theme-accent font-bold text-sm lg:text-xs">{currentCategoryData.label}</span>
+                  <span className="hidden lg:inline text-theme-text-dim text-[10px] uppercase tracking-wider">Options</span>
+                </div>
               </div>
               <button 
                 onClick={() => setActiveCategory(null)}
-                className="text-theme-text-dim hover:text-theme-text transition-colors"
+                className="hidden lg:flex text-theme-text-dim hover:text-theme-text transition-colors w-6 h-6 items-center justify-center rounded-full hover:bg-theme-surface-hover"
               >
                 ✕
               </button>
@@ -443,7 +454,7 @@ export default function Sidebar() {
 
             {/* Content - Grid of Columns */}
             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-              <div className={`grid ${['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "grid-cols-3" : "grid-cols-2"} gap-x-6 gap-y-6`}>
+              <div className={`grid grid-cols-1 ${['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "lg:grid-cols-3" : "lg:grid-cols-2"} gap-x-6 gap-y-6`}>
                 {currentCategoryData.children?.map((sub: any) => {
                   const hasSubChildren = sub.children && sub.children.length > 0;
 

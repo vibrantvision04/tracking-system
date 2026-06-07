@@ -743,7 +743,7 @@ export default function RegionManager() {
               <div className="max-w-7xl mx-auto space-y-6">
                 
                 {/* Section Title */}
-                <div className="flex justify-between items-center border-b border-theme-border pb-4 shrink-0">
+                <div className="flex flex-wrap gap-4 justify-between items-center border-b border-theme-border pb-4 shrink-0">
                   <div>
                     <h2 className="text-xl font-black text-theme-text tracking-tight">Region</h2>
                     <div className="h-1 bg-theme-accent w-10 mt-1.5 rounded-full" />
