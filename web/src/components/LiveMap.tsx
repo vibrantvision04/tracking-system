@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import type { Vehicle, LivePosition } from "@/lib/types";
 import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import * as turf from "@turf/turf";
+import { centroid } from "@turf/turf";
 
 interface Props { 
   vehicles: Vehicle[];
@@ -197,7 +197,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
             return;
           }
         }
-        const center = turf.centroid(feature);
+        const center = centroid(feature);
         if (!center || !center.geometry || !center.geometry.coordinates) return;
         const coords = center.geometry.coordinates;
         const latLng = [coords[1], coords[0]] as [number, number];
@@ -324,7 +324,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
               regionGeoJSON.bindPopup(`
                 <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
                   <b style="font-size:12px;color:#4f46e5;">${w.region_name}</b><br/>
-                  <span style="color:#64748b;font-weight:bold;">Vidhansabha: ${z.region_name || z.name}</span><br/>
+                  <span style="color:#64748b;font-weight:bold;"> ${z.region_name || z.name}</span><br/>
                   <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
                 </div>
               `);

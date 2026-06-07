@@ -302,6 +302,52 @@ export default function RegionManager() {
     setFilterText(searchQuery);
   };
 
+  const generateZoneBoundary = async (selectedIds: number[]) => {
+    const selectedWards = regions.filter(r => r.region_type_id === 3 && selectedIds.includes(r.id) && r.geojson && r.geojson !== "null");
+    if (selectedWards.length === 0) {
+      setForm(prev => ({ ...prev, geojson: "" }));
+      return;
+    }
+    try {
+      const { feature, featureCollection, union } = await import("@turf/turf");
+      let features: any[] = [];
+      for (const ward of selectedWards) {
+        try {
+          const geom = typeof ward.geojson === 'string' ? JSON.parse(ward.geojson) : ward.geojson;
+          if (!geom) continue;
+          if (geom.type === "FeatureCollection" && geom.features) {
+            features.push(...geom.features);
+          } else if (geom.type === "Feature") {
+            features.push(geom);
+          } else if (geom.type === "Polygon" || geom.type === "MultiPolygon") {
+            features.push(feature(geom));
+          }
+        } catch (e) {
+          console.warn("Failed to parse geometry for ward", ward.id);
+        }
+      }
+      if (features.length === 0) {
+        setForm(prev => ({ ...prev, geojson: "" }));
+        return;
+      }
+      
+      let unioned = features[0];
+      for (let i = 1; i < features.length; i++) {
+        try {
+          unioned = union(featureCollection([unioned, features[i]]));
+        } catch(e) {
+          console.error(`Failed to union ward ${i}:`, e);
+        }
+      }
+      if (unioned) {
+        const fc = featureCollection([unioned]);
+        setForm(prev => ({ ...prev, geojson: JSON.stringify(fc, null, 2) }));
+      }
+    } catch(e) {
+      console.error("Failed to generate union:", e);
+    }
+  };
+
   const renderFormFields = () => (
     <>
       {/* Name */}
@@ -382,59 +428,6 @@ export default function RegionManager() {
             <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
               Wards Assignment ({form.sub_region_ids.length} Selected)
             </label>
-            <button
-              type="button"
-              onClick={async () => {
-                const selectedWards = regions.filter(r => r.region_type_id === 3 && form.sub_region_ids.includes(r.id) && r.geojson && r.geojson !== "null");
-                if (selectedWards.length === 0) {
-                  alert("No wards selected or selected wards have no geometry.");
-                  return;
-                }
-                try {
-                  const turf = await import("@turf/turf");
-                  let features: any[] = [];
-                  for (const ward of selectedWards) {
-                    try {
-                      const geom = typeof ward.geojson === 'string' ? JSON.parse(ward.geojson) : ward.geojson;
-                      if (!geom) continue;
-                      if (geom.type === "FeatureCollection" && geom.features) {
-                        features.push(...geom.features);
-                      } else if (geom.type === "Feature") {
-                        features.push(geom);
-                      } else if (geom.type === "Polygon" || geom.type === "MultiPolygon") {
-                        features.push(turf.feature(geom));
-                      }
-                    } catch (e) {
-                      console.warn("Failed to parse geometry for ward", ward.id);
-                    }
-                  }
-                  if (features.length === 0) {
-                    alert("No valid geometries found in the selected wards.");
-                    return;
-                  }
-                  
-                  let unioned = features[0];
-                  for (let i = 1; i < features.length; i++) {
-                    try {
-                      unioned = turf.union(turf.featureCollection([unioned, features[i]]));
-                    } catch(e) {
-                      console.error(`Failed to union ward ${i}:`, e);
-                    }
-                  }
-                  if (unioned) {
-                    const fc = turf.featureCollection([unioned]);
-                    setForm(prev => ({ ...prev, geojson: JSON.stringify(fc, null, 2) }));
-                  }
-                } catch(e) {
-                  console.error("Failed to generate union:", e);
-                  alert("Failed to auto-generate boundary from wards.");
-                }
-              }}
-              className="text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 px-2 py-1 rounded transition"
-              title="Automatically combine the boundaries of the selected wards"
-            >
-              Auto-Generate Boundary
-            </button>
           </div>
           <div className="bg-theme-surface border border-theme-border rounded-xl p-3 space-y-2 shadow-inner">
             <input
@@ -456,17 +449,15 @@ export default function RegionManager() {
                         type="checkbox"
                         checked={isChecked}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setForm((prev) => ({
-                              ...prev,
-                              sub_region_ids: [...prev.sub_region_ids, w.id],
-                            }));
-                          } else {
-                            setForm((prev) => ({
-                              ...prev,
-                              sub_region_ids: prev.sub_region_ids.filter((id) => id !== w.id),
-                            }));
-                          }
+                          const newSubRegionIds = e.target.checked 
+                            ? [...form.sub_region_ids, w.id] 
+                            : form.sub_region_ids.filter((id) => id !== w.id);
+                          
+                          setForm((prev) => ({
+                            ...prev,
+                            sub_region_ids: newSubRegionIds,
+                          }));
+                          generateZoneBoundary(newSubRegionIds);
                         }}
                         className="rounded border-slate-350 text-emerald-650 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                       />

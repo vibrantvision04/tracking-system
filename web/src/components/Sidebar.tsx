@@ -6,126 +6,126 @@ import { useState, useRef, useEffect } from "react";
 
 const navData = [
   {
-    label: "Vehicles",
-    icon: "🚛",
+    label: "Manage",
+    icon: "⚙️",
     children: [
-      { label: "Vehicle List", href: "/vehicles" },
-      { label: "Vehicle Type", href: "/iswm/vehicle-type" },
-      { label: "Vehicle Make", href: "/iswm/vehicle-make" },
-      { label: "Vehicle Group", href: "/iswm/vehicle-groups" },
-      { label: "Capacity Type", href: "/iswm/capacity-type" },
-      { label: "Fuel Rate", href: "/iswm/fuel-rate" },
-      { label: "Contractors", href: "/iswm/contractors" },
       {
-        label: "Assignments",
+        label: "Vehicles",
         children: [
-          { label: "GPS Device To Vehicle", href: "/iswm/gpsdevice-vehicle" },
-          { label: "Vehicle To Region", href: "/iswm/vehicle-region" },
-          { label: "Vehicle To Department", href: "/iswm/vehicle-department" },
-          { label: "Vehicle To Groups", href: "/iswm/vehicle-groups-mapping" },
-          { label: "Fuel To Vehicle", href: "/iswm/vehicle-fuel" },
+          { label: "Vehicle List", href: "/vehicles" },
+          { label: "Vehicle Type", href: "/iswm/vehicle-type" },
+          { label: "Vehicle Make", href: "/iswm/vehicle-make" },
+          { label: "Vehicle Group", href: "/iswm/vehicle-groups" },
+          { label: "Capacity Type", href: "/iswm/capacity-type" },
+          { label: "Fuel Rate", href: "/iswm/fuel-rate" },
+          { label: "Contractors", href: "/iswm/contractors" },
+          {
+            label: "Assignments",
+            children: [
+              { label: "GPS Device To Vehicle", href: "/iswm/gpsdevice-vehicle" },
+              { label: "Vehicle To Region", href: "/iswm/vehicle-region" },
+              { label: "Vehicle To Department", href: "/iswm/vehicle-department" },
+              { label: "Vehicle To Groups", href: "/iswm/vehicle-groups-mapping" },
+              { label: "Fuel To Vehicle", href: "/iswm/vehicle-fuel" },
+            ],
+          },
+          {
+            label: "Adhoc",
+            children: [
+              { label: "Temporary Vehicle", href: "/iswm/temporary-vehicle" },
+            ],
+          },
         ],
       },
       {
-        label: "Adhoc",
+        label: "GPS Devices",
         children: [
-          { label: "Temporary Vehicle", href: "/iswm/temporary-vehicle" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "GPS Devices",
-    icon: "📡",
-    children: [
-      { label: "GPS Device List", href: "/devices" },
-      { label: "GPS Device Type", href: "/iswm/gps-device-type" },
-      { label: "POS Device", href: "/iswm/pos-device" },
-      { label: "Weigh Bridge", href: "/iswm/weigh-bridge" },
-      {
-        label: "Assignments",
-        children: [
-          { label: "POS Device To Fuelstation", href: "/iswm/posdevice-fuelstation" },
-          { label: "WeighBridge to TS", href: "/iswm/weighbridge-transferstation" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Regions & Routes",
-    icon: "🏛️",
-    children: [
-      { label: "Zones & Wards", href: "/zones" },
-      { label: "Region Type", href: "/iswm/region-type" },
-      { label: "Route", href: "/iswm/route" },
-      { label: "Route Type", href: "/iswm/route-type" },
-      { label: "Shift", href: "/iswm/shift" },
-      { label: "Collection Type", href: "/iswm/vehicle-purpose" },
-      { label: "Reason", href: "/iswm/reason" },
-      {
-        label: "Assignments",
-        children: [
-          { label: "Route To Ward", href: "/iswm/route-ward" },
-          { label: "Route To Vehicle & Shift", href: "/iswm/route-shift-vehicle" },
-          { label: "Route Type To Vehicle Type", href: "/iswm/routetype-vehicletype" },
-          { label: "Transfer Station To Ward", href: "/iswm/transferstation-ward" },
-          { label: "Fuel Station To Zone", href: "/iswm/fuelstation-zone" },
-          { label: "Parking Spot To Zone", href: "/iswm/parkingspot-zone" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "POIs",
-    icon: "📍",
-    children: [
-      { label: "Transfer Station", href: "/iswm/transfer-station" },
-      { label: "Workshop", href: "/iswm/workshop" },
-      { label: "Parking Spots", href: "/iswm/parking-spot" },
-      { label: "Fuel Station", href: "/iswm/fuel-station" },
-      { label: "Fuel Companies", href: "/iswm/fuel-company" },
-      { label: "Fuel Type", href: "/iswm/fuel-type" },
-      { label: "Upload Fuel Transactions", href: "/iswm/upload-fuel-transaction" },
-      {
-        label: "Depute",
-        children: [
-          { label: "Incharge at TS", href: "/iswm/incharge-transferstation" },
-          { label: "Incharge at Fuel Station", href: "/iswm/incharge-fuelstation" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "HR / Staff",
-    icon: "👥",
-    children: [
-      { label: "Employee List", href: "/iswm/employee" },
-      { label: "Department", href: "/iswm/department" },
-      { label: "Designation", href: "/iswm/designation" },
-      {
-        label: "Assignments",
-        children: [
-          { label: "Driver/Helper to Shift & Vehicle", href: "/iswm/employee-shift-vehicle" },
-          { label: "Employee to Designation & Department", href: "/iswm/employee-department-designation" },
-          { label: "Role To User", href: "/iswm/role-user" },
-          { label: "Department to Designation", href: "/iswm/department-designation" },
-          { label: "Region Type to Designation", href: "/iswm/regiontype-designation" },
+          { label: "GPS Device List", href: "/devices" },
+          { label: "GPS Device Type", href: "/iswm/gps-device-type" },
+          { label: "POS Device", href: "/iswm/pos-device" },
+          { label: "Weigh Bridge", href: "/iswm/weigh-bridge" },
+          {
+            label: "Assignments",
+            children: [
+              { label: "POS Device To Fuelstation", href: "/iswm/posdevice-fuelstation" },
+              { label: "WeighBridge to TS", href: "/iswm/weighbridge-transferstation" },
+            ],
+          },
         ],
       },
       {
-        label: "Adhoc",
+        label: "Regions & Routes",
         children: [
-          { label: "Temporary Driver", href: "/iswm/temporary-driver" },
+          { label: "Zones & Wards", href: "/zones" },
+          { label: "Region Type", href: "/iswm/region-type" },
+          { label: "Route", href: "/iswm/route" },
+          { label: "Route Type", href: "/iswm/route-type" },
+          { label: "Shift", href: "/iswm/shift" },
+          { label: "Collection Type", href: "/iswm/vehicle-purpose" },
+          { label: "Reason", href: "/iswm/reason" },
+          {
+            label: "Assignments",
+            children: [
+              { label: "Route To Ward", href: "/iswm/route-ward" },
+              { label: "Route To Vehicle & Shift", href: "/iswm/route-shift-vehicle" },
+              { label: "Route Type To Vehicle Type", href: "/iswm/routetype-vehicletype" },
+              { label: "Transfer Station To Ward", href: "/iswm/transferstation-ward" },
+              { label: "Fuel Station To Zone", href: "/iswm/fuelstation-zone" },
+              { label: "Parking Spot To Zone", href: "/iswm/parkingspot-zone" },
+            ],
+          },
         ],
       },
-    ],
-  },
-  {
-    label: "Data Entry",
-    icon: "⌨️",
-    children: [
-      { label: "Trenching Ground Weighbridge Entry", href: "/iswm/trenching-ground-weighbridge-entry" },
-      { label: "Weighbridge 3 Bin Entry", href: "/iswm/weighbridge-3-bin-entry" },
+      {
+        label: "POIs",
+        children: [
+          { label: "Transfer Station", href: "/iswm/transfer-station" },
+          { label: "Workshop", href: "/iswm/workshop" },
+          { label: "Parking Spots", href: "/iswm/parking-spot" },
+          { label: "Fuel Station", href: "/iswm/fuel-station" },
+          { label: "Fuel Companies", href: "/iswm/fuel-company" },
+          { label: "Fuel Type", href: "/iswm/fuel-type" },
+          { label: "Upload Fuel Transactions", href: "/iswm/upload-fuel-transaction" },
+          {
+            label: "Depute",
+            children: [
+              { label: "Incharge at TS", href: "/iswm/incharge-transferstation" },
+              { label: "Incharge at Fuel Station", href: "/iswm/incharge-fuelstation" },
+            ],
+          },
+        ],
+      },
+      {
+        label: "HR / Staff",
+        children: [
+          { label: "Employee List", href: "/iswm/employee" },
+          { label: "Department", href: "/iswm/department" },
+          { label: "Designation", href: "/iswm/designation" },
+          {
+            label: "Assignments",
+            children: [
+              { label: "Driver/Helper to Shift & Vehicle", href: "/iswm/employee-shift-vehicle" },
+              { label: "Employee to Designation & Department", href: "/iswm/employee-department-designation" },
+              { label: "Role To User", href: "/iswm/role-user" },
+              { label: "Department to Designation", href: "/iswm/department-designation" },
+              { label: "Region Type to Designation", href: "/iswm/regiontype-designation" },
+            ],
+          },
+          {
+            label: "Adhoc",
+            children: [
+              { label: "Temporary Driver", href: "/iswm/temporary-driver" },
+            ],
+          },
+        ],
+      },
+      {
+        label: "Data Entry",
+        children: [
+          { label: "Trenching Ground Weighbridge Entry", href: "/iswm/trenching-ground-weighbridge-entry" },
+          { label: "Weighbridge 3 Bin Entry", href: "/iswm/weighbridge-3-bin-entry" },
+        ],
+      },
     ],
   },
   {
@@ -225,7 +225,13 @@ const navData = [
     icon: "⏪",
     href: "/playback",
   },
+  {
+    label: "Live Feed",
+    icon: "🗺️",
+    href: "/",
+  },
 ];
+
 
 // Helper to recursively filter out fuel-related menus if feature toggle is disabled
 const filterFuelItems = (items: any[]): any[] => {
@@ -415,7 +421,7 @@ export default function Sidebar() {
             : "opacity-0 -translate-x-4 pointer-events-none"
           }
         `}
-        style={{ width: (activeCategory || renderedCategory) === "Reports" ? "600px" : "350px" }}
+        style={{ width: ['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "600px" : "350px" }}
       >
         {currentCategoryData && (
           <>
@@ -435,7 +441,7 @@ export default function Sidebar() {
 
             {/* Content - Grid of Columns */}
             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-              <div className={`grid ${(activeCategory || renderedCategory) === "Reports" ? "grid-cols-3" : "grid-cols-2"} gap-x-6 gap-y-6`}>
+              <div className={`grid ${['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "grid-cols-3" : "grid-cols-2"} gap-x-6 gap-y-6`}>
                 {currentCategoryData.children?.map((sub: any) => {
                   const hasSubChildren = sub.children && sub.children.length > 0;
 
@@ -459,27 +465,60 @@ export default function Sidebar() {
                         </div>
                       )}
 
-                      {/* Level 3 Links */}
+                      {/* Level 3 Links and Level 4 Headers */}
                       {hasSubChildren && (
                         <div className="space-y-0.5 flex flex-col">
-                          {sub.children!.map((item: any) => (
-                            <Link
-                              key={item.label}
-                              href={item.href}
-                              prefetch={false}
-                              onClick={() => {
-                                setSidebarOpen(false);
-                                setActiveCategory(null);
-                              }}
-                              className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
-                                ${path === item.href
-                                  ? "text-theme-accent font-medium"
-                                  : "text-theme-text-dim hover:text-theme-text"
-                                }`}
-                            >
-                              {item.label}
-                            </Link>
-                          ))}
+                          {sub.children!.map((item: any) => {
+                            if (item.href) {
+                              return (
+                                <Link
+                                  key={item.label}
+                                  href={item.href}
+                                  prefetch={false}
+                                  onClick={() => {
+                                    setSidebarOpen(false);
+                                    setActiveCategory(null);
+                                  }}
+                                  className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
+                                    ${path === item.href
+                                      ? "text-theme-accent font-medium"
+                                      : "text-theme-text-dim hover:text-theme-text"
+                                    }`}
+                                >
+                                  {item.label}
+                                </Link>
+                              );
+                            }
+                            
+                            // Nested Level 4 (e.g. 'Assignments' or 'Adhoc')
+                            return (
+                              <div key={item.label} className="mt-3 mb-1 flex flex-col">
+                                <span className="text-[9px] font-bold text-theme-text-dim/80 uppercase tracking-wider mb-1.5 border-b border-theme-border/50 pb-0.5 w-fit">
+                                  {item.label}
+                                </span>
+                                <div className="space-y-0.5 flex flex-col ml-1.5 border-l-2 border-theme-border/30 pl-2">
+                                  {item.children?.map((subItem: any) => (
+                                    <Link
+                                      key={subItem.label}
+                                      href={subItem.href}
+                                      prefetch={false}
+                                      onClick={() => {
+                                        setSidebarOpen(false);
+                                        setActiveCategory(null);
+                                      }}
+                                      className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
+                                        ${path === subItem.href
+                                          ? "text-theme-accent font-medium"
+                                          : "text-theme-text-dim hover:text-theme-text"
+                                        }`}
+                                    >
+                                      {subItem.label}
+                                    </Link>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api, post, put, del } from "@/lib/api";
 import { toast } from "react-toastify";
 import dynamic from "next/dynamic";
-import * as turf from "@turf/turf";
+import { polygon, point, booleanPointInPolygon } from "@turf/turf";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
@@ -167,25 +167,25 @@ export default function TransferStationPage() {
         return;
       }
 
-      const poly = turf.polygon(polyGeom.coordinates);
+      const poly = polygon(polyGeom.coordinates);
 
       // Validate Dump Zone inside
-      const dumpPt = turf.point([dumpZone.longitude, dumpZone.latitude]);
-      if (!turf.booleanPointInPolygon(dumpPt, poly)) {
+      const dumpPt = point([dumpZone.longitude, dumpZone.latitude]);
+      if (!booleanPointInPolygon(dumpPt, poly)) {
         toast.error("Dump zone center must be inside the transfer station boundary.");
         return;
       }
 
       // Validate Entry Point inside
-      const entryPt = turf.point([entryPoint.longitude, entryPoint.latitude]);
-      if (!turf.booleanPointInPolygon(entryPt, poly)) {
+      const entryPt = point([entryPoint.longitude, entryPoint.latitude]);
+      if (!booleanPointInPolygon(entryPt, poly)) {
         toast.error("Entry point must be inside the transfer station boundary.");
         return;
       }
 
       // Validate Exit Point inside
-      const exitPt = turf.point([exitPoint.longitude, exitPoint.latitude]);
-      if (!turf.booleanPointInPolygon(exitPt, poly)) {
+      const exitPt = point([exitPoint.longitude, exitPoint.latitude]);
+      if (!booleanPointInPolygon(exitPt, poly)) {
         toast.error("Exit point must be inside the transfer station boundary.");
         return;
       }

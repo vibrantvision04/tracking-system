@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { api, post } from "@/lib/api";
 import { toast } from "react-toastify";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
-import * as turf from "@turf/turf";
+import { centroid } from "@turf/turf";
 
 interface D2DAlert {
   id: number;
@@ -516,7 +516,7 @@ export default function D2DMap() {
             return;
           }
         }
-        const center = turf.centroid(feature);
+        const center = centroid(feature);
         if (!center || !center.geometry || !center.geometry.coordinates) return;
         const coords = center.geometry.coordinates;
         const latLng = [coords[1], coords[0]] as [number, number];
@@ -839,7 +839,7 @@ export default function D2DMap() {
               regionGeoJSON.bindPopup(`
                 <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
                   <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
-                  <span style="color:#64748b;font-weight:bold;">Vidhansabha: ${z.region_name}</span><br/>
+                  <span style="color:#64748b;font-weight:bold;"> ${z.region_name}</span><br/>
                   <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
                 </div>
               `);
@@ -968,7 +968,7 @@ export default function D2DMap() {
             regionGeoJSON.bindPopup(`
               <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
                 <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
-                <span style="color:#64748b;font-weight:bold;">Vidhansabha: ${selectedZone}</span><br/>
+                <span style="color:#64748b;font-weight:bold;"> ${selectedZone}</span><br/>
                 <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
               </div>
             `);
