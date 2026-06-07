@@ -681,17 +681,17 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
 
       {/* Overlay Panel */}
       {showMenu && (
-        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[300px] max-h-[calc(100%-32px)] bg-[rgba(15,21,37,.92)] backdrop-blur-2xl rounded-xl border border-theme-border z-[1000] flex flex-col shadow-2xl shadow-black/40">
+        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[300px] max-h-[calc(100%-32px)] bg-slate-100/95 backdrop-blur-2xl rounded-xl border border-slate-700 z-[1000] flex flex-col shadow-2xl shadow-black/40 text-slate-200">
           {/* Stats Row */}
-          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-theme-border text-[11px] font-semibold">
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 text-[11px] font-semibold">
             <span className="text-green-400">● {counts.running}</span>
             <span className="text-amber-400">● {counts.idle}</span>
             <span className="text-red-400">● {counts.stopped}</span>
-            <span className="text-theme-text-dim ml-auto">{filteredByZone.length} visible</span>
+            <span className="text-slate-900 ml-auto">{filteredByZone.length} visible</span>
           </div>
 
           {/* Zone Selector */}
-          <div className="p-3 border-b border-theme-border">
+          <div className="p-3 border-b border-slate-900">
             <select
               value={selectedZone || "all"}
               onChange={(e) => {
@@ -699,7 +699,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
                 setSelectedZone(val);
                 localStorage.setItem("selectedZone", val);
               }}
-              className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-[13px] text-theme-text placeholder:text-theme-text-dim outline-none focus:border-emerald-500 transition"
+              className="w-full px-3 py-2 bg-slate-100 border border-slate-600 rounded-lg text-[13px] text-slate-900 placeholder:text-slate-500 outline-none focus:border-emerald-500 transition"
             >
               <option value="all">Jaipur Heritage (All Zones)</option>
               {zones.map((z, idx) => (
@@ -709,12 +709,12 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           </div>
 
           {/* Search */}
-          <div className="p-3 border-b border-theme-border">
+          <div className="p-3 border-b border-slate-900">
             <input
               placeholder="Search reg no, type…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-[13px] text-theme-text placeholder:text-theme-text-dim outline-none focus:border-emerald-500 transition"
+              className="w-full px-3 py-2 bg-slate-100 border border-slate-600 rounded-lg text-[13px] text-slate-900 placeholder:text-slate-500 outline-none focus:border-emerald-500 transition"
             />
           </div>
 
@@ -735,14 +735,14 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
                       markers.current[imei].openPopup();
                     }
                   }}
-                  className={`flex items-center gap-3 px-4 py-3 border-b border-theme-border cursor-pointer transition
-                    ${sel ? "bg-theme-surface-hover border-l-[3px] border-l-indigo-500" : "hover:bg-theme-surface"}`}
+                  className={`flex items-center gap-3 px-4 py-3 border-b border-slate-700/50 cursor-pointer transition
+                    ${sel ? "bg-indigo-500/20 border-l-[3px] border-l-indigo-500" : "hover:bg-slate-800/50"}`}
                 >
                   <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.realStatus === "running" ? `0 0 6px ${dotColor}` : "none" }} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className="text-[13px] font-semibold text-theme-text truncate">{v.registration_no}</div>
+                        <div className="text-[13px] font-semibold text-slate-900 truncate">{v.registration_no}</div>
                         {statuses[imei] === "connected" && (
                           <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded-full border border-green-500/20 font-medium">CONNECTED</span>
                         )}
@@ -753,13 +753,13 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
                         </div>
                       )}
                     </div>
-                    <div className="text-[11px] text-theme-text-dim truncate">{v.vehicle_type?.name || "—"}</div>
+                    <div className="text-[11px] text-slate-900 truncate">{v.vehicle_type?.name || "—"}</div>
                     {pos && <div className="text-[10px] text-theme-accent mt-0.5">{pos.speed} km/h</div>}
                   </div>
                 </div>
               );
             })}
-            {filtered.length === 0 && <div className="text-center py-8 text-theme-text-dim text-sm">No vehicles</div>}
+            {filtered.length === 0 && <div className="text-center py-8 text-slate-500 text-sm">No vehicles</div>}
           </div>
         </div>
       )}
