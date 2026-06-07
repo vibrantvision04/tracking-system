@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import useSWR from "swr";
+
+const fetcher = (url: string) => api<{ data?: any[] }>(url).then(res => res.data || []);
 
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import DashboardGrid from "@/components/dashboard/DashboardGrid";
@@ -23,9 +26,13 @@ export default function HomePage() {
   const loaded = useStore((state) => state.loaded);
   const loadAll = useStore((state) => state.loadAll);
 
-  const [zonesCount, setZonesCount] = useState<number | string>("...");
-  const [wardsCount, setWardsCount] = useState<number | string>("...");
-  const [routesCount, setRoutesCount] = useState<number | string>("...");
+  const { data: zones = [], isValidating: loadingZones } = useSWR("/api/zones", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const { data: wards = [], isValidating: loadingWards } = useSWR("/api/wards", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const { data: routes = [], isValidating: loadingRoutes } = useSWR("/api/routes", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+
+  const zonesCount = loadingZones && zones.length === 0 ? "..." : zones.length;
+  const wardsCount = loadingWards && wards.length === 0 ? "..." : wards.length;
+  const routesCount = loadingRoutes && routes.length === 0 ? "..." : routes.length;
 
   // Mocked for now based on user instruction
   const gvpCount = "24"; 
@@ -37,13 +44,6 @@ export default function HomePage() {
       loadAll();
     }
   }, [loaded, loadAll]);
-
-  useEffect(() => {
-    // Fetch counts
-    api<{ data: any[] }>("/api/zones").then((res) => setZonesCount(res.data ? res.data.length : 0)).catch(() => setZonesCount("N/A"));
-    api<{ data: any[] }>("/api/wards").then((res) => setWardsCount(res.data ? res.data.length : 0)).catch(() => setWardsCount("N/A"));
-    api<{ data: any[] }>("/api/routes").then((res) => setRoutesCount(res.data ? res.data.length : 0)).catch(() => setRoutesCount("N/A"));
-  }, []);
 
   const loading = !loaded;
   const activeVehiclesCount = vehicles.filter((v) => v.status !== "offline").length;

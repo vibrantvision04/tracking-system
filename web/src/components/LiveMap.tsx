@@ -2,10 +2,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Vehicle, LivePosition } from "@/lib/types";
 import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { centroid } from "@turf/turf";
+import useSWR from "swr";
+
+const fetcher = (url: string) => api<{ data?: any[], success?: boolean }>(url).then(res => res.data || []);
 
 interface Props { 
   vehicles: Vehicle[];
@@ -17,6 +23,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const markers = useRef<Record<string, L.Marker>>({});
   const wardsLayerRef = useRef<L.LayerGroup | null>(null);
   const facilitiesLayerRef = useRef<L.LayerGroup | null>(null);
+  const clusterLayerRef = useRef<L.MarkerClusterGroup | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -29,73 +36,12 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     }
     return "all";
   });
-  const [zones, setZones] = useState<any[]>([]);
-  const [regionsList, setRegionsList] = useState<any[]>([]);
-  const hasFitBounds = useRef(false);
-
-  const [parkingSpots, setParkingSpots] = useState<any[]>([]);
-  const [transferStations, setTransferStations] = useState<any[]>([]);
-  const [fuelStations, setFuelStations] = useState<any[]>([]);
-  const [workshops, setWorkshops] = useState<any[]>([]);
-
-  // SWR: Load static elements instantly from localStorage cache on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const cachedZones = localStorage.getItem("live_zones");
-        const cachedRegions = localStorage.getItem("live_regions");
-        const cachedParking = localStorage.getItem("live_parking_spots");
-        const cachedTransfer = localStorage.getItem("live_transfer_stations");
-        const cachedFuel = localStorage.getItem("live_fuel_stations");
-        const cachedWorkshops = localStorage.getItem("live_workshops");
-
-        if (cachedZones) setZones(JSON.parse(cachedZones));
-        if (cachedRegions) setRegionsList(JSON.parse(cachedRegions));
-        if (cachedParking) setParkingSpots(JSON.parse(cachedParking));
-        if (cachedTransfer) setTransferStations(JSON.parse(cachedTransfer));
-        if (cachedFuel) setFuelStations(JSON.parse(cachedFuel));
-        if (cachedWorkshops) setWorkshops(JSON.parse(cachedWorkshops));
-      } catch (e) {
-        console.warn("Failed to load cached LiveMap layers:", e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    Promise.all([
-      api<{ data: any[] }>("/api/zones").then((res) => {
-        setZones(res.data || []);
-        localStorage.setItem("live_zones", JSON.stringify(res.data || []));
-      }).catch(err => console.error("LiveMap failed to load zones:", err)),
-      
-      api<{ success: boolean; data: any[] }>("/api/regions").then((res) => {
-        if (res.success) {
-          setRegionsList(res.data || []);
-          localStorage.setItem("live_regions", JSON.stringify(res.data || []));
-        }
-      }).catch(err => console.error("LiveMap failed to load regions:", err)),
-      
-      api<{ data: any[] }>("/api/parking-spots").then((res) => {
-        setParkingSpots(res.data || []);
-        localStorage.setItem("live_parking_spots", JSON.stringify(res.data || []));
-      }).catch(err => console.error("LiveMap failed to load parking spots:", err)),
-      
-      api<{ data: any[] }>("/api/transfer-stations").then((res) => {
-        setTransferStations(res.data || []);
-        localStorage.setItem("live_transfer_stations", JSON.stringify(res.data || []));
-      }).catch(err => console.error("LiveMap failed to load transfer stations:", err)),
-      
-      api<{ data: any[] }>("/api/fuel-stations").then((res) => {
-        setFuelStations(res.data || []);
-        localStorage.setItem("live_fuel_stations", JSON.stringify(res.data || []));
-      }).catch(err => console.error("LiveMap failed to load fuel stations:", err)),
-      
-      api<{ data: any[] }>("/api/workshops").then((res) => {
-        setWorkshops(res.data || []);
-        localStorage.setItem("live_workshops", JSON.stringify(res.data || []));
-      }).catch(err => console.error("LiveMap failed to load workshops:", err))
-    ]).catch(err => console.error("LiveMap SWR revalidation failed:", err));
-  }, []);
+  const { data: zones = [] } = useSWR("/api/zones", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const { data: regionsList = [] } = useSWR("/api/regions", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const { data: parkingSpots = [] } = useSWR("/api/parking-spots", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const { data: transferStations = [] } = useSWR("/api/transfer-stations", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const { data: fuelStations = [] } = useSWR("/api/fuel-stations", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const { data: workshops = [] } = useSWR("/api/workshops", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
 
   const livePosAccumulator = useRef<Record<string, LivePosition>>({});
 
@@ -155,9 +101,15 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
 
     googleMapLayer.addTo(m); // Default layer
     
-    // Initialize Wards layer group
     wardsLayerRef.current = L.layerGroup().addTo(m);
     facilitiesLayerRef.current = L.layerGroup().addTo(m);
+    
+    clusterLayerRef.current = (L as any).markerClusterGroup({
+      disableClusteringAtZoom: 15,
+      spiderfyOnMaxZoom: true,
+      maxClusterRadius: 60,
+    });
+    m.addLayer(clusterLayerRef.current!);
     
     // Add zoom control manually in the bottom right corner
     L.control.zoom({ position: 'bottomright' }).addTo(m);
@@ -175,6 +127,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       markers.current = {}; 
       wardsLayerRef.current = null;
       facilitiesLayerRef.current = null;
+      clusterLayerRef.current = null;
     };
   }, []);
 
@@ -524,7 +477,12 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     if (markers.current[imei]) {
       markers.current[imei].setLatLng([lat, lng]).setIcon(icon);
     } else {
-      markers.current[imei] = L.marker([lat, lng], { icon }).addTo(mapRef.current);
+      markers.current[imei] = L.marker([lat, lng], { icon });
+      if (clusterLayerRef.current) {
+        clusterLayerRef.current.addLayer(markers.current[imei]);
+      } else if (mapRef.current) {
+        markers.current[imei].addTo(mapRef.current);
+      }
     }
 
     const timeStr = isLive ? "Live Now" : (lastTime ? `Last seen: ${new Date(lastTime).toLocaleString()}` : "Offline");
@@ -559,7 +517,11 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     // Cleanup hidden markers
     Object.keys(markers.current).forEach((imei) => {
       if (!filteredImeis.has(imei)) {
-        markers.current[imei].remove();
+        if (clusterLayerRef.current) {
+          clusterLayerRef.current.removeLayer(markers.current[imei]);
+        } else {
+          markers.current[imei].remove();
+        }
         delete markers.current[imei];
       }
     });
@@ -643,7 +605,11 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
                 upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "", true);
               } else {
                 if (markers.current[msg.imei]) {
-                  markers.current[msg.imei].remove();
+                  if (clusterLayerRef.current) {
+                    clusterLayerRef.current.removeLayer(markers.current[msg.imei]);
+                  } else {
+                    markers.current[msg.imei].remove();
+                  }
                   delete markers.current[msg.imei];
                 }
               }
