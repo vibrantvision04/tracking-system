@@ -3,9 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import "leaflet.markercluster";
-import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Vehicle, LivePosition } from "@/lib/types";
 import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
@@ -24,7 +21,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const markers = useRef<Record<string, L.Marker>>({});
   const wardsLayerRef = useRef<L.LayerGroup | null>(null);
   const facilitiesLayerRef = useRef<L.LayerGroup | null>(null);
-  const clusterLayerRef = useRef<L.MarkerClusterGroup | null>(null);
+
   const box = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -105,12 +102,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     wardsLayerRef.current = L.layerGroup().addTo(m);
     facilitiesLayerRef.current = L.layerGroup().addTo(m);
     
-    clusterLayerRef.current = (L as any).markerClusterGroup({
-      disableClusteringAtZoom: 15,
-      spiderfyOnMaxZoom: true,
-      maxClusterRadius: 60,
-    });
-    m.addLayer(clusterLayerRef.current!);
+
     
     // Add zoom control manually in the bottom right corner
     L.control.zoom({ position: 'bottomright' }).addTo(m);
@@ -128,7 +120,6 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       markers.current = {}; 
       wardsLayerRef.current = null;
       facilitiesLayerRef.current = null;
-      clusterLayerRef.current = null;
     };
   }, []);
 
@@ -478,12 +469,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     if (markers.current[imei]) {
       markers.current[imei].setLatLng([lat, lng]).setIcon(icon);
     } else {
-      markers.current[imei] = L.marker([lat, lng], { icon });
-      if (clusterLayerRef.current) {
-        clusterLayerRef.current.addLayer(markers.current[imei]);
-      } else if (mapRef.current) {
-        markers.current[imei].addTo(mapRef.current);
-      }
+      markers.current[imei] = L.marker([lat, lng], { icon }).addTo(mapRef.current);
     }
 
     const timeStr = isLive ? "Live Now" : (lastTime ? `Last seen: ${new Date(lastTime).toLocaleString()}` : "Offline");
@@ -518,11 +504,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     // Cleanup hidden markers
     Object.keys(markers.current).forEach((imei) => {
       if (!filteredImeis.has(imei)) {
-        if (clusterLayerRef.current) {
-          clusterLayerRef.current.removeLayer(markers.current[imei]);
-        } else {
-          markers.current[imei].remove();
-        }
+        markers.current[imei].remove();
         delete markers.current[imei];
       }
     });
@@ -606,11 +588,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
                 upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "", true);
               } else {
                 if (markers.current[msg.imei]) {
-                  if (clusterLayerRef.current) {
-                    clusterLayerRef.current.removeLayer(markers.current[msg.imei]);
-                  } else {
-                    markers.current[msg.imei].remove();
-                  }
+                  markers.current[msg.imei].remove();
                   delete markers.current[msg.imei];
                 }
               }
