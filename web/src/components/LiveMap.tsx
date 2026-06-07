@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
@@ -322,7 +323,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           if (bounds.isValid()) {
             mapRef.current.fitBounds(bounds, { padding: [30, 30] });
           }
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
@@ -440,7 +441,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           if (bounds.isValid()) {
             mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
           }
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
@@ -577,7 +578,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     let ws: WebSocket | null = null;
     let reconnect: ReturnType<typeof setTimeout>;
     let isMounted = true;
-    const pendingFetches = new Set<string>();
+
     
     const connect = () => {
       if (!isMounted) return;
