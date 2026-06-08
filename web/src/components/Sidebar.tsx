@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,126 +6,126 @@ import { useState, useRef, useEffect } from "react";
 
 const navData = [
   {
-    label: "Manage",
-    icon: "⚙️",
+    label: "Vehicles",
+    icon: "🚛",
     children: [
+      { label: "Vehicle List", href: "/vehicles" },
+      { label: "Vehicle Type", href: "/iswm/vehicle-type" },
+      { label: "Vehicle Make", href: "/iswm/vehicle-make" },
+      { label: "Vehicle Group", href: "/iswm/vehicle-groups" },
+      { label: "Capacity Type", href: "/iswm/capacity-type" },
+      { label: "Fuel Rate", href: "/iswm/fuel-rate" },
+      { label: "Contractors", href: "/iswm/contractors" },
       {
-        label: "Vehicles",
+        label: "Assignments",
         children: [
-          { label: "Vehicle List", href: "/vehicles" },
-          { label: "Vehicle Type", href: "/iswm/vehicle-type" },
-          { label: "Vehicle Make", href: "/iswm/vehicle-make" },
-          { label: "Vehicle Group", href: "/iswm/vehicle-groups" },
-          { label: "Capacity Type", href: "/iswm/capacity-type" },
-          { label: "Fuel Rate", href: "/iswm/fuel-rate" },
-          { label: "Contractors", href: "/iswm/contractors" },
-          {
-            label: "Assignments",
-            children: [
-              { label: "GPS Device To Vehicle", href: "/iswm/gpsdevice-vehicle" },
-              { label: "Vehicle To Region", href: "/iswm/vehicle-region" },
-              { label: "Vehicle To Department", href: "/iswm/vehicle-department" },
-              { label: "Vehicle To Groups", href: "/iswm/vehicle-groups-mapping" },
-              { label: "Fuel To Vehicle", href: "/iswm/vehicle-fuel" },
-            ],
-          },
-          {
-            label: "Adhoc",
-            children: [
-              { label: "Temporary Vehicle", href: "/iswm/temporary-vehicle" },
-            ],
-          },
+          { label: "GPS Device To Vehicle", href: "/iswm/gpsdevice-vehicle" },
+          { label: "Vehicle To Region", href: "/iswm/vehicle-region" },
+          { label: "Vehicle To Department", href: "/iswm/vehicle-department" },
+          { label: "Vehicle To Groups", href: "/iswm/vehicle-groups-mapping" },
+          { label: "Fuel To Vehicle", href: "/iswm/vehicle-fuel" },
         ],
       },
       {
-        label: "GPS Devices",
+        label: "Adhoc",
         children: [
-          { label: "GPS Device List", href: "/devices" },
-          { label: "GPS Device Type", href: "/iswm/gps-device-type" },
-          { label: "POS Device", href: "/iswm/pos-device" },
-          { label: "Weigh Bridge", href: "/iswm/weigh-bridge" },
-          {
-            label: "Assignments",
-            children: [
-              { label: "POS Device To Fuelstation", href: "/iswm/posdevice-fuelstation" },
-              { label: "WeighBridge to TS", href: "/iswm/weighbridge-transferstation" },
-            ],
-          },
+          { label: "Temporary Vehicle", href: "/iswm/temporary-vehicle" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "GPS Devices",
+    icon: "📡",
+    children: [
+      { label: "GPS Device List", href: "/devices" },
+      { label: "GPS Device Type", href: "/iswm/gps-device-type" },
+      { label: "POS Device", href: "/iswm/pos-device" },
+      { label: "Weigh Bridge", href: "/iswm/weigh-bridge" },
+      {
+        label: "Assignments",
+        children: [
+          { label: "POS Device To Fuelstation", href: "/iswm/posdevice-fuelstation" },
+          { label: "WeighBridge to TS", href: "/iswm/weighbridge-transferstation" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Regions & Routes",
+    icon: "🏛️",
+    children: [
+      { label: "Zones & Wards", href: "/zones" },
+      { label: "Region Type", href: "/iswm/region-type" },
+      { label: "Route", href: "/iswm/route" },
+      { label: "Route Type", href: "/iswm/route-type" },
+      { label: "Shift", href: "/iswm/shift" },
+      { label: "Collection Type", href: "/iswm/vehicle-purpose" },
+      { label: "Reason", href: "/iswm/reason" },
+      {
+        label: "Assignments",
+        children: [
+          { label: "Route To Ward", href: "/iswm/route-ward" },
+          { label: "Route To Vehicle & Shift", href: "/iswm/route-shift-vehicle" },
+          { label: "Route Type To Vehicle Type", href: "/iswm/routetype-vehicletype" },
+          { label: "Transfer Station To Ward", href: "/iswm/transferstation-ward" },
+          { label: "Fuel Station To Zone", href: "/iswm/fuelstation-zone" },
+          { label: "Parking Spot To Zone", href: "/iswm/parkingspot-zone" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "POIs",
+    icon: "📍",
+    children: [
+      { label: "Transfer Station", href: "/iswm/transfer-station" },
+      { label: "Workshop", href: "/iswm/workshop" },
+      { label: "Parking Spots", href: "/iswm/parking-spot" },
+      { label: "Fuel Station", href: "/iswm/fuel-station" },
+      { label: "Fuel Companies", href: "/iswm/fuel-company" },
+      { label: "Fuel Type", href: "/iswm/fuel-type" },
+      { label: "Upload Fuel Transactions", href: "/iswm/upload-fuel-transaction" },
+      {
+        label: "Depute",
+        children: [
+          { label: "Incharge at TS", href: "/iswm/incharge-transferstation" },
+          { label: "Incharge at Fuel Station", href: "/iswm/incharge-fuelstation" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "HR / Staff",
+    icon: "👥",
+    children: [
+      { label: "Employee List", href: "/iswm/employee" },
+      { label: "Department", href: "/iswm/department" },
+      { label: "Designation", href: "/iswm/designation" },
+      {
+        label: "Assignments",
+        children: [
+          { label: "Driver/Helper to Shift & Vehicle", href: "/iswm/employee-shift-vehicle" },
+          { label: "Employee to Designation & Department", href: "/iswm/employee-department-designation" },
+          { label: "Role To User", href: "/iswm/role-user" },
+          { label: "Department to Designation", href: "/iswm/department-designation" },
+          { label: "Region Type to Designation", href: "/iswm/regiontype-designation" },
         ],
       },
       {
-        label: "Regions & Routes",
+        label: "Adhoc",
         children: [
-          { label: "Zones & Wards", href: "/zones" },
-          { label: "Region Type", href: "/iswm/region-type" },
-          { label: "Route", href: "/iswm/route" },
-          { label: "Route Type", href: "/iswm/route-type" },
-          { label: "Shift", href: "/iswm/shift" },
-          { label: "Collection Type", href: "/iswm/vehicle-purpose" },
-          { label: "Reason", href: "/iswm/reason" },
-          {
-            label: "Assignments",
-            children: [
-              { label: "Route To Ward", href: "/iswm/route-ward" },
-              { label: "Route To Vehicle & Shift", href: "/iswm/route-shift-vehicle" },
-              { label: "Route Type To Vehicle Type", href: "/iswm/routetype-vehicletype" },
-              { label: "Transfer Station To Ward", href: "/iswm/transferstation-ward" },
-              { label: "Fuel Station To Zone", href: "/iswm/fuelstation-zone" },
-              { label: "Parking Spot To Zone", href: "/iswm/parkingspot-zone" },
-            ],
-          },
+          { label: "Temporary Driver", href: "/iswm/temporary-driver" },
         ],
       },
-      {
-        label: "POIs",
-        children: [
-          { label: "Transfer Station", href: "/iswm/transfer-station" },
-          { label: "Workshop", href: "/iswm/workshop" },
-          { label: "Parking Spots", href: "/iswm/parking-spot" },
-          { label: "Fuel Station", href: "/iswm/fuel-station" },
-          { label: "Fuel Companies", href: "/iswm/fuel-company" },
-          { label: "Fuel Type", href: "/iswm/fuel-type" },
-          { label: "Upload Fuel Transactions", href: "/iswm/upload-fuel-transaction" },
-          {
-            label: "Depute",
-            children: [
-              { label: "Incharge at TS", href: "/iswm/incharge-transferstation" },
-              { label: "Incharge at Fuel Station", href: "/iswm/incharge-fuelstation" },
-            ],
-          },
-        ],
-      },
-      {
-        label: "HR / Staff",
-        children: [
-          { label: "Employee List", href: "/iswm/employee" },
-          { label: "Department", href: "/iswm/department" },
-          { label: "Designation", href: "/iswm/designation" },
-          {
-            label: "Assignments",
-            children: [
-              { label: "Driver/Helper to Shift & Vehicle", href: "/iswm/employee-shift-vehicle" },
-              { label: "Employee to Designation & Department", href: "/iswm/employee-department-designation" },
-              { label: "Role To User", href: "/iswm/role-user" },
-              { label: "Department to Designation", href: "/iswm/department-designation" },
-              { label: "Region Type to Designation", href: "/iswm/regiontype-designation" },
-            ],
-          },
-          {
-            label: "Adhoc",
-            children: [
-              { label: "Temporary Driver", href: "/iswm/temporary-driver" },
-            ],
-          },
-        ],
-      },
-      {
-        label: "Data Entry",
-        children: [
-          { label: "Trenching Ground Weighbridge Entry", href: "/iswm/trenching-ground-weighbridge-entry" },
-          { label: "Weighbridge 3 Bin Entry", href: "/iswm/weighbridge-3-bin-entry" },
-        ],
-      },
+    ],
+  },
+  {
+    label: "Data Entry",
+    icon: "⌨️",
+    children: [
+      { label: "Trenching Ground Weighbridge Entry", href: "/iswm/trenching-ground-weighbridge-entry" },
+      { label: "Weighbridge 3 Bin Entry", href: "/iswm/weighbridge-3-bin-entry" },
     ],
   },
   {
@@ -226,13 +225,7 @@ const navData = [
     icon: "⏪",
     href: "/playback",
   },
-  {
-    label: "Live Feed",
-    icon: "🗺️",
-    href: "/",
-  },
 ];
-
 
 // Helper to recursively filter out fuel-related menus if feature toggle is disabled
 const filterFuelItems = (items: any[]): any[] => {
@@ -270,7 +263,6 @@ export default function Sidebar() {
   // Smooth unmount trick: keep content visible during fade out
   useEffect(() => {
     if (activeCategory) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRenderedCategory(activeCategory);
     }
   }, [activeCategory]);
@@ -415,38 +407,27 @@ export default function Sidebar() {
       {/* Flyout Mega Menu - Glassmorphism & Slide-in Animation */}
       <div 
         ref={flyoutRef}
-        className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl lg:border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
+        className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
           transition-all duration-300 ease-out
-          left-0 lg:${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
-          w-full
-          ${['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "lg:w-[600px]" : "lg:w-[350px]"}
+          ${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
           ${activeCategory 
             ? "opacity-100 translate-x-0" 
-            : "opacity-0 -translate-x-full lg:-translate-x-4 pointer-events-none"
+            : "opacity-0 -translate-x-4 pointer-events-none"
           }
         `}
+        style={{ width: (activeCategory || renderedCategory) === "Reports" ? "600px" : "350px" }}
       >
         {currentCategoryData && (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-4 border-b border-theme-border bg-theme-surface">
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setActiveCategory(null)}
-                  className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-theme-surface-hover border border-theme-border text-theme-text hover:text-theme-accent transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <div className="flex items-center gap-2">
-                  <span className="text-theme-accent font-bold text-sm lg:text-xs">{currentCategoryData.label}</span>
-                  <span className="hidden lg:inline text-theme-text-dim text-[10px] uppercase tracking-wider">Options</span>
-                </div>
+            <div className="flex items-center justify-between px-4 py-4 border-b border-theme-border">
+              <div className="flex items-center gap-2">
+                <span className="text-theme-accent font-bold text-xs">{currentCategoryData.label}</span>
+                <span className="text-theme-text-dim text-[10px] uppercase tracking-wider">Options</span>
               </div>
               <button 
                 onClick={() => setActiveCategory(null)}
-                className="hidden lg:flex text-theme-text-dim hover:text-theme-text transition-colors w-6 h-6 items-center justify-center rounded-full hover:bg-theme-surface-hover"
+                className="text-theme-text-dim hover:text-theme-text transition-colors"
               >
                 ✕
               </button>
@@ -454,7 +435,7 @@ export default function Sidebar() {
 
             {/* Content - Grid of Columns */}
             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-              <div className={`grid grid-cols-1 ${['Reports', 'Manage'].includes(activeCategory || renderedCategory || '') ? "lg:grid-cols-3" : "lg:grid-cols-2"} gap-x-6 gap-y-6`}>
+              <div className={`grid ${(activeCategory || renderedCategory) === "Reports" ? "grid-cols-3" : "grid-cols-2"} gap-x-6 gap-y-6`}>
                 {currentCategoryData.children?.map((sub: any) => {
                   const hasSubChildren = sub.children && sub.children.length > 0;
 
@@ -478,60 +459,27 @@ export default function Sidebar() {
                         </div>
                       )}
 
-                      {/* Level 3 Links and Level 4 Headers */}
+                      {/* Level 3 Links */}
                       {hasSubChildren && (
                         <div className="space-y-0.5 flex flex-col">
-                          {sub.children!.map((item: any) => {
-                            if (item.href) {
-                              return (
-                                <Link
-                                  key={item.label}
-                                  href={item.href}
-                                  prefetch={false}
-                                  onClick={() => {
-                                    setSidebarOpen(false);
-                                    setActiveCategory(null);
-                                  }}
-                                  className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
-                                    ${path === item.href
-                                      ? "text-theme-accent font-medium"
-                                      : "text-theme-text-dim hover:text-theme-text"
-                                    }`}
-                                >
-                                  {item.label}
-                                </Link>
-                              );
-                            }
-                            
-                            // Nested Level 4 (e.g. 'Assignments' or 'Adhoc')
-                            return (
-                              <div key={item.label} className="mt-3 mb-1 flex flex-col">
-                                <span className="text-[9px] font-bold text-theme-text-dim/80 uppercase tracking-wider mb-1.5 border-b border-theme-border/50 pb-0.5 w-fit">
-                                  {item.label}
-                                </span>
-                                <div className="space-y-0.5 flex flex-col ml-1.5 border-l-2 border-theme-border/30 pl-2">
-                                  {item.children?.map((subItem: any) => (
-                                    <Link
-                                      key={subItem.label}
-                                      href={subItem.href}
-                                      prefetch={false}
-                                      onClick={() => {
-                                        setSidebarOpen(false);
-                                        setActiveCategory(null);
-                                      }}
-                                      className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
-                                        ${path === subItem.href
-                                          ? "text-theme-accent font-medium"
-                                          : "text-theme-text-dim hover:text-theme-text"
-                                        }`}
-                                    >
-                                      {subItem.label}
-                                    </Link>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {sub.children!.map((item: any) => (
+                            <Link
+                              key={item.label}
+                              href={item.href}
+                              prefetch={false}
+                              onClick={() => {
+                                setSidebarOpen(false);
+                                setActiveCategory(null);
+                              }}
+                              className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
+                                ${path === item.href
+                                  ? "text-theme-accent font-medium"
+                                  : "text-theme-text-dim hover:text-theme-text"
+                                }`}
+                            >
+                              {item.label}
+                            </Link>
+                          ))}
                         </div>
                       )}
                     </div>
