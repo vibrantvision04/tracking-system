@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { useState, useRef, useEffect } from "react";
+import { Label } from "recharts";
 
 const navData = [
   {
@@ -82,6 +83,7 @@ const navData = [
       { label: "Transfer Station", href: "/iswm/transfer-station" },
       { label: "Workshop", href: "/iswm/workshop" },
       { label: "Parking Spots", href: "/iswm/parking-spot" },
+      { label: "Open Depot", href: "/iswm/open-depot" },
       { label: "Fuel Station", href: "/iswm/fuel-station" },
       { label: "Fuel Companies", href: "/iswm/fuel-company" },
       { label: "Fuel Type", href: "/iswm/fuel-type" },
@@ -136,6 +138,7 @@ const navData = [
       { label: "Employee Location", href: "/iswm/employee-location" },
       { label: "D2D", href: "/iswm/d2d" },
       { label: "Alert Manager", href: "/iswm/alert-manager" },
+
     ],
   },
   {
@@ -174,6 +177,7 @@ const navData = [
           { label: "Waste Generator Coverage Report", href: "/iswm/waste-generator-coverage-report" },
           { label: "Waste Generator Summary Report", href: "/iswm/waste-generator-summary-report" },
           { label: "Waste Weight Report", href: "/iswm/waste-weight-report" },
+          { label: "Open Depot Cleaning Report", href: "/iswm/open-depot-cleaning-report" },
         ],
       },
       {
@@ -221,6 +225,13 @@ const navData = [
     ],
   },
   {
+    label: "Approvals",
+    icon: "✅",
+    children: [
+      { label: "Open Depot Cleaning", href: "/iswm/open-depot-cleaning" }
+    ],
+  },
+  {
     label: "Playback",
     icon: "⏪",
     href: "/playback",
@@ -254,7 +265,7 @@ export default function Sidebar() {
   const setSidebarOpen = useStore((state) => state.setSidebarOpen);
   const sidebarCollapsed = useStore((state) => state.sidebarCollapsed);
   const setSidebarCollapsed = useStore((state) => state.setSidebarCollapsed);
-  
+
   // State to track active category for flyout
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [renderedCategory, setRenderedCategory] = useState<string | null>(null);
@@ -284,7 +295,7 @@ export default function Sidebar() {
     <>
       {/* Overlay for mobile with glass effect */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-theme-surface backdrop-blur-sm z-[1001] lg:hidden transition-opacity duration-300"
           onClick={() => setSidebarOpen(false)}
         />
@@ -309,7 +320,7 @@ export default function Sidebar() {
             </div>
           </div>
           {!sidebarCollapsed && (
-            <button 
+            <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors animate-fade-in"
             >
@@ -317,7 +328,7 @@ export default function Sidebar() {
             </button>
           )}
           {sidebarCollapsed && (
-            <button 
+            <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors"
             >
@@ -358,8 +369,8 @@ export default function Sidebar() {
                     onClick={() => setActiveCategory(isActive ? null : category.label)}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg transition-all duration-200 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
-                      ${isActive 
-                        ? "bg-gradient-to-r from-emerald-500/[.15] to-transparent text-theme-accent font-medium" 
+                      ${isActive
+                        ? "bg-gradient-to-r from-emerald-500/[.15] to-transparent text-theme-accent font-medium"
                         : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
                       }`}
                   >
@@ -405,13 +416,13 @@ export default function Sidebar() {
       </aside>
 
       {/* Flyout Mega Menu - Glassmorphism & Slide-in Animation */}
-      <div 
+      <div
         ref={flyoutRef}
         className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
           transition-all duration-300 ease-out
           ${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
-          ${activeCategory 
-            ? "opacity-100 translate-x-0" 
+          ${activeCategory
+            ? "opacity-100 translate-x-0"
             : "opacity-0 -translate-x-4 pointer-events-none"
           }
         `}
@@ -425,7 +436,7 @@ export default function Sidebar() {
                 <span className="text-theme-accent font-bold text-xs">{currentCategoryData.label}</span>
                 <span className="text-theme-text-dim text-[10px] uppercase tracking-wider">Options</span>
               </div>
-              <button 
+              <button
                 onClick={() => setActiveCategory(null)}
                 className="text-theme-text-dim hover:text-theme-text transition-colors"
               >

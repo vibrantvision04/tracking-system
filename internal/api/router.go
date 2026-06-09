@@ -1,15 +1,17 @@
 package api
 
 import (
+	"gps-tracking-system/internal/config"
 	"gps-tracking-system/internal/ws"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 )
 
-func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
+func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 	r := chi.NewRouter()
 
 	// 1. Middleware
@@ -189,7 +191,46 @@ func SetupRouter(h *Handler, hub *ws.Hub) http.Handler {
 		r.Post("/reasons", h.CreateReason)
 		r.Put("/reasons/{id}", h.UpdateReason)
 		r.Delete("/reasons/{id}", h.DeleteReason)
+
+		// Open Depot Management endpoints
+		r.Get("/open-depots", h.GetOpenDepots)
+		r.Get("/open-depots/analytics", h.GetOpenDepotAnalytics)
+		r.Get("/open-depots/{id}", h.GetOpenDepotByID)
+		r.Post("/open-depots", h.CreateOpenDepot)
+		r.Put("/open-depots/{id}", h.UpdateOpenDepot)
+		r.Delete("/open-depots/{id}", h.DeleteOpenDepot)
+
+		// Open Depot Cleaning Review & Report endpoints (Admin side)
+		r.Get("/open-depots/cleanings", h.GetCleaningSubmissions)
+		r.Post("/open-depots/cleanings/{id}/review", h.ReviewCleaningSubmission)
+
+		// Worker Upload & Submission endpoints (Worker side - unsecured for testing phase)
+		r.Post("/open-depots/cleanings/upload", h.UploadCleaningPhoto)
+		r.Post("/open-depots/cleanings", h.CreateCleaningSubmission)
 	})
 
+	// Static files serving for uploaded cleaning photos
+	fileServer(r, "/uploads", http.Dir("./uploads"))
+
 	return r
+}
+
+// fileServer sets up a http.FileServer handler for a chi router.
+func fileServer(r chi.Router, path string, root http.FileSystem) {
+	if strings.ContainsAny(path, "{}*") {
+		panic("FileServer does not permit any URL parameters.")
+	}
+
+	if path != "/" && path[len(path)-1] == '/' {
+		r.Get(path, http.RedirectHandler(path[:len(path)-1], http.StatusMovedPermanently).ServeHTTP)
+		path = path[:len(path)-1]
+	}
+	pathPattern := path + "/*"
+
+	r.Get(pathPattern, func(w http.ResponseWriter, r *http.Request) {
+		rctx := chi.RouteContext(r.Context())
+		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
+		fs := http.StripPrefix(pathPrefix, http.FileServer(root))
+		fs.ServeHTTP(w, r)
+	})
 }

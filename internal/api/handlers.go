@@ -27,6 +27,7 @@ type ResolvedDetails struct {
 type Handler struct {
 	vRepo             *repository.VehicleRepository
 	gpsRepo           *repository.GPSRepository
+	openDepotRepo     *repository.OpenDepotRepository
 	rService          *service.ReportService
 	rdb               *redis.Client
 	routeRepo         *repository.RouteRepository
@@ -36,18 +37,21 @@ type Handler struct {
 	alertsMutex       sync.Mutex
 	alertsCache       []map[string]interface{}
 	resolvedAlerts    map[int]ResolvedDetails
+	jwtSecret         string
 }
 
-func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine) *Handler {
+func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine, openDepotRepo *repository.OpenDepotRepository, jwtSecret string) *Handler {
 	h := &Handler{
 		vRepo:             vRepo,
 		gpsRepo:           gpsRepo,
+		openDepotRepo:     openDepotRepo,
 		rService:          rService,
 		rdb:               rdb,
 		routeRepo:         routeRepo,
 		routeEngine:       routeEngine,
 		zoneVehiclesCache: make(map[string][]map[string]interface{}),
 		resolvedAlerts:    make(map[int]ResolvedDetails),
+		jwtSecret:         jwtSecret,
 	}
 	h.RebuildCache()
 	h.LoadAlerts()

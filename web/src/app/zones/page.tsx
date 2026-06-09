@@ -607,49 +607,6 @@ export default function RegionManager() {
       ) : (
         /* ─── CASES WITH STANDARD HEADER ─── */
         <>
-          {/* Header Bar */}
-          <header className="h-16 bg-theme-surface px-6 flex items-center justify-between border-b border-theme-border shrink-0 shadow-sm z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-theme-accent text-white font-bold text-[13px] shadow-md shadow-emerald-500/20 shrink-0">
-                JN
-              </div>
-              <div>
-                <h1 className="text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase">
-                  ISWM - Nagar Nigam Jaipur
-                </h1>
-                <span className="text-[9px] text-theme-text-dim font-bold uppercase tracking-wider">
-                  Integrated Solid Waste Management System
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center bg-theme-surface border border-theme-border rounded-lg px-2 py-1 select-none">
-                <span className="text-[10px] text-theme-text-dim uppercase font-extrabold mr-1.5">Lang:</span>
-                <select
-                  value={selectedLanguage}
-                  onChange={(e) => setSelectedLanguage(e.target.value)}
-                  className="bg-transparent text-xs text-theme-text-dim font-bold outline-none cursor-pointer pr-1"
-                >
-                  <option value="en">English</option>
-                  <option value="hi">हिन्दी</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2 border-l border-theme-border pl-4">
-                <div className="text-right hidden sm:block">
-                  <div className="text-[11px] font-bold text-theme-text leading-none">Admin User</div>
-                  <span className="text-[8px] font-semibold text-theme-accent uppercase tracking-wider">
-                    Online
-                  </span>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 text-white text-xs font-black shadow-md shadow-emerald-500/20">
-                  AD
-                </div>
-              </div>
-            </div>
-          </header>
-
           {formOpen ? (
             /* ─── CASE A.2: Split-Screen Form (Form Card Left, Map Card Right) ─── */
             <div className="flex-grow overflow-y-auto p-6 md:p-8 custom-scrollbar">

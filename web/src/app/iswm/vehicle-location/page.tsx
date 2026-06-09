@@ -21,34 +21,13 @@ export default function VehicleLocationPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none">
-      {/* Premium light-grey header bar matching dashboard */}
-      <header className="h-16 bg-theme-surface px-6 flex items-center justify-between border-b border-theme-border shrink-0 shadow-sm z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-theme-accent text-white font-bold text-[13px] shadow-md shadow-emerald-500/20 shrink-0">
-            VT
-          </div>
-          <div>
-            <h1 className="text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase">
-              Vehicle Live Location Tracking
-            </h1>
-            <span className="text-[9px] text-theme-text-dim font-bold uppercase tracking-wider">
-              Nagar Nigam Jaipur Heritage - Realtime GPS Fleet Monitoring
-            </span>
-          </div>
+      {/* Sub-header with Title */}
+      <div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-slate-700">Vehicle Live Location Tracking</h2>
+          <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
         </div>
-
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <div className="text-[11px] font-bold text-theme-text leading-none">Admin User</div>
-            <span className="text-[8px] font-semibold text-theme-accent uppercase tracking-wider">
-              Online
-            </span>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 text-white text-xs font-black shadow-md shadow-emerald-500/20">
-            AD
-          </div>
-        </div>
-      </header>
+      </div>
 
       {/* Main full-screen viewport */}
       <div className="flex-1 flex min-h-0 relative bg-theme-base">

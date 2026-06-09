@@ -9,8 +9,6 @@ import { api } from "@/lib/api";
 import useSWR from "swr";
 
 const fetcher = (url: string) => api<{ data?: any[] }>(url).then(res => res.data || []);
-
-import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import DashboardGrid from "@/components/dashboard/DashboardGrid";
 import StatCard from "@/components/dashboard/StatCard";
 import CoverageChart from "@/components/dashboard/CoverageChart";
@@ -53,8 +51,6 @@ export default function HomePage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 text-slate-800 overflow-hidden font-sans">
-      <DashboardHeader />
-      
       <DashboardGrid
         row1={
           <>

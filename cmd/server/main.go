@@ -54,6 +54,7 @@ func main() {
 	rRepo := repository.NewReportRepository(db)
 	tRepo := repository.NewTripRepository(db)
 	routeRepo := repository.NewRouteRepository(db)
+	openDepotRepo := repository.NewOpenDepotRepository(db)
 
 	// 5. Initialize Caches
 	locCache := cache.NewLocationCache(rdb)
@@ -91,8 +92,8 @@ func main() {
 
 
 	// 12. Start Servers
-	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo, routeEngine)
-	router := api.SetupRouter(handler, hub)
+	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo, routeEngine, openDepotRepo, cfg.JWTSecret)
+	router := api.SetupRouter(handler, hub, cfg)
 
 	// API Server (Handles both HTTP and WebSockets)
 	srv := &http.Server{

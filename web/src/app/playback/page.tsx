@@ -1018,28 +1018,6 @@ export default function PlaybackPage() {
         }
       `}} />
       
-      {/* Dynamic Master Header */}
-      <header className="flex h-14 bg-[#e2e8f0] px-6 items-center border-b border-slate-300 shrink-0 justify-between w-full">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold tracking-wide text-slate-800">ISWM - NAGAR NIGAM JAIPUR</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          {/* Language Selection */}
-          <div className="relative flex items-center bg-white border border-slate-300 rounded px-3 py-1 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-50 transition">
-            <span>English</span>
-            <svg className="w-3.5 h-3.5 ml-1.5 fill-current text-slate-500" viewBox="0 0 20 20">
-              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-            </svg>
-          </div>
-          {/* Circular user profile silhouette */}
-          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-white shrink-0 shadow-sm">
-            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-            </svg>
-          </div>
-        </div>
-      </header>
-
       {/* Sub-header / Playback Title with Green Line */}
       <div className="bg-white px-6 py-2 border-b border-slate-200 shrink-0">
         <h2 className="text-base font-bold text-slate-700">Playback</h2>
