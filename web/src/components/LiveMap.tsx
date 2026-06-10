@@ -513,16 +513,42 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     filteredVehicles.forEach((v) => {
       const imei = v.gps_device?.imei;
       if (!imei) return;
-      if (v.last_lat && v.last_lng) {
+
+      const pos = livePos[imei];
+      if (pos) {
+        // Use live position data (from snapshot or ws updates)
+        upsertMarker(
+          imei,
+          pos.lat,
+          pos.lng,
+          pos.speed,
+          !!pos.ignition,
+          v.registration_no,
+          v.vehicle_type?.name || "Vehicle",
+          true,
+          pos.captured_at || v.last_time
+        );
+      } else if (v.last_lat && v.last_lng) {
+        // Fallback to static DB values
         const isMoving = v.status === "running";
         const isIdle = v.status === "idle";
         const simulatedSpeed = isMoving ? 5 : (isIdle ? 2 : 0);
         const simulatedIsLive = v.status !== "offline";
         
-        upsertMarker(imei, v.last_lat, v.last_lng, simulatedSpeed, false, v.registration_no, v.vehicle_type?.name || "Vehicle", simulatedIsLive, v.last_time);
+        upsertMarker(
+          imei,
+          v.last_lat,
+          v.last_lng,
+          simulatedSpeed,
+          false,
+          v.registration_no,
+          v.vehicle_type?.name || "Vehicle",
+          simulatedIsLive,
+          v.last_time
+        );
       }
     });
-  }, [vehicles, selectedZone, upsertMarker]);
+  }, [vehicles, selectedZone, livePos, upsertMarker]);
 
   // ─── Fit Bounds on Zone Change or Load ───
   const lastFittedZone = useRef<string | null | undefined>(undefined);
