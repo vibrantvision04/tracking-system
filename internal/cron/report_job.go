@@ -65,6 +65,16 @@ func (j *ReportJob) RunForDate(date time.Time) {
 			generated++
 		}
 	}
-	
+
 	log.Info().Int("generated", generated).Int("total_vehicles", len(vehicles)).Str("date", date.Format("2006-01-02")).Msg("Movement report generation completed")
+
+	// ── Finalization ────────────────────────────────────────────────────────
+	// After all reports have been computed, lock them so no further GPS data
+	// or cron re-runs can modify yesterday's records.  The WHERE NOT
+	// is_finalized guard in Upsert enforces this at the SQL level.
+	if err := j.rService.FinalizeForDate(ctx, date); err != nil {
+		log.Error().Err(err).Str("date", date.Format("2006-01-02")).Msg("Failed to finalize reports for date")
+	} else {
+		log.Info().Str("date", date.Format("2006-01-02")).Msg("Reports finalized and locked for date")
+	}
 }

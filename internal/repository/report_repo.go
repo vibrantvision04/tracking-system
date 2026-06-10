@@ -43,6 +43,7 @@ type MovementReport struct {
 	OverspeedDistance         float64   `json:"overspeed_distance"`
 	OverspeedCount            string    `json:"overspeed_count"`
 	OverspeedTime             string    `json:"overspeed_time"`
+	IsFinalized               bool      `json:"is_finalized"`
 }
 
 type ReportRepository struct {
@@ -91,7 +92,8 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 			  overspeed_time = EXCLUDED.overspeed_time,
 			  zone = EXCLUDED.zone,
 			  ward = EXCLUDED.ward,
-			  stoppages_count = EXCLUDED.stoppages_count`
+			  stoppages_count = EXCLUDED.stoppages_count
+			  WHERE NOT movement_reports.is_finalized`
 	
 	_, err := r.pool.Exec(ctx, query,
 		rep.IMEI, rep.VehicleID, rep.ReportDate, rep.AverageSpeed, rep.TotalDistance, rep.StartPoint, rep.EndPoint,
@@ -101,6 +103,18 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 		rep.DayRunningTime, rep.NightRunningTime, rep.FuelInLtr, rep.FuelConsumption,
 		rep.SpeedLimit, rep.MaxSpeed, rep.MinSpeed, rep.OverspeedDistance, rep.OverspeedCount, rep.OverspeedTime,
 		rep.Zone, rep.Ward, rep.StoppagesCount,
+	)
+	return err
+}
+
+// FinalizeReportsForDate stamps all movement reports for the given date as
+// finalized (is_finalized = true). After this call, Upsert will refuse to
+// overwrite those rows, turning them into a permanent historical snapshot.
+func (r *ReportRepository) FinalizeReportsForDate(ctx context.Context, date time.Time) error {
+	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	_, err := r.pool.Exec(ctx,
+		`UPDATE movement_reports SET is_finalized = true WHERE report_date = $1`,
+		day,
 	)
 	return err
 }

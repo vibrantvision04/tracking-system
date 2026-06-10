@@ -184,13 +184,16 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		}
 
 		if i == 0 {
-			// Initialise state from the first packet
+			// Initialise state from the first packet.
+			// If ignition is already ON at the very first packet of this day, the
+			// vehicle may have been driving through midnight (carry-over session).
+			// We anchor the session to the day-start boundary (00:00:00) so the
+			// duration correctly starts from midnight, not from the packet timestamp.
 			if currOn {
-				// Day starts with ignition already on — treat as a rising edge
 				inSession = true
-				sessionStart = p.Time
+				sessionStart = start // day-boundary (00:00:00)
 
-				t := p.Time
+				t := start // StartTime = midnight (carry-over) or actual first-packet time
 				startTime = &t
 				startLat = p.Lat
 				startLng = p.Lng
@@ -232,6 +235,30 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	}
 
 	// ─────────────────────────────────────────────────────────────────
+	// End-of-day clipping
+	// If a session is still open when the day's data ends (vehicle drove
+	// through midnight into the next day), forcibly close it at the day
+	// boundary (end = start + 24h). This gives the current day a definite
+	// EndTime and a complete active-hours count.
+	// The carry-over portion will be accounted for in the next day's report
+	// because the first packet of the next day will also have ignition ON.
+	// ─────────────────────────────────────────────────────────────────
+	if inSession {
+		clipDur := int(end.Sub(sessionStart).Seconds())
+		if clipDur > 0 {
+			totalActiveSec += clipDur
+		}
+		// EndTime = day boundary (23:59:59.999…)
+		endClip := end.Add(-time.Millisecond)
+		endTime = &endClip
+		// EndPoint = last known location
+		if lastPoint != nil {
+			endLat = lastPoint.Lat
+			endLng = lastPoint.Lng
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────
 	// Build start/end point JSON strings
 	// ─────────────────────────────────────────────────────────────────
 	startPointStr := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", startLng, startLat)
@@ -243,7 +270,8 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		startTime = &t
 		startPointStr = fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", validData[0].Lng, validData[0].Lat)
 	}
-	// endTime stays nil if the day ended with ignition still on (open session)
+	// endTime may still be nil only if there were zero ignition events at all
+	// (handled by the fallback below if needed — but distance/stoppage still store).
 
 	// ─────────────────────────────────────────────────────────────────
 	// Average speed = total distance / active hours
@@ -286,6 +314,13 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 // This ensures consistent, fast responses regardless of GPS data volume.
 func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int) ([]repository.MovementReport, int, error) {
 	return s.repo.Get(ctx, vehicleID, from, to, limit, offset)
+}
+
+// FinalizeForDate marks all movement reports for the given calendar date as
+// finalized (is_finalized = true). After finalization the Upsert guard in the
+// repository prevents any further modification of those rows.
+func (s *ReportService) FinalizeForDate(ctx context.Context, date time.Time) error {
+	return s.repo.FinalizeReportsForDate(ctx, date)
 }
 
 func formatDuration(seconds int) string {
