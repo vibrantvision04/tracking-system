@@ -33,8 +33,30 @@ type VehicleRouteAssignment struct {
 	ID           int       `json:"id"`
 	VehicleID    int       `json:"vehicle_id"`
 	RouteID      int       `json:"route_id"`
+	ShiftID      int       `json:"shift_id"`
 	AssignedDate time.Time `json:"assigned_date"`
 	IsActive     bool      `json:"is_active"`
+}
+
+type Shift struct {
+	ID           int       `json:"id"`
+	ShiftName    string    `json:"shift_name"`
+	StartTime    string    `json:"start_time"`
+	EndTime      string    `json:"end_time"`
+	TimeDuration int       `json:"time_duration"`
+	IsActive     bool      `json:"is_active"`
+}
+
+type VehicleRouteAssignmentDetail struct {
+	ID             int       `json:"id"`
+	VehicleID      int       `json:"vehicle_id"`
+	VehicleRegNo   string    `json:"vehicle_reg_no"`
+	RouteID        int       `json:"route_id"`
+	RouteName      string    `json:"route_name"`
+	ShiftID        int       `json:"shift_id"`
+	ShiftName      string    `json:"shift_name"`
+	AssignedDate   string    `json:"assigned_date"`
+	IsActive       bool      `json:"is_active"`
 }
 
 type RouteCoverageLog struct {
@@ -83,28 +105,103 @@ func (r *RouteRepository) GetCheckpointsByRoute(ctx context.Context, routeID int
 }
 
 // Assignments
-func (r *RouteRepository) AssignRoute(ctx context.Context, vehicleID, routeID int, date time.Time) error {
+func (r *RouteRepository) AssignRoute(ctx context.Context, vehicleID, routeID, shiftID int, date time.Time) error {
 	query := `
-		INSERT INTO vehicle_route_assignments (vehicle_id, route_id, assigned_date, is_active)
-		VALUES ($1, $2, $3, true)
-		ON CONFLICT (vehicle_id, assigned_date)
+		INSERT INTO vehicle_route_assignments (vehicle_id, route_id, shift_id, assigned_date, is_active)
+		VALUES ($1, $2, $3, $4, true)
+		ON CONFLICT (vehicle_id, shift_id, assigned_date)
 		DO UPDATE SET route_id = EXCLUDED.route_id, is_active = true, updated_at = NOW()
 	`
-	_, err := r.db.Exec(ctx, query, vehicleID, routeID, date.Format("2006-01-02"))
+	_, err := r.db.Exec(ctx, query, vehicleID, routeID, shiftID, date.Format("2006-01-02"))
 	return err
 }
 
-func (r *RouteRepository) GetAssignedRoute(ctx context.Context, vehicleID int, date time.Time) (*VehicleRouteAssignment, error) {
-	query := `SELECT id, vehicle_id, route_id, assigned_date, is_active
-              FROM vehicle_route_assignments
-              WHERE vehicle_id = $1 AND assigned_date = $2 AND is_active = true`
+func (r *RouteRepository) GetAssignedRoute(ctx context.Context, vehicleID int, date time.Time, shiftID *int, timeOfDay *string) (*VehicleRouteAssignment, error) {
+	query := `SELECT va.id, va.vehicle_id, va.route_id, va.shift_id, va.assigned_date, va.is_active
+              FROM vehicle_route_assignments va
+              JOIN shifts s ON va.shift_id = s.id
+              WHERE va.vehicle_id = $1 AND va.assigned_date = $2 AND va.is_active = true`
+	
+	var args []interface{}
+	args = append(args, vehicleID, date.Format("2006-01-02"))
+	
+	if shiftID != nil {
+		query += " AND va.shift_id = $3"
+		args = append(args, *shiftID)
+	} else if timeOfDay != nil {
+		query += ` AND (
+			(s.start_time <= s.end_time AND ($3::TIME >= s.start_time AND $3::TIME <= s.end_time))
+			OR
+			(s.start_time > s.end_time AND ($3::TIME >= s.start_time OR $3::TIME <= s.end_time))
+		)`
+		args = append(args, *timeOfDay)
+	}
+	query += " LIMIT 1"
+
 	var a VehicleRouteAssignment
-	err := r.db.QueryRow(ctx, query, vehicleID, date.Format("2006-01-02")).
-		Scan(&a.ID, &a.VehicleID, &a.RouteID, &a.AssignedDate, &a.IsActive)
+	err := r.db.QueryRow(ctx, query, args...).
+		Scan(&a.ID, &a.VehicleID, &a.RouteID, &a.ShiftID, &a.AssignedDate, &a.IsActive)
 	if err != nil {
 		return nil, err
 	}
 	return &a, nil
+}
+
+func (r *RouteRepository) GetShifts(ctx context.Context) ([]Shift, error) {
+	query := `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, ''), COALESCE(time_duration, 0), is_active FROM shifts ORDER BY id ASC`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Shift
+	for rows.Next() {
+		var s Shift
+		if err := rows.Scan(&s.ID, &s.ShiftName, &s.StartTime, &s.EndTime, &s.TimeDuration, &s.IsActive); err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	return list, nil
+}
+
+func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, date time.Time) ([]VehicleRouteAssignmentDetail, error) {
+	query := `
+		SELECT 
+			va.id,
+			va.vehicle_id, COALESCE(v.registration_no, '') as vehicle_reg_no,
+			va.route_id, COALESCE(r.route_name, '') as route_name,
+			va.shift_id, COALESCE(s.shift_name, '') as shift_name,
+			TO_CHAR(va.assigned_date, 'YYYY-MM-DD') as assigned_date,
+			va.is_active
+		FROM vehicle_route_assignments va
+		JOIN vehicles v ON va.vehicle_id = v.id
+		JOIN routes r ON va.route_id = r.id
+		JOIN shifts s ON va.shift_id = s.id
+		WHERE va.assigned_date = $1 AND va.is_active = true
+		ORDER BY va.id DESC
+	`
+	rows, err := r.db.Query(ctx, query, date.Format("2006-01-02"))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []VehicleRouteAssignmentDetail
+	for rows.Next() {
+		var d VehicleRouteAssignmentDetail
+		if err := rows.Scan(&d.ID, &d.VehicleID, &d.VehicleRegNo, &d.RouteID, &d.RouteName, &d.ShiftID, &d.ShiftName, &d.AssignedDate, &d.IsActive); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
+	return list, nil
+}
+
+func (r *RouteRepository) DeleteAssignment(ctx context.Context, id int) error {
+	query := `DELETE FROM vehicle_route_assignments WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, id)
+	return err
 }
 
 // Coverage Logging

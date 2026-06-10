@@ -63,6 +63,7 @@ func main() {
 	rService := service.NewReportService(rRepo, gpsRepo, vRepo)
 	tService := service.NewTripService(tRepo, vRepo, gpsRepo, rdb)
 	routeEngine := service.NewRouteEngine(routeRepo, vRepo)
+	routeEngine.RefreshCache()
 
 	// 7. Initialize Ingestion Pipeline
 	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond, cfg.BatchBufferCeiling)

@@ -771,7 +771,7 @@ export default function RouteBuilderMap({
 			<div ref={mapContainerRef} className="w-full h-full min-h-[400px] z-10" />
 
 			{/* Left Top Action Panel */}
-			<div className="absolute top-3 left-12 z-50 flex flex-col gap-2">
+			<div className="absolute top-3 left-[60px] z-50 flex flex-col gap-2">
 				<button
 					type="button"
 					onClick={(e) => {
@@ -779,8 +779,8 @@ export default function RouteBuilderMap({
 						setIsDrawing(!isDrawing);
 						setActiveOverlay(false);
 					}}
-					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs ${
-						isDrawing ? "bg-theme-accent border border-indigo-400" : "bg-theme-surface/80 hover:bg-slate-800 border border-theme-border"
+					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs whitespace-nowrap ${
+						isDrawing ? "bg-theme-accent border border-indigo-400" : "bg-theme-surface/80 hover:bg-slate-100 border border-theme-border"
 					}`}
 					title={isDrawing ? "Click on map to draw. Double-click to stop" : "Start drawing route polyline"}
 				>
@@ -810,7 +810,7 @@ export default function RouteBuilderMap({
 								return updated;
 							});
 						}}
-						className="p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs bg-theme-surface/90 hover:bg-slate-800 border border-theme-border"
+						className="p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs whitespace-nowrap bg-theme-surface/90 hover:bg-slate-100 border border-theme-border"
 						title="Remove the last placed route point (Undo)"
 					>
 						<span>↩️</span>
@@ -840,10 +840,10 @@ export default function RouteBuilderMap({
 									setShowConfirmClear(false);
 								}
 							}}
-							className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs border ${
+							className={`p-2 rounded-lg text-white font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs whitespace-nowrap border ${
 								showConfirmClear 
-									? "bg-red-600 hover:bg-red-700 border-red-500 animate-pulse" 
-									: "bg-red-950/90 hover:bg-red-900/90 border-red-500/30 hover:border-red-500/50"
+									? "bg-red-400 hover:bg-red-600 border-red-100 animate-pulse" 
+									: "bg-red-700 hover:bg-red-600 border-red-500/30 hover:border-red-500/50"
 							}`}
 							title="Delete all coordinate points and reset the entire route"
 						>
@@ -859,7 +859,7 @@ export default function RouteBuilderMap({
 									e.preventDefault();
 									setShowConfirmClear(false);
 								}}
-								className="p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center transition-colors text-xs bg-theme-surface/90 hover:bg-slate-800 border border-theme-border"
+								className="p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center transition-colors text-xs bg-theme-surface/90 hover:bg-slate-100 border border-theme-border"
 								title="Cancel clearing"
 							>
 								Cancel
@@ -880,8 +880,8 @@ export default function RouteBuilderMap({
 						setIsDrawing(false);
 					}}
 					disabled={routeCoords.length < 2}
-					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs ${
-						activeOverlay ? "bg-blue-600 border border-blue-400" : "bg-theme-surface/80 hover:bg-slate-800 border border-theme-border"
+					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs whitespace-nowrap ${
+						activeOverlay ? "bg-blue-100 border border-blue-400" : "bg-theme-surface/80 hover:bg-slate-200 border border-theme-border"
 					} ${routeCoords.length < 2 ? "opacity-40 cursor-not-allowed" : ""}`}
 					title={routeCoords.length < 2 ? "Draw route path first to enable lane checkpoints" : "Configure lane checkpoints snapped to route line"}
 				>

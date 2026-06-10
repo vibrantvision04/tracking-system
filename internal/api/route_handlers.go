@@ -66,6 +66,7 @@ func (h *Handler) AssignRouteToVehicle(w http.ResponseWriter, r *http.Request) {
 
 	var payload struct {
 		RouteID int    `json:"route_id"`
+		ShiftID int    `json:"shift_id"`
 		Date    string `json:"date"` // YYYY-MM-DD
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -85,7 +86,19 @@ func (h *Handler) AssignRouteToVehicle(w http.ResponseWriter, r *http.Request) {
 		targetDate = parsedDate
 	}
 
-	if err := h.routeRepo.AssignRoute(r.Context(), vehicleID, payload.RouteID, targetDate); err != nil {
+	if payload.ShiftID <= 0 {
+		var route struct {
+			ShiftID *int
+		}
+		err := h.gpsRepo.Pool().QueryRow(r.Context(), "SELECT shift_id FROM routes WHERE id = $1", payload.RouteID).Scan(&route.ShiftID)
+		if err == nil && route.ShiftID != nil {
+			payload.ShiftID = *route.ShiftID
+		} else {
+			payload.ShiftID = 1 // default shift ID
+		}
+	}
+
+	if err := h.routeRepo.AssignRoute(r.Context(), vehicleID, payload.RouteID, payload.ShiftID, targetDate); err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to assign route: " + err.Error()})
 		return
 	}
@@ -127,7 +140,13 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 			return
 		}
 	} else {
-		assignment, err := h.routeRepo.GetAssignedRoute(r.Context(), vehicleID, targetDate)
+		var shiftIDPtr *int
+		if shiftIDStr := r.URL.Query().Get("shift_id"); shiftIDStr != "" {
+			if sID, err := strconv.Atoi(shiftIDStr); err == nil {
+				shiftIDPtr = &sID
+			}
+		}
+		assignment, err := h.routeRepo.GetAssignedRoute(r.Context(), vehicleID, targetDate, shiftIDPtr, nil)
 		if err != nil || assignment == nil {
 			sendJSON(w, http.StatusOK, map[string]interface{}{
 				"success": false,
@@ -224,4 +243,49 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 		"coverage_percentage": coveragePct,
 		"details":             visitedDetails,
 	})
+}
+
+func (h *Handler) GetVehicleRouteAssignments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	dateStr := r.URL.Query().Get("date")
+	var targetDate time.Time
+	if dateStr == "" {
+		targetDate = time.Now()
+	} else {
+		var err error
+		targetDate, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
+			return
+		}
+	}
+
+	assignments, err := h.routeRepo.GetVehicleRouteAssignmentsByDate(ctx, targetDate)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch assignments: " + err.Error()})
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    assignments,
+	})
+}
+
+func (h *Handler) DeleteVehicleRouteAssignment(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid assignment ID"})
+		return
+	}
+
+	if err := h.routeRepo.DeleteAssignment(r.Context(), id); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete assignment: " + err.Error()})
+		return
+	}
+
+	h.routeEngine.RefreshCache()
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }

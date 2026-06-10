@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import DeleteButton from "@/components/ui/DeleteButton";
+import EditButton from "@/components/ui/EditButton";
 import Table from "@/components/shared/Table";
 
 interface RouteWard {
@@ -44,6 +45,7 @@ export default function RouteWardPage() {
   const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
   const [wardDropdownOpen, setWardDropdownOpen] = useState(false);
   const [tableFilter, setTableFilter] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
   const routeRef = useRef<HTMLDivElement>(null);
   const wardRef = useRef<HTMLDivElement>(null);
 
@@ -77,22 +79,36 @@ export default function RouteWardPage() {
   useEffect(() => { loadData(); }, []);
 
   const closeForm = () => {
-    setFormOpen(false); setSelectedRouteId(null); setSelectedWardId(null);
-    setRouteSearch(""); setWardSearch("");
+    setFormOpen(false); 
+    setSelectedRouteId(null); 
+    setSelectedWardId(null);
+    setRouteSearch(""); 
+    setWardSearch("");
+    setEditingId(null);
   };
 
   const handleSubmit = async () => {
     if (!selectedRouteId || !selectedWardId) { toast.warning("Both Route and Ward must be selected."); return; }
     setSubmitting(true);
     try {
+      if (editingId) {
+        await del(`/api/route-wards/${editingId}`);
+      }
       await post("/api/route-wards", { route_id: selectedRouteId, ward_id: selectedWardId });
-      toast.success("Assigned successfully!");
+      toast.success(editingId ? "Mapping updated successfully!" : "Assigned successfully!");
       closeForm(); loadData();
     } catch {
       toast.error("Failed to assign route to ward.");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleOpenEditForm = (rw: RouteWard) => {
+    setEditingId(rw.id);
+    setSelectedRouteId(rw.route_id);
+    setSelectedWardId(rw.ward_id);
+    setFormOpen(true);
   };
 
   const handleDelete = async (rw: RouteWard) => {
@@ -134,7 +150,7 @@ export default function RouteWardPage() {
         {formOpen && (
           <Card className="animate-fade-in relative z-20">
             <CardHeader>
-              <CardTitle>Assign Route to Ward</CardTitle>
+              <CardTitle>{editingId ? "✏️ Edit Route to Ward Mapping" : "Assign Route to Ward"}</CardTitle>
               <CardDescription>Select a route and ward to create a mapping.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -214,7 +230,10 @@ export default function RouteWardPage() {
                     <td className="py-3 px-5 font-medium">{rw.route_name}</td>
                     <td className="py-3 px-5 text-theme-text-dim">{rw.ward_name}</td>
                     <td className="py-3 px-5 text-right">
-                      <DeleteButton onDelete={() => handleDelete(rw)} confirmMessage={`Remove assignment for ${rw.route_name}?`} />
+                      <div className="flex items-center justify-end gap-2">
+                        <EditButton onClick={() => handleOpenEditForm(rw)} />
+                        <DeleteButton onDelete={() => handleDelete(rw)} confirmMessage={`Remove assignment for ${rw.route_name}?`} />
+                      </div>
                     </td>
                   </tr>
                 ))}

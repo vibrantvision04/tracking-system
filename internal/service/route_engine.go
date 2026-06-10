@@ -19,7 +19,8 @@ type RouteEngine struct {
 
 	// In-memory cache for fast geofence lookups to avoid DB hit per GPS ping
 	mu               sync.RWMutex
-	assignments      map[int]int                          // vehicleID -> routeID (0 means no route assigned today)
+	shifts           []repository.Shift                   // cache of all shifts
+	assignments      map[int]int                          // compositeKey (vehicleID * 1000 + shiftID) -> routeID
 	routeCheckpoints map[int][]repository.RouteCheckpoint // routeID -> checkpoints
 	visited          map[int]map[int]bool                 // vehicleID -> checkpointID -> visited today
 	onRoute          map[int]bool                         // vehicleID -> is currently actively on route
@@ -41,6 +42,35 @@ func NewRouteEngine(routeRepo *repository.RouteRepository, vehicleRepo *reposito
 		imeiVehicles:     make(map[string]*repository.Vehicle),
 		lastRefresh:      time.Now(),
 	}
+}
+
+func (e *RouteEngine) getShiftIDForTime(t time.Time) int {
+	localTimeStr := t.Local().Format("15:04:05")
+	e.mu.RLock()
+	shiftsCopy := make([]repository.Shift, len(e.shifts))
+	copy(shiftsCopy, e.shifts)
+	e.mu.RUnlock()
+
+	for _, s := range shiftsCopy {
+		if !s.IsActive {
+			continue
+		}
+		start := s.StartTime
+		end := s.EndTime
+		if start == "" || end == "" {
+			continue
+		}
+		if start <= end {
+			if localTimeStr >= start && localTimeStr <= end {
+				return s.ID
+			}
+		} else {
+			if localTimeStr >= start || localTimeStr <= end {
+				return s.ID
+			}
+		}
+	}
+	return 0
 }
 
 // Process checks a new GPS point against assigned route checkpoints
@@ -78,9 +108,16 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 	}
 	vehicleID := vehicle.ID
 
+	// Find current shift based on packet time
+	shiftID := e.getShiftIDForTime(data.Time)
+	if shiftID == 0 {
+		shiftID = 1 // default/fallback to shift 1
+	}
+	compositeKey := vehicleID*1000 + shiftID
+
 	// 2. Look up assigned route in cache (0 indicates no route assigned today)
 	e.mu.RLock()
-	routeID, hasAssignedRoute := e.assignments[vehicleID]
+	routeID, hasAssignedRoute := e.assignments[compositeKey]
 	e.mu.RUnlock()
 
 	if !hasAssignedRoute {
@@ -89,18 +126,18 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		defer cancel()
 
 		today := time.Now().Truncate(24 * time.Hour)
-		assignment, err := e.routeRepo.GetAssignedRoute(ctx, vehicleID, today)
+		assignment, err := e.routeRepo.GetAssignedRoute(ctx, vehicleID, today, &shiftID, nil)
 		
 		e.mu.Lock()
 		if err != nil || assignment == nil {
 			// Cache the negative result (0) to avoid hitting database on every subsequent ping today
-			e.assignments[vehicleID] = 0
+			e.assignments[compositeKey] = 0
 			e.mu.Unlock()
 			return
 		}
 
 		routeID = assignment.RouteID
-		e.assignments[vehicleID] = routeID
+		e.assignments[compositeKey] = routeID
 
 		// Load checkpoints
 		checkpoints, _ := e.routeRepo.GetCheckpointsByRoute(ctx, routeID)
@@ -239,12 +276,21 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 // RefreshCache can be called via API when an assignment changes
 func (e *RouteEngine) RefreshCache() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.assignments = make(map[int]int)
 	e.visited = make(map[int]map[int]bool)
 	e.onRoute = make(map[int]bool)
 	e.lastPositions = make(map[int]decoder.AVLData)
 	e.imeiVehicles = make(map[string]*repository.Vehicle)
+	e.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	shifts, err := e.routeRepo.GetShifts(ctx)
+	if err == nil {
+		e.mu.Lock()
+		e.shifts = shifts
+		e.mu.Unlock()
+	}
 }
 
 func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {

@@ -4,13 +4,32 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-interface DepotMapProps {
+interface OpenDepot {
+  id: number;
+  name: string;
+  zone_id: number;
+  ward_id: number;
   latitude: number;
   longitude: number;
   radius: number;
+  status: string;
+  cleaning_percentage: number;
+  last_cleaned_at: string | null;
+  total_submissions: number;
+  total_approved: number;
+  total_rejected: number;
+  zone_name?: string;
+  ward_name?: string;
+}
+
+interface DepotMapProps {
+  latitude?: number;
+  longitude?: number;
+  radius?: number;
   onLocationChange?: (lat: number, lng: number) => void;
   onRadiusChange?: (radius: number) => void;
   previewOnly?: boolean;
+  depots?: OpenDepot[];
 }
 
 export default function DepotMap({
@@ -20,6 +39,7 @@ export default function DepotMap({
   onLocationChange,
   onRadiusChange,
   previewOnly = false,
+  depots,
 }: DepotMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   
@@ -28,6 +48,7 @@ export default function DepotMap({
   
   const markerRef = useRef<L.Marker | null>(null);
   const circleRef = useRef<L.Circle | null>(null);
+  const multiDepotsLayerRef = useRef<L.LayerGroup | null>(null);
   const initialFitPerformed = useRef(false);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -36,9 +57,9 @@ export default function DepotMap({
   const defaultLng = 75.7873;
 
   // Force cast inputs to numbers to prevent string parsing bugs in Leaflet
-  const latNum = parseFloat(String(latitude));
-  const lngNum = parseFloat(String(longitude));
-  const radNum = parseFloat(String(radius));
+  const latNum = latitude !== undefined ? parseFloat(String(latitude)) : NaN;
+  const lngNum = longitude !== undefined ? parseFloat(String(longitude)) : NaN;
+  const radNum = radius !== undefined ? parseFloat(String(radius)) : NaN;
 
   const hasValidCoords = !isNaN(latNum) && !isNaN(lngNum) && latNum !== 0 && lngNum !== 0;
 
@@ -63,6 +84,8 @@ export default function DepotMap({
 
     // Zoom controls on top-right
     L.control.zoom({ position: "topright" }).addTo(m);
+
+    multiDepotsLayerRef.current = L.layerGroup().addTo(m);
 
     setMapInstance(m);
 
@@ -90,6 +113,19 @@ export default function DepotMap({
   // 2. Track, update, and pan/zoom Marker and Geofence Circle
   useEffect(() => {
     if (!mapInstance) return;
+
+    // If in multi-depots mode, clear single depot layer refs and return
+    if (depots && depots.length > 0) {
+      if (markerRef.current) {
+        markerRef.current.remove();
+        markerRef.current = null;
+      }
+      if (circleRef.current) {
+        circleRef.current.remove();
+        circleRef.current = null;
+      }
+      return;
+    }
 
     const targetLat = hasValidCoords ? latNum : defaultLat;
     const targetLng = hasValidCoords ? lngNum : defaultLng;
@@ -195,7 +231,107 @@ export default function DepotMap({
       // If coords are cleared, reset the initial fit flag
       initialFitPerformed.current = false;
     }
-  }, [mapInstance, latitude, longitude, radius, hasValidCoords, previewOnly, onLocationChange]);
+  }, [mapInstance, latitude, longitude, radius, hasValidCoords, previewOnly, onLocationChange, depots]);
+
+  // 2.5 Render Multiple Depots (when depots prop is provided)
+  useEffect(() => {
+    if (!mapInstance || !multiDepotsLayerRef.current) return;
+
+    multiDepotsLayerRef.current.clearLayers();
+
+    if (!depots || depots.length === 0) return;
+
+    const bounds: L.LatLngTuple[] = [];
+
+    depots.forEach((d) => {
+      if (d.latitude === 0 || d.longitude === 0 || isNaN(d.latitude) || isNaN(d.longitude)) return;
+
+      const position = L.latLng(d.latitude, d.longitude);
+      bounds.push([d.latitude, d.longitude]);
+
+      // Color code based on cleaning score
+      let color = "#3B82F6"; // Default blue
+      if (d.total_submissions === 0) {
+        color = "#94A3B8"; // Gray if never submitted
+      } else if (d.cleaning_percentage >= 80) {
+        color = "#10B981"; // Green (Good cleaning)
+      } else if (d.cleaning_percentage >= 40) {
+        color = "#F59E0B"; // Orange (Medium)
+      } else {
+        color = "#EF4444"; // Red (Poor/Dirty)
+      }
+
+      // Draw the depot radius circle
+      const circle = L.circle(position, {
+        radius: d.radius || 30,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.25,
+        weight: 2,
+      });
+
+      // Marker center dot
+      const marker = L.circleMarker(position, {
+        radius: 5,
+        color: "#FFFFFF",
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 1.5,
+      });
+
+      // Bind rich popup
+      const formattedDate = d.last_cleaned_at
+        ? new Date(d.last_cleaned_at).toLocaleString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Never";
+
+      const popupContent = `
+        <div class="p-2 space-y-1.5 text-xs text-slate-800 font-sans min-w-[200px]">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-1">
+            <h3 class="font-bold text-sm text-slate-900">${d.name}</h3>
+            <span class="px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${
+              d.status === "Active" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+            }">${d.status}</span>
+          </div>
+          <div class="grid grid-cols-2 gap-x-2 gap-y-1 pt-1">
+            <span class="text-slate-400 font-medium">Zone:</span>
+            <span class="font-semibold text-right">${d.zone_name || "N/A"}</span>
+            <span class="text-slate-400 font-medium">Ward:</span>
+            <span class="font-semibold text-right">${d.ward_name || "N/A"}</span>
+            <span class="text-slate-400 font-medium">Radius:</span>
+            <span class="font-mono text-right">${d.radius} m</span>
+            <span class="text-slate-400 font-medium">Clean Score:</span>
+            <span class="font-bold text-right ${
+              d.cleaning_percentage >= 80 ? "text-emerald-600" : d.cleaning_percentage >= 40 ? "text-amber-500" : "text-rose-500"
+            }">${d.cleaning_percentage.toFixed(0)}%</span>
+          </div>
+          <div class="border-t border-slate-100 pt-1.5 flex flex-col text-[10px] text-slate-500">
+            <span>Submissions: ${d.total_submissions} (${d.total_approved} Appr / ${d.total_rejected} Rej)</span>
+            <span class="mt-0.5">Last Cleaned: <strong>${formattedDate}</strong></span>
+          </div>
+        </div>
+      `;
+
+      circle.bindPopup(popupContent);
+      marker.bindPopup(popupContent);
+
+      multiDepotsLayerRef.current?.addLayer(circle);
+      multiDepotsLayerRef.current?.addLayer(marker);
+    });
+
+    // Fit map bounds to view all depots
+    if (bounds.length > 0) {
+      try {
+        mapInstance.fitBounds(bounds, { padding: [50, 50] });
+      } catch (e) {
+        console.error("Failed to fit map bounds", e);
+      }
+    }
+  }, [mapInstance, depots]);
 
   // 3. Handle resize and invalidate map size when fullscreen toggles
   useEffect(() => {

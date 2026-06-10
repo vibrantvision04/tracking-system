@@ -140,13 +140,21 @@ export default function D2DMap() {
   const [zonesList, setZonesList] = useState<Zone[]>([]);
   const [wardsList, setWardsList] = useState<Ward[]>([]);
   const [routeTypesList, setRouteTypesList] = useState<{ id: number; name: string }[]>([]);
+  const [routesList, setRoutesList] = useState<any[]>([]);
+  const [shiftsList, setShiftsList] = useState<any[]>([]);
 
   // Filtering states
   const [selectedZone, setSelectedZone] = useState("Jaipur Heritage (All Zones)");
   const [selectedWard, setSelectedWard] = useState("");
   const [selectedRouteType, setSelectedRouteType] = useState("");
+  const [selectedShift, setSelectedShift] = useState<string>("Morning Shift");
+  const [selectedRouteId, setSelectedRouteId] = useState<string>("");
+  const [hasInitializedShift, setHasInitializedShift] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"alerts" | "started" | "unauth" | "other">("alerts");
+
+  // Layer groups for clean updates
+  const allRoutesLayerRef = useRef<L.LayerGroup | null>(null);
 
   // Facilities states
   const [parkingSpots, setParkingSpots] = useState<any[]>([]);
@@ -177,6 +185,8 @@ export default function D2DMap() {
 
   const [showPlannedRoute, setShowPlannedRoute] = useState(true);
   const [showActualMovement, setShowActualMovement] = useState(true);
+  const [showZoneBoundary, setShowZoneBoundary] = useState(true);
+  const [showWardBoundary, setShowWardBoundary] = useState(true);
 
   // Form states inside table/details
   const [reasons, setReasons] = useState<Record<number, string>>({});
@@ -218,7 +228,9 @@ export default function D2DMap() {
         pSpotsRes,
         tStationsRes,
         fStationsRes,
-        workshopsRes
+        workshopsRes,
+        routesRes,
+        shiftsRes
       ] = await Promise.all([
         api<{
           success: boolean;
@@ -263,6 +275,14 @@ export default function D2DMap() {
         api<{ data: any[] }>("/api/workshops").catch(err => {
           console.error("Failed to load workshops:", err);
           return { data: [] };
+        }),
+        api<{ success: boolean; data: any[] }>("/api/routes").catch(err => {
+          console.error("Failed to load routes:", err);
+          return { success: false, data: [] };
+        }),
+        api<{ success: boolean; data: any[] }>("/api/shifts").catch(err => {
+          console.error("Failed to load shifts:", err);
+          return { success: false, data: [] };
         })
       ]);
 
@@ -273,6 +293,14 @@ export default function D2DMap() {
         setOtherVehicles(dashboardRes.other_vehicles || []);
         setGeofences(dashboardRes.geofences || []);
         setActiveShift(dashboardRes.active_shift || "");
+        if (!hasInitializedShift) {
+          if (dashboardRes.active_shift) {
+            setSelectedShift(dashboardRes.active_shift);
+          } else {
+            setSelectedShift("Morning Shift");
+          }
+          setHasInitializedShift(true);
+        }
       }
 
       if (zonesRes.success) {
@@ -315,6 +343,16 @@ export default function D2DMap() {
         setWorkshops(workshopsRes.data);
         localStorage.setItem("d2d_workshops", JSON.stringify(workshopsRes.data));
       }
+
+      if (routesRes.success) {
+        setRoutesList(routesRes.data || []);
+        localStorage.setItem("d2d_routes", JSON.stringify(routesRes.data || []));
+      }
+
+      if (shiftsRes.success) {
+        setShiftsList(shiftsRes.data || []);
+        localStorage.setItem("d2d_shifts", JSON.stringify(shiftsRes.data || []));
+      }
     } catch (err) {
       console.error("Failed to load dashboard telemetry", err);
     } finally {
@@ -333,6 +371,8 @@ export default function D2DMap() {
         const cachedParking = localStorage.getItem("d2d_parking_spots");
         const cachedTransfer = localStorage.getItem("d2d_transfer_stations");
         const cachedFuel = localStorage.getItem("d2d_fuel_stations");
+        const cachedRoutes = localStorage.getItem("d2d_routes");
+        const cachedShifts = localStorage.getItem("d2d_shifts");
 
         if (cachedZones) {
           const parsed = JSON.parse(cachedZones);
@@ -345,6 +385,8 @@ export default function D2DMap() {
         if (cachedParking) setParkingSpots(JSON.parse(cachedParking));
         if (cachedTransfer) setTransferStations(JSON.parse(cachedTransfer));
         if (cachedFuel) setFuelStations(JSON.parse(cachedFuel));
+        if (cachedRoutes) setRoutesList(JSON.parse(cachedRoutes));
+        if (cachedShifts) setShiftsList(JSON.parse(cachedShifts));
         
         const cachedWorkshops = localStorage.getItem("d2d_workshops");
         if (cachedWorkshops) setWorkshops(JSON.parse(cachedWorkshops));
@@ -381,6 +423,7 @@ export default function D2DMap() {
     geofencesLayerRef.current = L.layerGroup().addTo(m);
     routesLayerRef.current = L.layerGroup().addTo(m);
     wardsLayerRef.current = L.layerGroup().addTo(m);
+    allRoutesLayerRef.current = L.layerGroup().addTo(m);
 
     // Reposition zoom controls manually to bottomright corner
     L.control.zoom({ position: "bottomright" }).addTo(m);
@@ -394,6 +437,7 @@ export default function D2DMap() {
       geofencesLayerRef.current = null;
       routesLayerRef.current = null;
       wardsLayerRef.current = null;
+      allRoutesLayerRef.current = null;
     };
   }, []);
 
@@ -414,13 +458,15 @@ export default function D2DMap() {
     setShowUnauthorizedMovement(checked);
     setShowPlannedRoute(checked);
     setShowActualMovement(checked);
+    setShowZoneBoundary(checked);
+    setShowWardBoundary(checked);
   };
 
   const isAllSelected = 
     showParking && showTransfer && showFuel && showWorkshop &&
     showStop5_10 && showStop10_15 && showStop15_plus &&
     showOverspeeding && showFastCoverage && showDeviation && showDelay && showLateStarted && showUnauthorizedMovement &&
-    showPlannedRoute && showActualMovement;
+    showPlannedRoute && showActualMovement && showZoneBoundary && showWardBoundary;
 
   // ─── Handle Resolve Alert ───
   const handleResolveAlert = async (id: number) => {
@@ -762,12 +808,250 @@ export default function D2DMap() {
     alerts,
   ]);
 
+  // ─── Draw Filtered Routes and Lanes ───
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = allRoutesLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+
+    if (!showPlannedRoute) return;
+
+    // Helper to snap coordinates to a route segment
+    const snapToRoute = (latlng: L.LatLng, coords: L.LatLng[]): { snapped: L.LatLng; index: number } => {
+      if (coords.length === 0) return { snapped: latlng, index: -1 };
+      if (coords.length === 1) return { snapped: coords[0], index: 0 };
+
+      let minDistance = Infinity;
+      let bestPoint = coords[0];
+      let bestIndex = 0;
+
+      for (let i = 0; i < coords.length - 1; i++) {
+        const p1 = coords[i];
+        const p2 = coords[i + 1];
+
+        const x = latlng.lng;
+        const y = latlng.lat;
+        const x1 = p1.lng;
+        const y1 = p1.lat;
+        const x2 = p2.lng;
+        const y2 = p2.lat;
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+
+        let t = 0;
+        if (dx !== 0 || dy !== 0) {
+          t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+          t = Math.max(0, Math.min(1, t));
+        }
+
+        const snapped = L.latLng(y1 + t * dy, x1 + t * dx);
+        const d = latlng.distanceTo(snapped);
+
+        if (d < minDistance) {
+          minDistance = d;
+          bestPoint = snapped;
+          bestIndex = i;
+        }
+      }
+
+      return { snapped: bestPoint, index: bestIndex };
+    };
+
+    // Helper to create flags (pins) for lanes
+    const createD2DPinIcon = (type: "start" | "end", number: string | number) => {
+      const color = type === "start" ? "#22c55e" : "#ef4444";
+      const strokeColor = type === "start" ? "#15803d" : "#b91c1c";
+      return L.divIcon({
+        className: `lane-${type}-flag-pin`,
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 22px; height: 28px;">
+            <svg width="22" height="28" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.5));">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>
+              <circle cx="12" cy="12" r="7.5" fill="white"/>
+              <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="8.5" fill="${strokeColor}">${number}</text>
+            </svg>
+          </div>
+        `,
+        iconSize: [22, 28],
+        iconAnchor: [11, 28],
+      });
+    };
+
+    // Filter logic
+    const activeZone = zonesList.find(z => z.region_name === selectedZone);
+    const activeWardObj = regionsList.find(r => 
+      r.region_type_id === 3 && 
+      r.region_name.split(" - ")[0] === selectedWard
+    );
+
+    let filtered = routesList;
+
+    // 1. Zone Filter
+    if (activeZone && activeZone.id !== -1) {
+      filtered = filtered.filter(route => {
+        const routeWard = regionsList.find(r => r.region_type_id === 3 && r.id === route.ward_id);
+        return routeWard && routeWard.parent_id === activeZone.id;
+      });
+    }
+
+    // 2. Ward Filter
+    if (selectedWard && activeWardObj) {
+      filtered = filtered.filter(route => route.ward_id === activeWardObj.id);
+    }
+
+    // 3. Shift Filter
+    if (selectedShift && selectedShift !== "all") {
+      filtered = filtered.filter(route => {
+        return route.shift_name === selectedShift || 
+               (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
+      });
+    }
+
+    // 4. Route Filter (if a specific route is selected)
+    const isSingleRouteSelected = selectedRouteId && selectedRouteId !== "all";
+    if (isSingleRouteSelected) {
+      filtered = filtered.filter(route => String(route.id) === selectedRouteId);
+    }
+
+    filtered.forEach((route) => {
+      if (!route.geojson) return;
+      try {
+        let feature = route.geojson;
+        if (typeof feature === "string") {
+          feature = JSON.parse(feature);
+        }
+        
+        const routeColor = route.color || "#fba339";
+        
+        // Render route line
+        const routeGeo = L.geoJSON(feature, {
+          style: {
+            color: routeColor,
+            weight: isSingleRouteSelected ? 6 : 4,
+            opacity: isSingleRouteSelected ? 0.95 : 0.65,
+          }
+        }).addTo(layer);
+
+        routeGeo.bindPopup(`
+          <div style="font-family:Inter,sans-serif;font-size:12px;padding:4px;color:#1e293b;">
+            <b style="font-size:14px;color:${routeColor};">${route.route_name}</b><br/>
+            <span style="color:#64748b;font-weight:bold;">ID: ${route.identification}</span><br/>
+            <span style="color:#64748b;">Distance: ${route.distance} km</span><br/>
+            ${route.shift_name ? `<span style="color:#4f46e5;">Shift: ${route.shift_name}</span>` : ''}
+          </div>
+        `);
+
+        // If a specific route is selected, also draw its lanes and pin drop markers
+        if (isSingleRouteSelected && route.lanes) {
+          let parsedLanes = route.lanes;
+          if (typeof parsedLanes === "string") {
+            try {
+              parsedLanes = JSON.parse(parsedLanes);
+            } catch (e) {
+              parsedLanes = [];
+            }
+          }
+          if (Array.isArray(parsedLanes)) {
+            // Get route coordinates for snapping/drawing lane segments
+            let routePts: L.LatLng[] = [];
+            if (feature.geometry && feature.geometry.type === "LineString") {
+              routePts = feature.geometry.coordinates.map((c: any) => L.latLng(c[1], c[0]));
+            } else if (feature.type === "LineString") {
+              routePts = feature.coordinates.map((c: any) => L.latLng(c[1], c[0]));
+            }
+
+            parsedLanes.forEach((lane: any) => {
+              // Draw highlighted lane segment
+              if (routePts.length >= 2) {
+                const startIdx = snapToRoute(L.latLng(lane.startLat, lane.startLng), routePts).index;
+                const endIdx = snapToRoute(L.latLng(lane.endLat, lane.endLng), routePts).index;
+                if (startIdx >= 0 && endIdx >= 0) {
+                  let segmentCoords: L.LatLng[] = [];
+                  const startPt = L.latLng(lane.startLat, lane.startLng);
+                  const endPt = L.latLng(lane.endLat, lane.endLng);
+
+                  if (startIdx <= endIdx) {
+                    segmentCoords = [
+                      startPt,
+                      ...routePts.slice(startIdx, endIdx + 1),
+                      endPt,
+                    ];
+                  } else {
+                    segmentCoords = [
+                      startPt,
+                      ...routePts.slice(endIdx, startIdx + 1).reverse(),
+                      endPt,
+                    ];
+                  }
+
+                  L.polyline(segmentCoords, {
+                    color: "#3b82f6", // Blue for lanes
+                    weight: 6,
+                    opacity: 0.8,
+                  }).addTo(layer);
+                }
+              }
+
+              // Draw start pin (Green)
+              L.marker([lane.startLat, lane.startLng], { 
+                icon: createD2DPinIcon("start", lane.laneOrder) 
+              })
+              .bindPopup(`
+                <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
+                  <b>Lane Set ${lane.laneOrder} - Start</b><br/>
+                  <span style="color:#64748b;">Households: ${lane.noOfHouseholds || 0}</span>
+                </div>
+              `)
+              .addTo(layer);
+
+              // Draw end pin (Red)
+              L.marker([lane.endLat, lane.endLng], { 
+                icon: createD2DPinIcon("end", lane.laneOrder) 
+              })
+              .bindPopup(`
+                <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
+                  <b>Lane Set ${lane.laneOrder} - End</b><br/>
+                  <span style="color:#64748b;">Commercials: ${lane.noOfCommercials || 0}</span>
+                </div>
+              `)
+              .addTo(layer);
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to render route on D2DMap:", err);
+      }
+    });
+
+    // Auto-fit bounds if a specific route is selected
+    if (isSingleRouteSelected && filtered.length > 0 && filtered[0].geojson) {
+      try {
+        let feature = filtered[0].geojson;
+        if (typeof feature === "string") {
+          feature = JSON.parse(feature);
+        }
+        const tempLayer = L.geoJSON(feature);
+        const bounds = tempLayer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [routesList, selectedZone, selectedWard, selectedShift, selectedRouteId, regionsList, zonesList, showPlannedRoute]);
+
   // ─── Render Ward Boundaries overlay on map ───
   useEffect(() => {
     const layer = wardsLayerRef.current;
     if (!layer || !mapRef.current) return;
 
     layer.clearLayers();
+
+    if (!showZoneBoundary && !showWardBoundary) return;
 
     const isAllJaipur = selectedZone === "Jaipur Heritage (All Zones)";
 
@@ -784,7 +1068,7 @@ export default function D2DMap() {
         const zoneColor = zoneRegion && zoneRegion.color ? zoneRegion.color : "#8b5cf6";
 
         // Draw Combined Zone boundary for this zone
-        if (zoneRegion && zoneRegion.geojson) {
+        if (showZoneBoundary && zoneRegion && zoneRegion.geojson) {
           try {
             const zoneBoundaryLayer = L.geoJSON(zoneRegion.geojson, {
               style: {
@@ -827,51 +1111,53 @@ export default function D2DMap() {
 
 
         // Draw all individual Wards of this zone as thin dividers
-        zoneWards.forEach((w) => {
-          if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
-            try {
-              const regionGeoJSON = L.geoJSON(w.geojson, {
-                style: {
-                  color: w.color || zoneColor,
-                  weight: 1.0,
-                  dashArray: "3, 4",
-                  fillColor: w.color || zoneColor,
-                  fillOpacity: 0.0,
-                },
-              });
-
-              regionGeoJSON.bindPopup(`
-                <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
-                  <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
-                  <span style="color:#64748b;font-weight:bold;"> ${z.region_name}</span><br/>
-                  <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
-                </div>
-              `);
-
-              regionGeoJSON.on("mouseover", function (e) {
-                const layerObj = e.target;
-                layerObj.setStyle({
-                  fillOpacity: 0.2,
-                  weight: 2.2,
-                  dashArray: undefined,
+        if (showWardBoundary) {
+          zoneWards.forEach((w) => {
+            if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+              try {
+                const regionGeoJSON = L.geoJSON(w.geojson, {
+                  style: {
+                    color: w.color || zoneColor,
+                    weight: 1.0,
+                    dashArray: "3, 4",
+                    fillColor: w.color || zoneColor,
+                    fillOpacity: 0.0,
+                  },
                 });
-              });
 
-              regionGeoJSON.on("mouseout", function (e) {
-                const layerObj = e.target;
-                layerObj.setStyle({
-                  fillOpacity: 0.0,
-                  weight: 1.0,
-                  dashArray: "3, 4",
+                regionGeoJSON.bindPopup(`
+                  <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
+                    <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
+                    <span style="color:#64748b;font-weight:bold;"> ${z.region_name}</span><br/>
+                    <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
+                  </div>
+                `);
+
+                regionGeoJSON.on("mouseover", function (e) {
+                  const layerObj = e.target;
+                  layerObj.setStyle({
+                    fillOpacity: 0.2,
+                    weight: 2.2,
+                    dashArray: undefined,
+                  });
                 });
-              });
 
-              layer.addLayer(regionGeoJSON);
-            } catch (err) {
-              console.error("Failed to render ward boundary in Jaipur view", err);
+                regionGeoJSON.on("mouseout", function (e) {
+                  const layerObj = e.target;
+                  layerObj.setStyle({
+                    fillOpacity: 0.0,
+                    weight: 1.0,
+                    dashArray: "3, 4",
+                  });
+                });
+
+                layer.addLayer(regionGeoJSON);
+              } catch (err) {
+                console.error("Failed to render ward boundary in Jaipur view", err);
+              }
             }
-          }
-        });
+          });
+        }
       });
 
       // Fit map to show all wards
@@ -907,7 +1193,7 @@ export default function D2DMap() {
       const zoneColor = selectedZoneRegion && selectedZoneRegion.color ? selectedZoneRegion.color : "#8b5cf6";
 
       // 1. Draw Combined Zone Boundary if multiple wards exist and no specific ward is selected
-      if (selectedZoneRegion && selectedZoneRegion.geojson && !selectedWard) {
+      if (showZoneBoundary && selectedZoneRegion && selectedZoneRegion.geojson && !selectedWard) {
         try {
           const zoneBoundaryLayer = L.geoJSON(selectedZoneRegion.geojson, {
             style: {
@@ -950,78 +1236,128 @@ export default function D2DMap() {
 
 
       // 2. Plot individual Wards
-      const wardsToDraw = selectedWard 
-        ? activeWards.filter(w => w.region_name.split(" - ")[0] === selectedWard || w.region_code === selectedWard || w.region_name === selectedWard)
-        : activeWards;
+      if (showWardBoundary) {
+        const wardsToDraw = selectedWard 
+          ? activeWards.filter(w => w.region_name.split(" - ")[0] === selectedWard || w.region_code === selectedWard || w.region_name === selectedWard)
+          : activeWards;
 
-      wardsToDraw.forEach((w) => {
-        if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
-          try {
-            const isSelectedWard = selectedWard && (w.region_name.split(" - ")[0] === selectedWard || w.region_code === selectedWard || w.region_name === selectedWard);
+        wardsToDraw.forEach((w) => {
+          if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+            try {
+              const isSelectedWard = selectedWard && (w.region_name.split(" - ")[0] === selectedWard || w.region_code === selectedWard || w.region_name === selectedWard);
 
-            const regionGeoJSON = L.geoJSON(w.geojson, {
-              style: {
-                color: w.color || zoneColor,
-                weight: isSelectedWard ? 3.5 : 1.2,
-                dashArray: isSelectedWard ? undefined : "3, 4",
-                fillColor: w.color || zoneColor,
-                fillOpacity: isSelectedWard ? 0.25 : 0.0, // transparent inside when displaying combined boundary to avoid overlap
-              },
-            });
-
-            regionGeoJSON.bindPopup(`
-              <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
-                <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
-                <span style="color:#64748b;font-weight:bold;"> ${selectedZone}</span><br/>
-                <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
-              </div>
-            `);
-
-            regionGeoJSON.on("mouseover", function (e) {
-              const layerObj = e.target;
-              layerObj.setStyle({
-                fillOpacity: isSelectedWard ? 0.35 : 0.25,
-                weight: isSelectedWard ? 4.5 : 2.5,
-                dashArray: undefined,
+              const regionGeoJSON = L.geoJSON(w.geojson, {
+                style: {
+                  color: w.color || zoneColor,
+                  weight: isSelectedWard ? 3.5 : 1.2,
+                  dashArray: isSelectedWard ? undefined : "3, 4",
+                  fillColor: w.color || zoneColor,
+                  fillOpacity: isSelectedWard ? 0.25 : 0.0, // transparent inside when displaying combined boundary to avoid overlap
+                },
               });
-            });
 
-            regionGeoJSON.on("mouseout", function (e) {
-              const layerObj = e.target;
-              layerObj.setStyle({
-                fillOpacity: isSelectedWard ? 0.25 : 0.0,
-                weight: isSelectedWard ? 3.5 : 1.2,
-                dashArray: isSelectedWard ? undefined : "3, 4",
+              regionGeoJSON.bindPopup(`
+                <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
+                  <b style="font-size:13px;color:#4f46e5;">${w.region_name}</b><br/>
+                  <span style="color:#64748b;font-weight:bold;"> ${selectedZone}</span><br/>
+                  <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
+                </div>
+              `);
+
+              regionGeoJSON.on("mouseover", function (e) {
+                const layerObj = e.target;
+                layerObj.setStyle({
+                  fillOpacity: isSelectedWard ? 0.35 : 0.25,
+                  weight: isSelectedWard ? 4.5 : 2.5,
+                  dashArray: undefined,
+                });
               });
-            });
 
-            layer.addLayer(regionGeoJSON);
-          } catch (err) {
-            console.error("Failed to render ward boundary polygon", w.region_name, err);
-          }
-        }
-      });
+              regionGeoJSON.on("mouseout", function (e) {
+                const layerObj = e.target;
+                layerObj.setStyle({
+                  fillOpacity: isSelectedWard ? 0.25 : 0.0,
+                  weight: isSelectedWard ? 3.5 : 1.2,
+                  dashArray: isSelectedWard ? undefined : "3, 4",
+                });
+              });
 
-      // Optionally pan map to fit the selected/filtered boundaries
-      if (wardsToDraw.length > 0) {
-        try {
-          const boundsGroup = L.featureGroup();
-          wardsToDraw.forEach(w => {
-            if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
-              const g = L.geoJSON(w.geojson);
-              boundsGroup.addLayer(g);
+              layer.addLayer(regionGeoJSON);
+            } catch (err) {
+              console.error("Failed to render ward boundary polygon", w.region_name, err);
             }
-          });
-          const bounds = boundsGroup.getBounds();
-          if (bounds.isValid()) {
-            mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
           }
-        } catch (e) {
-          // quiet fail
+        });
+
+        // Optionally pan map to fit the selected/filtered boundaries
+        if (wardsToDraw.length > 0) {
+          try {
+            const boundsGroup = L.featureGroup();
+            wardsToDraw.forEach(w => {
+              if (w.geojson && w.geojson.features && w.geojson.features.length > 0) {
+                const g = L.geoJSON(w.geojson);
+                boundsGroup.addLayer(g);
+              }
+            });
+            const bounds = boundsGroup.getBounds();
+            if (bounds.isValid()) {
+              mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+            }
+          } catch (e) {
+            // quiet fail
+          }
         }
       }
     }
-  }, [selectedZone, selectedWard, regionsList, zonesList]);
+  }, [selectedZone, selectedWard, regionsList, zonesList, showZoneBoundary, showWardBoundary]);
+
+  // Automatically select the vehicle's assigned route when a vehicle is selected
+  useEffect(() => {
+    if (!selectedVehicleId) return;
+
+    // Find the vehicle in startedVehicles or otherVehicles
+    const v = startedVehicles.find(sv => sv.id === selectedVehicleId) || 
+              otherVehicles.find(ov => ov.id === selectedVehicleId);
+    if (!v) return;
+
+    // Resolve the route ID
+    let routeIdStr = "";
+    const match = routesList.find(r => 
+      r.identification && v.route && 
+      (r.identification.toLowerCase() === v.route.toLowerCase() ||
+       r.route_name.toLowerCase() === v.route.toLowerCase())
+    );
+    if (match) {
+      routeIdStr = String(match.id);
+    } else if (v.ward_no) {
+      const wardClean = v.ward_no.replace(/\D/g, "");
+      const wardRegion = regionsList.find(r => 
+        r.region_type_id === 3 && 
+        (r.region_name.split(" - ")[0] === wardClean || r.region_code === wardClean || r.region_name.includes(wardClean))
+      );
+      if (wardRegion) {
+        const matchByWard = routesList.find(r => r.ward_id === wardRegion.id);
+        if (matchByWard) routeIdStr = String(matchByWard.id);
+      }
+    }
+
+    if (routeIdStr) {
+      setSelectedRouteId(routeIdStr);
+      
+      // Also match the shift filter if the route has a shift
+      const routeObj = routesList.find(r => String(r.id) === routeIdStr);
+      if (routeObj && routeObj.shift_name) {
+        // Find matching shift in shiftsList
+        const matchedShift = shiftsList.find(s => 
+          s.shift_name === routeObj.shift_name || 
+          s.shift_name.toLowerCase().includes(routeObj.shift_name.toLowerCase().split(" ")[0])
+        );
+        if (matchedShift) {
+          setSelectedShift(matchedShift.shift_name);
+        }
+      }
+    }
+  }, [selectedVehicleId, startedVehicles, otherVehicles, routesList, regionsList, shiftsList]);
 
   // Handle row selection
   const handleSelectRow = (id: number) => {
@@ -1040,6 +1376,39 @@ export default function D2DMap() {
     const numB = parseInt(b.replace(/\D/g, "")) || 0;
     return numA - numB;
   });
+
+  const filteredRoutesDropdownList = (() => {
+    const activeZone = zonesList.find(z => z.region_name === selectedZone);
+    const activeWardObj = regionsList.find(r => 
+      r.region_type_id === 3 && 
+      r.region_name.split(" - ")[0] === selectedWard
+    );
+
+    let filtered = routesList;
+
+    // 1. Zone Filter
+    if (activeZone && activeZone.id !== -1) {
+      filtered = filtered.filter(route => {
+        const routeWard = regionsList.find(r => r.region_type_id === 3 && r.id === route.ward_id);
+        return routeWard && routeWard.parent_id === activeZone.id;
+      });
+    }
+
+    // 2. Ward Filter
+    if (selectedWard && activeWardObj) {
+      filtered = filtered.filter(route => route.ward_id === activeWardObj.id);
+    }
+
+    // 3. Shift Filter
+    if (selectedShift && selectedShift !== "all") {
+      filtered = filtered.filter(route => {
+        return route.shift_name === selectedShift || 
+               (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
+      });
+    }
+
+    return filtered;
+  })();
 
   const filterItem = (reg: string, ward: string) => {
     const matchesSearch = reg.toLowerCase().includes(searchQuery.toLowerCase()) || ward.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1093,6 +1462,8 @@ export default function D2DMap() {
               onChange={(e) => {
                 setSelectedZone(e.target.value);
                 setSelectedWard(""); // Reset selected ward when zone changes
+                setSelectedRouteId(""); // Reset selected route when zone changes
+                setSelectedVehicleId(null); // Deselect vehicle when filters change
               }}
               className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
@@ -1106,7 +1477,11 @@ export default function D2DMap() {
             <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Select Ward</span>
             <select
               value={selectedWard}
-              onChange={(e) => setSelectedWard(e.target.value)}
+              onChange={(e) => {
+                setSelectedWard(e.target.value);
+                setSelectedRouteId(""); // Reset selected route when ward changes
+                setSelectedVehicleId(null); // Deselect vehicle when filters change
+              }}
               className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
             >
               <option value="">All Wards</option>
@@ -1114,6 +1489,41 @@ export default function D2DMap() {
                 const clean = w.split(" - ")[0];
                 return <option key={w} value={clean}>{w}</option>;
               })}
+            </select>
+          </div>
+
+          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Shift</span>
+            <select
+              value={selectedShift}
+              onChange={(e) => {
+                setSelectedShift(e.target.value);
+                setSelectedRouteId(""); // Reset route selection when shift changes
+                setSelectedVehicleId(null); // Deselect vehicle when filters change
+              }}
+              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
+            >
+              <option value="all">All Shifts</option>
+              {shiftsList.map(s => (
+                <option key={s.id} value={s.shift_name}>{s.shift_name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Route</span>
+            <select
+              value={selectedRouteId}
+              onChange={(e) => {
+                setSelectedRouteId(e.target.value);
+                setSelectedVehicleId(null); // Deselect vehicle when filters change
+              }}
+              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
+            >
+              <option value="">All Routes</option>
+              {filteredRoutesDropdownList.map(r => (
+                <option key={r.id} value={String(r.id)}>{r.route_name}</option>
+              ))}
             </select>
           </div>
 
@@ -1134,7 +1544,7 @@ export default function D2DMap() {
           </div>
           
           <div className="flex items-center gap-2 px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text font-medium shrink-0 ml-auto lg:ml-0 h-[32px] mt-4 lg:mt-0">
-            <span className="font-bold text-theme-accent">⏱️ Shift:</span> {activeShift || "N/A"}
+            <span className="font-bold text-theme-accent">⏱️ Active:</span> {activeShift || "N/A"}
           </div>
         </div>
       </header>
@@ -1897,6 +2307,26 @@ export default function D2DMap() {
                   className="w-4 h-4 accent-emerald-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">📈 Actual Movement</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showZoneBoundary}
+                  onChange={(e) => setShowZoneBoundary(e.target.checked)}
+                  className="w-4 h-4 accent-indigo-500 rounded bg-theme-surface border-theme-border cursor-pointer"
+                />
+                <span className="flex items-center gap-1.5">⭕ Zone Boundary</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showWardBoundary}
+                  onChange={(e) => setShowWardBoundary(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-500 rounded bg-theme-surface border-theme-border cursor-pointer"
+                />
+                <span className="flex items-center gap-1.5">💠 Ward Boundary</span>
               </label>
             </div>
           </details>

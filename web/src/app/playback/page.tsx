@@ -290,11 +290,25 @@ export default function PlaybackPage() {
   // Filtering States
   const [selectedZoneId, setSelectedZoneId] = useState<string>("");
   const [selectedWardId, setSelectedWardId] = useState<string>("");
-  const [selectedShift, setSelectedShift] = useState<string>("Morning");
+  const [selectedShift, setSelectedShift] = useState<string>("Morning Shift");
   const [selectedImei, setSelectedImei] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(4);
   const [routeIdParam, setRouteIdParam] = useState<string | null>(null);
+
+  const [routesList, setRoutesList] = useState<any[]>([]);
+  const [shiftsList, setShiftsList] = useState<any[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<string>("");
+  const allRoutesLayerRef = useRef<any>(null);
+
+  // Visibility states
+  const [showPlannedRoute, setShowPlannedRoute] = useState(true);
+  const [showActualMovement, setShowActualMovement] = useState(true);
+  const [showRawPlayback, setShowRawPlayback] = useState(true);
+  const [showRegionBoundary, setShowRegionBoundary] = useState(true);
+  const [showStartEndPoint, setShowStartEndPoint] = useState(true);
+  const [showStoppages, setShowStoppages] = useState(true);
+  const [showMapIndicationMenu, setShowMapIndicationMenu] = useState(false);
 
   // Playback States
   const [points, setPoints] = useState<GpsDataPoint[]>([]);
@@ -347,6 +361,330 @@ export default function PlaybackPage() {
     };
   }, [jumpToKeyframe]);
 
+  // Toggling visibility of playback layers in response to checkbox states
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    
+    // 1. Raw Playback (Dashed gray line)
+    if (lineRef.current) {
+      if (showRawPlayback) {
+        if (!map.hasLayer(lineRef.current)) map.addLayer(lineRef.current);
+      } else {
+        if (map.hasLayer(lineRef.current)) map.removeLayer(lineRef.current);
+      }
+    }
+
+    // 2. Actual Movement (Solid orange line)
+    if (activeLineRef.current) {
+      if (showActualMovement) {
+        if (!map.hasLayer(activeLineRef.current)) map.addLayer(activeLineRef.current);
+      } else {
+        if (map.hasLayer(activeLineRef.current)) map.removeLayer(activeLineRef.current);
+      }
+    }
+
+    // 3. Start/End Points
+    if (startMarkerRef.current) {
+      if (showStartEndPoint) {
+        if (!map.hasLayer(startMarkerRef.current)) map.addLayer(startMarkerRef.current);
+      } else {
+        if (map.hasLayer(startMarkerRef.current)) map.removeLayer(startMarkerRef.current);
+      }
+    }
+    if (endMarkerRef.current) {
+      if (showStartEndPoint) {
+        if (!map.hasLayer(endMarkerRef.current)) map.addLayer(endMarkerRef.current);
+      } else {
+        if (map.hasLayer(endMarkerRef.current)) map.removeLayer(endMarkerRef.current);
+      }
+    }
+
+    // 4. Stoppages
+    stoppageMarkersRef.current.forEach((marker: any) => {
+      if (showStoppages) {
+        if (!map.hasLayer(marker)) map.addLayer(marker);
+      } else {
+        if (map.hasLayer(marker)) map.removeLayer(marker);
+      }
+    });
+
+    // 5. Planned Route (Assigned Route Layer)
+    if (assignedRouteLayerRef.current) {
+      if (showPlannedRoute) {
+        if (!map.hasLayer(assignedRouteLayerRef.current)) map.addLayer(assignedRouteLayerRef.current);
+      } else {
+        if (map.hasLayer(assignedRouteLayerRef.current)) map.removeLayer(assignedRouteLayerRef.current);
+      }
+    }
+
+    // 6. Checkpoints
+    checkpointMarkersRef.current.forEach((marker: any) => {
+      if (showPlannedRoute) {
+        if (!map.hasLayer(marker)) map.addLayer(marker);
+      } else {
+        if (map.hasLayer(marker)) map.removeLayer(marker);
+      }
+    });
+  }, [showRawPlayback, showActualMovement, showStartEndPoint, showStoppages, showPlannedRoute, points]);
+
+  // ─── Draw Filtered Routes and Lanes on Playback Map ───
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = allRoutesLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+
+    if (!showPlannedRoute) return;
+
+    const L = require("leaflet");
+
+    // Helper to snap coordinates to a route segment
+    const snapToRoute = (latlng: any, coords: any[]): { snapped: any; index: number } => {
+      if (coords.length === 0) return { snapped: latlng, index: -1 };
+      if (coords.length === 1) return { snapped: coords[0], index: 0 };
+
+      let minDistance = Infinity;
+      let bestPoint = coords[0];
+      let bestIndex = 0;
+
+      for (let i = 0; i < coords.length - 1; i++) {
+        const p1 = coords[i];
+        const p2 = coords[i + 1];
+
+        const x = latlng.lng;
+        const y = latlng.lat;
+        const x1 = p1.lng;
+        const y1 = p1.lat;
+        const x2 = p2.lng;
+        const y2 = p2.lat;
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+
+        let t = 0;
+        if (dx !== 0 || dy !== 0) {
+          t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+          t = Math.max(0, Math.min(1, t));
+        }
+
+        const snapped = L.latLng(y1 + t * dy, x1 + t * dx);
+        const d = latlng.distanceTo(snapped);
+
+        if (d < minDistance) {
+          minDistance = d;
+          bestPoint = snapped;
+          bestIndex = i;
+        }
+      }
+
+      return { snapped: bestPoint, index: bestIndex };
+    };
+
+    const createD2DPinIcon = (type: "start" | "end", number: string | number) => {
+      const color = type === "start" ? "#22c55e" : "#ef4444";
+      const strokeColor = type === "start" ? "#15803d" : "#b91c1c";
+      return L.divIcon({
+        className: `lane-${type}-flag-pin`,
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 22px; height: 28px;">
+            <svg width="22" height="28" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.5));">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>
+              <circle cx="12" cy="12" r="7.5" fill="white"/>
+              <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="8.5" fill="${strokeColor}">${number}</text>
+            </svg>
+          </div>
+        `,
+        iconSize: [22, 28],
+        iconAnchor: [11, 28],
+      });
+    };
+
+    let filtered = routesList;
+
+    // 1. Zone Filter
+    if (selectedZoneId) {
+      filtered = filtered.filter(route => {
+        const routeWard = regionsList.find(r => r.region_type_id === 3 && r.id === route.ward_id);
+        return routeWard && routeWard.parent_id === parseInt(selectedZoneId);
+      });
+    }
+
+    // 2. Ward Filter
+    if (selectedWardId) {
+      filtered = filtered.filter(route => route.ward_id === parseInt(selectedWardId));
+    }
+
+    // 3. Shift Filter
+    if (selectedShift && selectedShift !== "all") {
+      filtered = filtered.filter(route => {
+        return route.shift_name === selectedShift || 
+               (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
+      });
+    }
+
+    // 4. Route Filter (if a specific route is selected)
+    const isSingleRouteSelected = selectedRouteId && selectedRouteId !== "all";
+    if (isSingleRouteSelected) {
+      filtered = filtered.filter(route => String(route.id) === selectedRouteId);
+    }
+
+    filtered.forEach((route) => {
+      if (!route.geojson) return;
+      try {
+        let feature = route.geojson;
+        if (typeof feature === "string") {
+          feature = JSON.parse(feature);
+        }
+        
+        const routeColor = route.color || "#fba339";
+        
+        // Render route line
+        const routeGeo = L.geoJSON(feature, {
+          style: {
+            color: routeColor,
+            weight: isSingleRouteSelected ? 6 : 4,
+            opacity: isSingleRouteSelected ? 0.95 : 0.65,
+          }
+        }).addTo(layer);
+
+        routeGeo.bindPopup(`
+          <div style="font-family:Inter,sans-serif;font-size:12px;padding:4px;color:#1e293b;">
+            <b style="font-size:14px;color:${routeColor};">${route.route_name}</b><br/>
+            <span style="color:#64748b;font-weight:bold;">ID: ${route.identification}</span><br/>
+            <span style="color:#64748b;">Distance: ${route.distance} km</span><br/>
+            ${route.shift_name ? `<span style="color:#4f46e5;">Shift: ${route.shift_name}</span>` : ''}
+          </div>
+        `);
+
+        // If a specific route is selected, also draw its lanes and pin drop markers
+        if (isSingleRouteSelected && route.lanes) {
+          let parsedLanes = route.lanes;
+          if (typeof parsedLanes === "string") {
+            try {
+              parsedLanes = JSON.parse(parsedLanes);
+            } catch (e) {
+              parsedLanes = [];
+            }
+          }
+          if (Array.isArray(parsedLanes)) {
+            // Get route coordinates for snapping/drawing lane segments
+            let routePts: any[] = [];
+            if (feature.geometry && feature.geometry.type === "LineString") {
+              routePts = feature.geometry.coordinates.map((c: any) => L.latLng(c[1], c[0]));
+            } else if (feature.type === "LineString") {
+              routePts = feature.coordinates.map((c: any) => L.latLng(c[1], c[0]));
+            }
+
+            parsedLanes.forEach((lane: any) => {
+              // Draw highlighted lane segment
+              if (routePts.length >= 2) {
+                const startIdx = snapToRoute(L.latLng(lane.startLat, lane.startLng), routePts).index;
+                const endIdx = snapToRoute(L.latLng(lane.endLat, lane.endLng), routePts).index;
+                if (startIdx >= 0 && endIdx >= 0) {
+                  let segmentCoords: any[] = [];
+                  const startPt = L.latLng(lane.startLat, lane.startLng);
+                  const endPt = L.latLng(lane.endLat, lane.endLng);
+
+                  if (startIdx <= endIdx) {
+                    segmentCoords = [
+                      startPt,
+                      ...routePts.slice(startIdx, endIdx + 1),
+                      endPt,
+                    ];
+                  } else {
+                    segmentCoords = [
+                      startPt,
+                      ...routePts.slice(endIdx, startIdx + 1).reverse(),
+                      endPt,
+                    ];
+                  }
+
+                  L.polyline(segmentCoords, {
+                    color: "#3b82f6", // Blue for lanes
+                    weight: 6,
+                    opacity: 0.8,
+                  }).addTo(layer);
+                }
+              }
+
+              // Draw start pin (Green)
+              L.marker([lane.startLat, lane.startLng], { 
+                icon: createD2DPinIcon("start", lane.laneOrder) 
+              })
+              .bindPopup(`
+                <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
+                  <b>Lane Set ${lane.laneOrder} - Start</b><br/>
+                  <span style="color:#64748b;">Households: ${lane.noOfHouseholds || 0}</span>
+                </div>
+              `)
+              .addTo(layer);
+
+              // Draw end pin (Red)
+              L.marker([lane.endLat, lane.endLng], { 
+                icon: createD2DPinIcon("end", lane.laneOrder) 
+              })
+              .bindPopup(`
+                <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
+                  <b>Lane Set ${lane.laneOrder} - End</b><br/>
+                  <span style="color:#64748b;">Commercials: ${lane.noOfCommercials || 0}</span>
+                </div>
+              `)
+              .addTo(layer);
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to render route on Playback Map:", err);
+      }
+    });
+
+    // Auto-fit bounds if a specific route is selected
+    if (isSingleRouteSelected && filtered.length > 0 && filtered[0].geojson) {
+      try {
+        let feature = filtered[0].geojson;
+        if (typeof feature === "string") {
+          feature = JSON.parse(feature);
+        }
+        const tempLayer = L.geoJSON(feature);
+        const bounds = tempLayer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [routesList, selectedZoneId, selectedWardId, selectedShift, selectedRouteId, regionsList, showPlannedRoute]);
+
+  const filteredRoutesDropdownList = (() => {
+    let filtered = routesList;
+
+    // 1. Zone Filter
+    if (selectedZoneId) {
+      filtered = filtered.filter(route => {
+        const routeWard = regionsList.find(r => r.region_type_id === 3 && r.id === route.ward_id);
+        return routeWard && routeWard.parent_id === parseInt(selectedZoneId);
+      });
+    }
+
+    // 2. Ward Filter
+    if (selectedWardId) {
+      filtered = filtered.filter(route => route.ward_id === parseInt(selectedWardId));
+    }
+
+    // 3. Shift Filter
+    if (selectedShift && selectedShift !== "all") {
+      filtered = filtered.filter(route => {
+        return route.shift_name === selectedShift || 
+               (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
+      });
+    }
+
+    return filtered;
+  })();
+
   // Load Initial Metadata
   useEffect(() => {
     api<{ data: Vehicle[] }>("/api/vehicles").then((r) => setVehicles(r.data || [])).catch(() => { });
@@ -354,6 +692,23 @@ export default function PlaybackPage() {
     api<{ success: boolean; data: any[] }>("/api/regions").then((res) => {
       if (res.success) setRegionsList(res.data || []);
     }).catch(() => {});
+    api<{ success: boolean; data: any[] }>("/api/routes").then((res) => {
+      if (res.success) setRoutesList(res.data || []);
+    }).catch(() => {});
+    api<{ success: boolean; data: any[] }>("/api/shifts").then((res) => {
+      if (res.success) setShiftsList(res.data || []);
+    }).catch(() => {});
+
+    if (typeof window !== "undefined") {
+      try {
+        const cachedRoutes = localStorage.getItem("d2d_routes");
+        const cachedShifts = localStorage.getItem("d2d_shifts");
+        if (cachedRoutes) setRoutesList(JSON.parse(cachedRoutes));
+        if (cachedShifts) setShiftsList(JSON.parse(cachedShifts));
+      } catch (e) {
+        console.warn("Failed to load cached routes/shifts:", e);
+      }
+    }
 
     // Parse URL parameters if present
     if (typeof window !== "undefined") {
@@ -378,6 +733,33 @@ export default function PlaybackPage() {
     }
   }, [selectedImei, vehicles]);
 
+  // Automatically select the vehicle's assigned route when a vehicle is selected in playback
+  useEffect(() => {
+    if (!selectedImei || vehicles.length === 0 || routesList.length === 0) return;
+
+    const veh = vehicles.find(v => v.gps_device?.imei === selectedImei);
+    if (!veh) return;
+
+    // Find route assigned to this vehicle's ward
+    if ((veh as any).ward_id) {
+      const match = routesList.find(r => r.ward_id === (veh as any).ward_id);
+      if (match) {
+        setSelectedRouteId(String(match.id));
+        
+        // Also select the shift of the route
+        if (match.shift_name) {
+          const matchedShift = shiftsList.find(s => 
+            s.shift_name === match.shift_name || 
+            s.shift_name.toLowerCase().includes(match.shift_name.toLowerCase().split(" ")[0])
+          );
+          if (matchedShift) {
+            setSelectedShift(matchedShift.shift_name);
+          }
+        }
+      }
+    }
+  }, [selectedImei, vehicles, routesList, shiftsList]);
+
   // Init Leaflet map
   useEffect(() => {
     if (typeof window === "undefined" || !box.current || mapRef.current) return;
@@ -400,6 +782,7 @@ export default function PlaybackPage() {
 
     googleMapLayer.addTo(mapRef.current);
     boundaryLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    allRoutesLayerRef.current = L.layerGroup().addTo(mapRef.current);
 
     L.control.layers({
       "Google Maps (Default)": googleMapLayer,
@@ -411,6 +794,7 @@ export default function PlaybackPage() {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        allRoutesLayerRef.current = null;
       }
     };
   }, []);
@@ -422,6 +806,8 @@ export default function PlaybackPage() {
 
     layer.clearLayers();
     const L = require("leaflet");
+
+    if (!showRegionBoundary) return;
 
     if (selectedWardId) {
       // 1. Draw specifically selected Ward
@@ -531,11 +917,12 @@ export default function PlaybackPage() {
       let routeCheckpoints: any[] = [];
       let assignedRouteData: any = null;
       let visitedCheckpointsList: any[] = [];
-      if (routeIdParam) {
+      const targetRouteId = selectedRouteId || routeIdParam;
+      if (targetRouteId) {
         try {
           const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
           if (vehicle) {
-            const cov = await api<any>(`/api/vehicles/${vehicle.id}/route-coverage?date=${date}&route_id=${routeIdParam}`);
+            const cov = await api<any>(`/api/vehicles/${vehicle.id}/route-coverage?date=${date}&route_id=${targetRouteId}`);
             if (cov.success && cov.route_id) {
               // Get Route details (geometry)
               const rRes = await api<any>(`/api/routes/${cov.route_id}`);
@@ -916,7 +1303,14 @@ export default function PlaybackPage() {
     } catch (err) {
       console.error("Playback load error:", err);
     }
-  }, [selectedImei, date, routeIdParam, vehicles]);
+  }, [selectedImei, date, routeIdParam, selectedRouteId, vehicles]);
+
+  // Automatically load the route playback trace when imei, date, or route changes
+  useEffect(() => {
+    if (selectedImei && date) {
+      loadRoute();
+    }
+  }, [selectedImei, date, selectedRouteId, loadRoute]);
 
   // Dynamic active trail updating helper
   const updateActiveCoveredLine = useCallback((currentIndex: number) => {
@@ -1050,6 +1444,7 @@ export default function PlaybackPage() {
                 setSelectedWardId("");
                 setSelectedImei("");
                 setRouteIdParam(null);
+                setSelectedRouteId("");
               }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             >
@@ -1068,6 +1463,7 @@ export default function PlaybackPage() {
                 setSelectedWardId(e.target.value);
                 setSelectedImei("");
                 setRouteIdParam(null);
+                setSelectedRouteId("");
               }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             >
@@ -1079,18 +1475,44 @@ export default function PlaybackPage() {
           </div>
 
           {/* Select Shift */}
-          <div className="min-w-[120px]">
+          <div className="min-w-[150px]">
             <select
               value={selectedShift}
               onChange={(e) => {
                 setSelectedShift(e.target.value);
                 setRouteIdParam(null);
+                setSelectedRouteId("");
               }}
               className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             >
-              <option value="Morning">Morning</option>
-              <option value="Evening">Evening</option>
-              <option value="Night">Night</option>
+              <option value="all">All Shifts</option>
+              {shiftsList.length > 0 ? (
+                shiftsList.map(s => (
+                  <option key={s.id} value={s.shift_name}>{s.shift_name}</option>
+                ))
+              ) : (
+                <>
+                  <option value="Morning Shift">Morning Shift</option>
+                  <option value="Afternoon Shift">Afternoon Shift</option>
+                  <option value="Night Shift">Night Shift</option>
+                </>
+              )}
+            </select>
+          </div>
+
+          {/* Select Route */}
+          <div className="min-w-[170px]">
+            <select
+              value={selectedRouteId}
+              onChange={(e) => {
+                setSelectedRouteId(e.target.value);
+              }}
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
+            >
+              <option value="">All Routes</option>
+              {filteredRoutesDropdownList.map((r, idx) => (
+                <option key={`route-${r.id}-${idx}`} value={String(r.id)}>{r.route_name}</option>
+              ))}
             </select>
           </div>
 
@@ -1179,10 +1601,79 @@ export default function PlaybackPage() {
         <div ref={box} className="flex-1 w-full h-full z-0 bg-theme-base" />
 
         {/* Custom Orange Map Indication Button matching screenshot */}
-        <div className="absolute top-3 right-16 z-[1000] flex items-center">
-          <div className="bg-[#f59e0b] hover:bg-amber-600 text-white px-3 py-1.5 text-xs font-bold uppercase rounded shadow-md tracking-wider flex items-center gap-1 cursor-pointer transition select-none">
+        <div className="absolute top-3 right-16 z-[1000] flex flex-col items-end">
+          <div 
+            onClick={() => setShowMapIndicationMenu(!showMapIndicationMenu)}
+            className="bg-[#f59e0b] hover:bg-amber-600 text-white px-3 py-1.5 text-xs font-bold uppercase rounded shadow-md tracking-wider flex items-center gap-1 cursor-pointer transition select-none"
+          >
             <span>Map Indication</span>
           </div>
+
+          {showMapIndicationMenu && (
+            <div className="mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl p-3 w-56 flex flex-col gap-2 z-[1000]">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1.5">Map Layers</span>
+              
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+                <input 
+                  type="checkbox" 
+                  checked={showPlannedRoute} 
+                  onChange={(e) => setShowPlannedRoute(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Planned Route</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+                <input 
+                  type="checkbox" 
+                  checked={showActualMovement} 
+                  onChange={(e) => setShowActualMovement(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Actual Movement</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+                <input 
+                  type="checkbox" 
+                  checked={showRawPlayback} 
+                  onChange={(e) => setShowRawPlayback(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Raw Playback (Unsnapped)</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+                <input 
+                  type="checkbox" 
+                  checked={showRegionBoundary} 
+                  onChange={(e) => setShowRegionBoundary(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Region Boundary</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+                <input 
+                  type="checkbox" 
+                  checked={showStartEndPoint} 
+                  onChange={(e) => setShowStartEndPoint(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Start/End Points</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+                <input 
+                  type="checkbox" 
+                  checked={showStoppages} 
+                  onChange={(e) => setShowStoppages(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Stoppages</span>
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Floating checkpoints sidebar if checkpoints exist */}

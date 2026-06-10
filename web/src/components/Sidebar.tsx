@@ -137,8 +137,8 @@ const navData = [
       { label: "Vehicle Location", href: "/iswm/vehicle-location" },
       { label: "Employee Location", href: "/iswm/employee-location" },
       { label: "D2D", href: "/iswm/d2d" },
+      { label: "Open Depot Live Map", href: "/iswm/open-depot-live-map" },
       { label: "Alert Manager", href: "/iswm/alert-manager" },
-
     ],
   },
   {
