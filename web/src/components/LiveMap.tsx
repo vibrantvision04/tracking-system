@@ -526,7 +526,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           v.registration_no,
           v.vehicle_type?.name || "Vehicle",
           true,
-          pos.captured_at || v.last_time
+          pos.time || v.last_time
         );
       } else if (v.last_lat && v.last_lng) {
         // Fallback to static DB values
