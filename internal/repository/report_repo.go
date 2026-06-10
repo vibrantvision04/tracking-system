@@ -21,8 +21,8 @@ type MovementReport struct {
 	TotalDistance             float64   `json:"total_distance"`
 	StartPoint                string    `json:"start_point"` // JSON string
 	EndPoint                  string    `json:"end_point"`   // JSON string
-	StartTime                 time.Time `json:"start_time"`
-	EndTime                   time.Time `json:"end_time"`
+	StartTime                 *time.Time `json:"start_time"`
+	EndTime                   *time.Time `json:"end_time"`
 	Alert                     int       `json:"alert"`
 	TotalActiveDuration       string    `json:"total_active_duration"`    // "HH:MM:SS"
 	TotalIdleDuration         string    `json:"total_idle_duration"`
@@ -112,7 +112,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 	var totalCount int
 
 	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, COALESCE(v.registration_no, ''), COALESCE(vt.vehicle_type_name, ''), r.report_date, COALESCE(r.average_speed, 0.0), COALESCE(r.total_distance, 0.0), COALESCE(r.start_point::text, '{}'), COALESCE(r.end_point::text, '{}'), 
-			  COALESCE(r.start_time, '1970-01-01 00:00:00+00'::timestamptz), COALESCE(r.end_time, '1970-01-01 00:00:00+00'::timestamptz), COALESCE(r.alert, 0), COALESCE(r.total_active_duration, ''), COALESCE(r.total_idle_duration, ''), 
+			  r.start_time, r.end_time, COALESCE(r.alert, 0), COALESCE(r.total_active_duration, ''), COALESCE(r.total_idle_duration, ''), 
 			  COALESCE(r.total_stoppage_duration, ''), COALESCE(r.in_parking_duration, ''), COALESCE(r.actual_ignition_on_duration, ''), 
 			  COALESCE(r.total_ignition_on_duration, ''), COALESCE(r.total_running_duration, ''), COALESCE(r.total_running_time, ''), 
 			  COALESCE(r.day_running_time, ''), COALESCE(r.night_running_time, ''), COALESCE(r.fuel_in_ltr, 0.0), COALESCE(r.fuel_consumption, 0.0), 

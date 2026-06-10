@@ -31,104 +31,37 @@ function getRouteDistance(pts: Coordinate[]): number {
   return parseFloat((total / 1000).toFixed(2));
 }
 
-// ── Input guard ──────────────────────────────────────────────────────────────
-const MAX_INPUT_BYTES = 5 * 1024 * 1024; // 5 MB
-const MALICIOUS_PATTERNS = [
-  /<script/i,
-  /javascript:/i,
-  /on\w+\s*=/i,   // onclick=, onerror=, etc.
-  /data:text\/html/i,
-  /vbscript:/i,
-];
-
-function isMaliciousInput(text: string): boolean {
-  return MALICIOUS_PATTERNS.some(p => p.test(text));
-}
-
-function isCoordInRange(lat: number, lng: number): boolean {
-  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
-function parseGeoJSONOrKMLText(text: string): Coordinate[] | null {
+function parseGeoJSONText(text: string): Coordinate[] | null {
   if (!text || !text.trim()) return null;
-  if (text.length > MAX_INPUT_BYTES) return null;   // too large
-  if (isMaliciousInput(text)) return null;           // contains script/injection
   const trimmed = text.trim();
   
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       const parsed = JSON.parse(trimmed);
+      let pts: any[] = [];
       
-      const extractCoordsFromObject = (obj: any): any[] | null => {
-        if (!obj) return null;
-        if (typeof obj === "string") {
-          try {
-            return extractCoordsFromObject(JSON.parse(obj));
-          } catch (e) {
-            return null;
+      if (parsed.type === "FeatureCollection" && parsed.features) {
+        for (const feat of parsed.features) {
+          if (feat.geometry && feat.geometry.type === "LineString") {
+            pts = feat.geometry.coordinates;
+            break;
           }
         }
-        if (obj.type === "LineString" && Array.isArray(obj.coordinates)) {
-          return obj.coordinates;
-        }
-        if (obj.type === "Feature" && obj.geometry) {
-          return extractCoordsFromObject(obj.geometry);
-        }
-        if (obj.type === "FeatureCollection" && Array.isArray(obj.features)) {
-          for (const feat of obj.features) {
-            const pts = extractCoordsFromObject(feat);
-            if (pts) return pts;
-          }
-        }
-        if (Array.isArray(obj.data)) {
-          for (const item of obj.data) {
-            const pts = extractCoordsFromObject(item);
-            if (pts) return pts;
-          }
-        }
-        if (obj.coordinates) {
-          const pts = extractCoordsFromObject(obj.coordinates);
-          if (pts) return pts;
-        }
-        if (obj.geometry_json) {
-          const pts = extractCoordsFromObject(obj.geometry_json);
-          if (pts) return pts;
-        }
-        if (obj.geometry) {
-          const pts = extractCoordsFromObject(obj.geometry);
-          if (pts) return pts;
-        }
-        if (Array.isArray(obj) && obj.length > 0 && Array.isArray(obj[0])) {
-          return obj;
-        }
-        return null;
-      };
-
-      const pts = extractCoordsFromObject(parsed);
+      } else if (parsed.type === "Feature" && parsed.geometry && parsed.geometry.type === "LineString") {
+        pts = parsed.geometry.coordinates;
+      } else if (parsed.type === "LineString" && parsed.coordinates) {
+        pts = parsed.coordinates;
+      } else if (Array.isArray(parsed) && parsed.length > 0 && Array.isArray(parsed[0])) {
+        pts = parsed;
+      }
+      
       if (pts && pts.length > 0) {
-        return pts
-          .map((p: any) => ({ lat: parseFloat(p[1]), lng: parseFloat(p[0]) }))
-          .filter(pt => !isNaN(pt.lat) && !isNaN(pt.lng) && isCoordInRange(pt.lat, pt.lng));
+        return pts.map((p: any) => ({ lat: parseFloat(p[1]), lng: parseFloat(p[0]) })).filter(pt => !isNaN(pt.lat) && !isNaN(pt.lng));
       }
     } catch (err) {}
   }
-  
-  if (trimmed.includes("<coordinates>") || trimmed.includes("<Placemark")) {
-    const match = trimmed.match(/<coordinates>([\s\S]*?)<\/coordinates>/i);
-    if (match && match[1]) {
-      const rawCoords = match[1].trim().split(/\s+/);
-      const pts = rawCoords.map(pair => {
-        const parts = pair.split(",");
-        return { lat: parseFloat(parts[1]), lng: parts[0] ? parseFloat(parts[0]) : NaN };
-      }).filter(pt => !isNaN(pt.lat) && !isNaN(pt.lng));
-      if (pts.length > 0) {
-        return pts;
-      }
-    }
-  }
 
-  // Regex fallback: match [lng, lat] patterns
+  // Regex fallback: match [lng, lat] patterns (accepting raw GeoJSON coordinates)
   try {
     const pairs: Coordinate[] = [];
     const regex = /\[\s*([0-9.-]+)\s*,\s*([0-9.-]+)\s*\]/g;
@@ -144,117 +77,82 @@ function parseGeoJSONOrKMLText(text: string): Coordinate[] | null {
       return pairs;
     }
   } catch (e) {}
-  
   return null;
 }
 
-interface Lane {
-  laneOrder: number;
-  totalDistance: number;
-  noOfHouseholds: number;
-  noOfCommercials: number;
-  doubleLane: string;
-  startLat: number;
-  startLng: number;
-  endLat: number;
-  endLng: number;
-}
-
-function extractLanesFromObject(obj: any): any[] | null {
-  if (!obj) return null;
-  if (typeof obj === "string") {
-    try {
-      return extractLanesFromObject(JSON.parse(obj));
-    } catch (e) {
-      return null;
-    }
-  }
-  if (typeof obj !== "object") return null;
-
-  if (Array.isArray(obj.lanes)) {
-    return obj.lanes;
-  }
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      const found = extractLanesFromObject(item);
-      if (found) return found;
-    }
-  } else {
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      if (val && (typeof val === "object" || typeof val === "string")) {
-        const found = extractLanesFromObject(val);
-        if (found) return found;
+function parseLanesJSON(text: string): any[] | null {
+  if (!text || !text.trim()) return [];
+  try {
+    let cleaned = text.trim();
+    
+    // If it starts with "lanes" or similar fragment, wrap in curly braces to make it valid JSON object
+    if (/^\s*"?lanes"?\s*:/i.test(cleaned)) {
+      if (!cleaned.startsWith("{")) {
+        cleaned = "{" + cleaned;
+      }
+      if (!cleaned.endsWith("}")) {
+        cleaned = cleaned + "}";
       }
     }
-  }
 
-  return null;
-}
+    // Remove trailing commas inside arrays and objects
+    cleaned = cleaned.replace(/,\s*([\]}])/g, "$1");
+    
+    // Also remove any trailing comma at the end of the string
+    cleaned = cleaned.replace(/,\s*$/, "");
 
-function parseLanesFromText(text: string): Lane[] | null {
-  if (!text || !text.trim()) return null;
-  if (text.length > MAX_INPUT_BYTES) return null;
-  if (isMaliciousInput(text)) return null;
-  const trimmed = text.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      const rawLanes = extractLanesFromObject(parsed);
-      if (rawLanes && Array.isArray(rawLanes)) {
-        const MAX_LANES = 500; // sanity cap
-        return rawLanes
-          .slice(0, MAX_LANES)
-          .map((lane: any) => ({
-            laneOrder: typeof lane.laneOrder === "number" ? lane.laneOrder
-              : typeof lane.lane_order === "number" ? lane.lane_order : 1,
-
-            totalDistance: typeof lane.totalDistance === "number" ? lane.totalDistance
-              : typeof lane.total_distance === "number" ? lane.total_distance : 0,
-
-            noOfHouseholds: typeof lane.noOfHouseholds === "number" ? lane.noOfHouseholds
-              : typeof lane.no_of_households === "number" ? lane.no_of_households : 0,
-
-            noOfCommercials: typeof lane.noOfCommercials === "number" ? lane.noOfCommercials
-              : typeof lane.no_of_commercials === "number" ? lane.no_of_commercials
-              : typeof lane.no_of_commercial === "number" ? lane.no_of_commercial : 0,
-
-            doubleLane: typeof lane.doubleLane === "string" ? lane.doubleLane
-              : typeof lane.double_lane === "string" ? lane.double_lane
-              : lane.is_double_lane === true ? "Yes" : "No",
-
-            startLat: typeof lane.startLat === "number" ? lane.startLat
-              : typeof lane.start_lat === "number" ? lane.start_lat
-              : (lane.start_point && typeof lane.start_point.y === "number") ? lane.start_point.y : 0,
-
-            startLng: typeof lane.startLng === "number" ? lane.startLng
-              : typeof lane.start_lng === "number" ? lane.start_lng
-              : (lane.start_point && typeof lane.start_point.x === "number") ? lane.start_point.x : 0,
-
-            endLat: typeof lane.endLat === "number" ? lane.endLat
-              : typeof lane.end_lat === "number" ? lane.end_lat
-              : (lane.end_point && typeof lane.end_point.y === "number") ? lane.end_point.y : 0,
-
-            endLng: typeof lane.endLng === "number" ? lane.endLng
-              : typeof lane.end_lng === "number" ? lane.end_lng
-              : (lane.end_point && typeof lane.end_point.x === "number") ? lane.end_point.x : 0,
-          }))
-          .filter(l =>
-            l.startLat !== 0 && l.startLng !== 0 &&   // must have coords
-            isCoordInRange(l.startLat, l.startLng) &&  // valid lat/lng range
-            isCoordInRange(l.endLat, l.endLng)         // valid end range
-          );
+    let parsed = JSON.parse(cleaned);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      if (Array.isArray(parsed.lanes)) {
+        parsed = parsed.lanes;
+      } else {
+        return null;
       }
-    } catch (e) {}
+    }
+    if (!Array.isArray(parsed)) return null;
+
+    return parsed.map((l: any, idx: number) => {
+      const isDB = l.start_point !== undefined;
+      const startLng = isDB ? (l.start_point?.x ?? 0) : (l.startLng ?? 0);
+      const startLat = isDB ? (l.start_point?.y ?? 0) : (l.startLat ?? 0);
+      const endLng = isDB ? (l.end_point?.x ?? 0) : (l.endLng ?? 0);
+      const endLat = isDB ? (l.end_point?.y ?? 0) : (l.endLat ?? 0);
+
+      const laneOrder = isDB ? (l.lane_order ?? (idx + 1)) : (l.laneOrder ?? (idx + 1));
+      const totalDistance = isDB ? (l.total_distance ?? 0) : (l.totalDistance ?? 0);
+      const noOfHouseholds = isDB ? (l.no_of_households ?? 0) : (l.noOfHouseholds ?? 0);
+      const noOfCommercial = isDB ? (l.no_of_commercial ?? null) : (l.noOfCommercials ?? null);
+
+      return {
+        id: l.id,
+        name: l.name ?? `lane_440_${laneOrder}`,
+        total_distance: Number(totalDistance),
+        start_point: { x: Number(startLng), y: Number(startLat) },
+        end_point: { x: Number(endLng), y: Number(endLat) },
+        lane_order: Number(laneOrder),
+        is_double_lane: l.is_double_lane ?? (l.doubleLane === "Yes"),
+        no_of_households: Number(noOfHouseholds),
+        no_of_commercial: noOfCommercial !== null ? Number(noOfCommercial) : null,
+        route_id: l.route_id ?? null,
+        created_by: l.created_by ?? 1,
+        updated_by: l.updated_by ?? 1,
+        deleted_at: l.deleted_at ?? null,
+        is_active: l.is_active ?? true,
+        created_at: l.created_at,
+        updated_at: l.updated_at,
+        lane_start_time: l.lane_start_time ?? null,
+        time_in_completion: l.time_in_completion ?? null
+      };
+    });
+  } catch (e) {
+    return null;
   }
-  return null;
 }
 
 interface Route {
   id: number; route_name: string; identification: string; distance: number; route_type_id: number;
   route_type_name: string; geometry_id?: number; ward_id?: number; ward_name: string;
-  shift_id?: number; shift_name: string; lanes: Lane[]; is_active: boolean; geojson: string;
+  shift_id?: number; shift_name: string; lanes: any[]; is_active: boolean; geojson: string;
   color: string; updated_at: string;
 }
 
@@ -272,7 +170,7 @@ export default function RoutePage() {
 
   const [form, setForm] = useState({
     name: "", identification: "", wardId: "", shiftId: "", routeTypeId: "1",
-    distance: 0, color: "#fba339", geojson: "", lanes: [] as Lane[],
+    distance: 0, color: "#fba339", geojson: "", lanes: [] as any[],
   });
 
   const [routeCoords, setRouteCoords] = useState<Coordinate[]>([]);
@@ -309,7 +207,7 @@ export default function RoutePage() {
       
       // Perform a semantic check on existing coords in form.geojson to avoid overwriting pasted input
       try {
-        const existingCoords = parseGeoJSONOrKMLText(prev.geojson);
+        const existingCoords = parseGeoJSONText(prev.geojson);
         const match = existingCoords && 
                       existingCoords.length === routeCoords.length && 
                       existingCoords.every((pt, i) => pt.lat === routeCoords[i].lat && pt.lng === routeCoords[i].lng);
@@ -319,6 +217,42 @@ export default function RoutePage() {
       return { ...prev, distance: distKm, geojson: geojsonStr };
     });
   }, [routeCoords]);
+
+  const [lanesJSONInput, setLanesJSONInput] = useState("");
+
+  const handleLanesJSONChange = (text: string) => {
+    setLanesJSONInput(text);
+    const parsed = parseLanesJSON(text);
+    if (parsed !== null) {
+      setForm(prev => ({ ...prev, lanes: parsed }));
+    }
+  };
+
+  // Synchronize map-edited lanes to the lanes JSON input field
+  useEffect(() => {
+    try {
+      const parsedCurrent = parseLanesJSON(lanesJSONInput);
+      const match = parsedCurrent &&
+                    parsedCurrent.length === form.lanes.length &&
+                    parsedCurrent.every((l, idx) => {
+                      const mapLane = form.lanes[idx];
+                      return mapLane &&
+                             l.lane_order === mapLane.lane_order &&
+                             l.total_distance === mapLane.total_distance &&
+                             l.no_of_households === mapLane.no_of_households &&
+                             l.no_of_commercial === mapLane.no_of_commercial &&
+                             l.start_point?.x === mapLane.start_point?.x &&
+                             l.start_point?.y === mapLane.start_point?.y &&
+                             l.end_point?.x === mapLane.end_point?.x &&
+                             l.end_point?.y === mapLane.end_point?.y;
+                    });
+      if (!match) {
+        setLanesJSONInput(JSON.stringify({ lanes: form.lanes }, null, 2));
+      }
+    } catch (e) {
+      setLanesJSONInput(JSON.stringify({ lanes: form.lanes }, null, 2));
+    }
+  }, [form.lanes]);
 
   const filteredRoutes = routes.filter(r => {
     const term = searchFilter.toLowerCase();
@@ -334,6 +268,7 @@ export default function RoutePage() {
       shiftId: shifts[0]?.id ? String(shifts[0].id) : "", routeTypeId: "1", distance: 0,
       color: "#fba339", geojson: "", lanes: [],
     });
+    setLanesJSONInput("");
     setRouteCoords([]); setIsFormOpen(true);
   };
 
@@ -344,6 +279,7 @@ export default function RoutePage() {
       shiftId: route.shift_id ? String(route.shift_id) : "", routeTypeId: String(route.route_type_id),
       distance: route.distance, color: route.color || "#fba339", geojson: route.geojson || "", lanes: route.lanes || [],
     });
+    setLanesJSONInput(route.lanes ? JSON.stringify({ lanes: route.lanes }, null, 2) : "");
     let coords: Coordinate[] = [];
     if (route.geojson) {
       try {
@@ -370,16 +306,14 @@ export default function RoutePage() {
       const text = event.target?.result as string;
       if (!text) return;
       
-      const parsedCoords = parseGeoJSONOrKMLText(text);
+      const parsedCoords = parseGeoJSONText(text);
       if (parsedCoords && parsedCoords.length > 0) {
         setRouteCoords(parsedCoords);
         const distKm = getRouteDistance(parsedCoords);
-        const parsedLanes = parseLanesFromText(text) || [];
         setForm(prev => ({
           ...prev,
           distance: distKm,
-          geojson: text,
-          lanes: parsedLanes,
+          geojson: text
         }));
         toast.success("File uploaded successfully.");
       } else {
@@ -390,33 +324,17 @@ export default function RoutePage() {
   };
 
   const handleGeoJSONPaste = (text: string) => {
-    // ── Validation guards ──
-    if (text.length > MAX_INPUT_BYTES) {
-      toast.error("Input too large (max 5MB). Please paste a smaller file.");
-      return;
-    }
-    if (isMaliciousInput(text)) {
-      toast.error("Invalid input: suspicious content detected.");
-      return;
-    }
-    // ──────────────────────
     setForm(prev => ({ ...prev, geojson: text }));
-    const parsedCoords = parseGeoJSONOrKMLText(text);
+    const parsedCoords = parseGeoJSONText(text);
     if (parsedCoords && parsedCoords.length > 0) {
       setRouteCoords(parsedCoords);
       const distKm = getRouteDistance(parsedCoords);
-      const parsedLanes = parseLanesFromText(text) || [];
       setForm(prev => ({
         ...prev,
         distance: distKm,
-        lanes: parsedLanes,
       }));
-      if (parsedLanes.length > 0) {
-        toast.info(`✅ ${parsedCoords.length} route points + ${parsedLanes.length} lanes loaded.`);
-      }
     } else if (!text.trim()) {
       setRouteCoords([]);
-      setForm(prev => ({ ...prev, lanes: [] }));
     }
   };
 
@@ -513,24 +431,43 @@ export default function RoutePage() {
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       {/* Paste Area */}
                       <div className="flex flex-col">
-                        <label className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-1.5 block">GEOJSON/KML <span className="text-rose-500">*</span></label>
+                        <label className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-1.5 block">GEOJSON <span className="text-rose-500">*</span></label>
                         <textarea
                           rows={4}
                           value={form.geojson}
                           onChange={(e) => handleGeoJSONPaste(e.target.value)}
-                          placeholder='{"type":"Feature","geometry":...}'
+                          placeholder='{"type":"Feature","geometry":{"type":"LineString","coordinates":...}}'
                           className="w-full h-[92px] p-2.5 bg-theme-surface border border-theme-border rounded-xl text-xs text-theme-text font-mono outline-none focus:border-emerald-500 transition resize-none custom-scrollbar"
                         />
                       </div>
                       {/* Upload Area */}
                       <div className="flex flex-col">
-                        <label className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-1.5 block">Upload File (KML or GEOJSON)</label>
+                        <label className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-1.5 block">Upload GEOJSON File</label>
                         <div className="border border-dashed border-emerald-500/50 rounded-xl flex flex-col items-center justify-center relative bg-theme-surface-hover0/5 h-[92px] hover:bg-theme-surface-hover0/10 transition cursor-pointer">
-                          <input type="file" accept=".kml,.geojson,.json" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                          <input type="file" accept=".geojson,.json" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
                           <span className="text-xs font-bold text-emerald-400">Click to upload</span>
-                          <span className="text-[10px] text-theme-text-dim mt-1">Supports .kml and .geojson</span>
+                          <span className="text-[10px] text-theme-text-dim mt-1">Supports .geojson and .json</span>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Lanes JSON Input (Enabled only when route coords/geojson is present) */}
+                    <div className="flex flex-col mb-4">
+                      <label className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-1.5 block">
+                        Lanes JSON {routeCoords.length === 0 && <span className="text-rose-500/80 font-normal lowercase">(disabled until route is drawn/pasted)</span>}
+                      </label>
+                      <textarea
+                        rows={6}
+                        disabled={routeCoords.length === 0}
+                        value={lanesJSONInput}
+                        onChange={(e) => handleLanesJSONChange(e.target.value)}
+                        placeholder={routeCoords.length === 0 ? "Draw or paste route first to enable lanes JSON input." : '{\n  "lanes": [\n    {\n      "lane_order": 1,\n      "start_point": {"x": 75.909, "y": 26.894},\n      "end_point": {"x": 75.909, "y": 26.893},\n      "total_distance": 246.62,\n      "no_of_households": 100\n    }\n  ]\n}'}
+                        className={`w-full p-2.5 bg-theme-surface border rounded-xl text-xs text-theme-text font-mono outline-none transition custom-scrollbar ${
+                          routeCoords.length === 0 
+                            ? "opacity-50 cursor-not-allowed border-theme-border" 
+                            : "focus:border-emerald-500 border-theme-border"
+                        }`}
+                      />
                     </div>
                   </div>
                   <div className="flex gap-3 pt-4 border-t border-theme-border">

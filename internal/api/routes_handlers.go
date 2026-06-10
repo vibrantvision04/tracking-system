@@ -523,12 +523,20 @@ func (h *Handler) DeleteRoute(w http.ResponseWriter, r *http.Request) {
 
 // Helper to automatically convert Lanes into Checkpoints for coverage calculations
 func syncRouteCheckpoints(ctx context.Context, h *Handler, routeID int, routeName string, lanesJSON []byte) {
+	type Point struct {
+		X float64 `json:"x"`
+		Y float64 `json:"y"`
+	}
 	type Lane struct {
-		LaneOrder int     `json:"laneOrder"`
-		StartLat  float64 `json:"startLat"`
-		StartLng  float64 `json:"startLng"`
-		EndLat    float64 `json:"endLat"`
-		EndLng    float64 `json:"endLng"`
+		LaneOrder        int     `json:"lane_order"`
+		StartPoint       Point   `json:"start_point"`
+		EndPoint         Point   `json:"end_point"`
+		// Fallbacks for old database format
+		OldLaneOrder     int     `json:"laneOrder"`
+		OldStartLat      float64 `json:"startLat"`
+		OldStartLng      float64 `json:"startLng"`
+		OldEndLat        float64 `json:"endLat"`
+		OldEndLng        float64 `json:"endLng"`
 	}
 
 	var lanes []Lane
@@ -548,15 +556,33 @@ func syncRouteCheckpoints(ctx context.Context, h *Handler, routeID int, routeNam
 
 	// 2. Insert new checkpoints
 	// For each lane, we insert the start point and the end point
-	// (or just start point if they are the same to avoid duplicates)
 	seq := 1
 	for _, lane := range lanes {
-		fmt.Printf("syncRouteCheckpoints: inserting Start checkpoint for lane %d\n", lane.LaneOrder)
+		laneOrder := lane.LaneOrder
+		if laneOrder == 0 {
+			laneOrder = lane.OldLaneOrder
+		}
+
+		startLat := lane.StartPoint.Y
+		startLng := lane.StartPoint.X
+		if startLat == 0 && startLng == 0 {
+			startLat = lane.OldStartLat
+			startLng = lane.OldStartLng
+		}
+
+		endLat := lane.EndPoint.Y
+		endLng := lane.EndPoint.X
+		if endLat == 0 && endLng == 0 {
+			endLat = lane.OldEndLat
+			endLng = lane.OldEndLng
+		}
+
+		fmt.Printf("syncRouteCheckpoints: inserting Start checkpoint for lane %d\n", laneOrder)
 		// Start Point
 		_, err = db.Exec(ctx, `
 			INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_Start", lane.StartLat, lane.StartLng, 10.0, seq)
+		`, routeID, routeName+"_Lane"+strconv.Itoa(laneOrder)+"_Start", startLat, startLng, 10.0, seq)
 		if err != nil {
 			fmt.Println("syncRouteCheckpoints INSERT start error:", err)
 		}
@@ -564,12 +590,12 @@ func syncRouteCheckpoints(ctx context.Context, h *Handler, routeID int, routeNam
 
 		// End Point
 		// Check if end is significantly different from start to avoid duplicate pins
-		if lane.StartLat != lane.EndLat || lane.StartLng != lane.EndLng {
-			fmt.Printf("syncRouteCheckpoints: inserting End checkpoint for lane %d\n", lane.LaneOrder)
+		if startLat != endLat || startLng != endLng {
+			fmt.Printf("syncRouteCheckpoints: inserting End checkpoint for lane %d\n", laneOrder)
 			_, err = db.Exec(ctx, `
 				INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
 				VALUES ($1, $2, $3, $4, $5, $6)
-			`, routeID, routeName+"_Lane"+strconv.Itoa(lane.LaneOrder)+"_End", lane.EndLat, lane.EndLng, 10.0, seq)
+			`, routeID, routeName+"_Lane"+strconv.Itoa(laneOrder)+"_End", endLat, endLng, 10.0, seq)
 			if err != nil {
 				fmt.Println("syncRouteCheckpoints INSERT end error:", err)
 			}

@@ -84,12 +84,15 @@ export default function ReportsPage() {
     }
   };
 
-  const formatTime = (dateStr: string) => {
+  const formatTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '—';
     try {
       const d = new Date(dateStr);
+      // Show '—' for null/epoch (1970-01-01)
+      if (d.getFullYear() <= 1970) return '—';
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
-      return dateStr;
+      return '—';
     }
   };
 
@@ -182,7 +185,7 @@ export default function ReportsPage() {
                     <th className="px-3 py-3 font-bold">ACTIVE HOURS</th>
                     <th className="px-3 py-3 font-bold text-center">TOTAL DISTANCE (KM)</th>
                     <th className="px-3 py-3 font-bold text-center">AVERAGE SPEED (KM/H)</th>
-                    <th className="px-3 py-3 font-bold">ACTUAL IGNITION ON</th>
+                    <th className="px-3 py-3 font-bold">ACTUAL IGNITION ON (Count)</th>
                     <th className="px-3 py-3 font-bold">TOTAL IGNITION ON</th>
                     <th className="px-3 py-3 font-bold">STOPPAGE DURATION</th>
                     <th className="px-3 py-3 font-bold">IDLE DURATION</th>
@@ -214,7 +217,7 @@ export default function ReportsPage() {
                         <td className="px-3 py-3 font-mono">{r.total_active_duration}</td>
                         <td className="px-3 py-3 font-mono font-bold text-slate-900 text-center">{r.total_distance.toFixed(2)}</td>
                         <td className="px-3 py-3 font-mono text-center">{r.average_speed.toFixed(1)}</td>
-                        <td className="px-3 py-3 font-mono">{r.actual_ignition_on_duration}</td>
+                        <td className="px-3 py-3 font-mono font-bold text-center text-indigo-600">{r.actual_ignition_on_duration}</td>
                         <td className="px-3 py-3 font-mono">{r.total_ignition_on_duration}</td>
                         <td className="px-3 py-3 font-mono">{r.total_stoppage_duration}</td>
                         <td className="px-3 py-3 font-mono">{r.total_idle_duration}</td>

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-interface Lane {
+interface UILane {
 	laneOrder: number;
 	totalDistance: number;
 	noOfHouseholds: number;
@@ -13,14 +13,172 @@ interface Lane {
 	startLng: number;
 	endLat: number;
 	endLng: number;
+	id?: number;
+	name?: string;
+	route_id?: number | null;
+	is_active?: boolean;
+	created_by?: number;
+	updated_by?: number;
+	deleted_at?: string | null;
+	created_at?: string;
+	updated_at?: string;
+	lane_start_time?: string | null;
+	time_in_completion?: string | null;
+}
+
+interface DBLane {
+	id?: number;
+	name?: string;
+	total_distance: number;
+	start_point: { x: number; y: number };
+	end_point: { x: number; y: number };
+	lane_order: number;
+	is_double_lane: boolean;
+	no_of_households: number;
+	no_of_commercial: number | null;
+	route_id?: number | null;
+	is_active?: boolean;
+	created_by?: number;
+	updated_by?: number;
+	deleted_at?: string | null;
+	created_at?: string;
+	updated_at?: string;
+	lane_start_time?: string | null;
+	time_in_completion?: string | null;
+}
+
+function snapToRoute(latlng: L.LatLng, coords: L.LatLng[]): { snapped: L.LatLng; index: number } {
+	if (coords.length === 0) return { snapped: latlng, index: -1 };
+	if (coords.length === 1) return { snapped: coords[0], index: 0 };
+
+	let minDistance = Infinity;
+	let bestPoint = coords[0];
+	let bestIndex = 0;
+
+	for (let i = 0; i < coords.length - 1; i++) {
+		const p1 = coords[i];
+		const p2 = coords[i + 1];
+
+		const x = latlng.lng;
+		const y = latlng.lat;
+		const x1 = p1.lng;
+		const y1 = p1.lat;
+		const x2 = p2.lng;
+		const y2 = p2.lat;
+
+		const dx = x2 - x1;
+		const dy = y2 - y1;
+
+		let t = 0;
+		if (dx !== 0 || dy !== 0) {
+			t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+			t = Math.max(0, Math.min(1, t)); // Clamp to segment
+		}
+
+		const snapped = L.latLng(y1 + t * dy, x1 + t * dx);
+		const d = latlng.distanceTo(snapped);
+
+		if (d < minDistance) {
+			minDistance = d;
+			bestPoint = snapped;
+			bestIndex = i;
+		}
+	}
+
+	return { snapped: bestPoint, index: bestIndex };
+}
+
+function toUILane(l: any, routeCoords?: { lat: number; lng: number }[]): UILane {
+	if (!l) {
+		return {
+			laneOrder: 1,
+			totalDistance: 0,
+			noOfHouseholds: 0,
+			noOfCommercials: 0,
+			doubleLane: "No",
+			startLat: 0,
+			startLng: 0,
+			endLat: 0,
+			endLng: 0
+		};
+	}
+	
+	let startLat = typeof l.startLat === "number" ? l.startLat : (l.start_point?.y ?? 0);
+	let startLng = typeof l.startLng === "number" ? l.startLng : (l.start_point?.x ?? 0);
+	let endLat = typeof l.endLat === "number" ? l.endLat : (l.end_point?.y ?? 0);
+	let endLng = typeof l.endLng === "number" ? l.endLng : (l.end_point?.x ?? 0);
+
+	if (routeCoords && routeCoords.length > 0) {
+		const leafletRoute = routeCoords.map((c) => L.latLng(c.lat, c.lng));
+		
+		const snapStart = snapToRoute(L.latLng(startLat, startLng), leafletRoute);
+		startLat = snapStart.snapped.lat;
+		startLng = snapStart.snapped.lng;
+
+		const snapEnd = snapToRoute(L.latLng(endLat, endLng), leafletRoute);
+		endLat = snapEnd.snapped.lat;
+		endLng = snapEnd.snapped.lng;
+	}
+
+	return {
+		laneOrder: l.lane_order ?? l.laneOrder ?? 1,
+		totalDistance: l.total_distance ?? l.totalDistance ?? 0,
+		noOfHouseholds: l.no_of_households ?? l.noOfHouseholds ?? 0,
+		noOfCommercials: l.no_of_commercial ?? l.noOfCommercials ?? 0,
+		doubleLane: l.is_double_lane !== undefined ? (l.is_double_lane ? "Yes" : "No") : (l.doubleLane ?? "No"),
+		startLat,
+		startLng,
+		endLat,
+		endLng,
+		id: l.id,
+		name: l.name,
+		route_id: l.route_id,
+		is_active: l.is_active ?? true,
+		created_by: l.created_by,
+		updated_by: l.updated_by,
+		deleted_at: l.deleted_at,
+		created_at: l.created_at,
+		updated_at: l.updated_at,
+		lane_start_time: l.lane_start_time,
+		time_in_completion: l.time_in_completion
+	};
+}
+
+function toDBLane(l: UILane): DBLane {
+	return {
+		id: l.id,
+		name: l.name ?? `lane_440_${l.laneOrder}`,
+		total_distance: l.totalDistance,
+		start_point: {
+			x: l.startLng,
+			y: l.startLat
+		},
+		end_point: {
+			x: l.endLng,
+			y: l.endLat
+		},
+		lane_order: l.laneOrder,
+		is_double_lane: l.doubleLane === "Yes",
+		no_of_households: l.noOfHouseholds,
+		no_of_commercial: l.noOfCommercials || null,
+		route_id: l.route_id ?? null,
+		created_by: l.created_by ?? 1,
+		updated_by: l.updated_by ?? 1,
+		deleted_at: l.deleted_at ?? null,
+		is_active: l.is_active ?? true,
+		created_at: l.created_at,
+		updated_at: l.updated_at,
+		lane_start_time: l.lane_start_time ?? null,
+		time_in_completion: l.time_in_completion ?? null
+	};
 }
 
 interface Props {
 	routeCoords: { lat: number; lng: number }[];
 	setRouteCoords: React.Dispatch<React.SetStateAction<{ lat: number; lng: number }[]>>;
 	borderColor: string;
-	lanes: Lane[];
-	setLanes: (lanes: Lane[]) => void;
+	lanes: DBLane[];
+	setLanes: (lanes: DBLane[]) => void;
 	distance: number;
 	setDistance: (dist: number) => void;
 	geojsonText: string;
@@ -47,10 +205,10 @@ export default function RouteBuilderMap({
 	const currentPlacingMarkersRef = useRef<L.Marker[]>([]);
 	const vertexMarkersRef = useRef<L.Marker[]>([]);
 	const hasFitBoundsRef = useRef(false);
-	const lanesRef = useRef<Lane[]>(lanes);
+	const lanesRef = useRef<UILane[]>([]);
 	useEffect(() => {
-		lanesRef.current = lanes;
-	}, [lanes]);
+		lanesRef.current = lanes.map((l) => toUILane(l, routeCoords));
+	}, [lanes, routeCoords]);
 
 	const [isDrawing, setIsDrawing] = useState(false);
 	const [isEditingLanes, setIsEditingLanes] = useState(false);
@@ -75,6 +233,8 @@ export default function RouteBuilderMap({
 		doubleLane: "No",
 	});
 
+	const uiLanesList = lanes.map((l) => toUILane(l, routeCoords));
+
 	// Helper to create beautiful map pin drop point icons with numbers
 	const createPinIcon = (type: "start" | "end", number: string | number) => {
 		const color = type === "start" ? "#22c55e" : "#ef4444";
@@ -95,47 +255,6 @@ export default function RouteBuilderMap({
 		});
 	};
 
-	// Standard projection/snapping helper
-	const snapToRoute = (latlng: L.LatLng, coords: L.LatLng[]): { snapped: L.LatLng; index: number } => {
-		if (coords.length === 0) return { snapped: latlng, index: -1 };
-		if (coords.length === 1) return { snapped: coords[0], index: 0 };
-
-		let minDistance = Infinity;
-		let bestPoint = coords[0];
-		let bestIndex = 0;
-
-		for (let i = 0; i < coords.length - 1; i++) {
-			const p1 = coords[i];
-			const p2 = coords[i + 1];
-
-			const x = latlng.lng;
-			const y = latlng.lat;
-			const x1 = p1.lng;
-			const y1 = p1.lat;
-			const x2 = p2.lng;
-			const y2 = p2.lat;
-
-			const dx = x2 - x1;
-			const dy = y2 - y1;
-
-			let t = 0;
-			if (dx !== 0 || dy !== 0) {
-				t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
-				t = Math.max(0, Math.min(1, t)); // Clamp to segment
-			}
-
-			const snapped = L.latLng(y1 + t * dy, x1 + t * dx);
-			const d = latlng.distanceTo(snapped);
-
-			if (d < minDistance) {
-				minDistance = d;
-				bestPoint = snapped;
-				bestIndex = i;
-			}
-		}
-
-		return { snapped: bestPoint, index: bestIndex };
-	};
 
 	// Calculate distance along polyline route
 	const calculatePathDistance = (
@@ -220,7 +339,7 @@ export default function RouteBuilderMap({
 	useEffect(() => {
 		(window as any).deleteLane = (laneOrder: number) => {
 			const updated = lanesRef.current.filter((l) => l.laneOrder !== laneOrder);
-			setLanes(updated);
+			setLanes(updated.map(toDBLane));
 		};
 		return () => {
 			delete (window as any).deleteLane;
@@ -328,7 +447,7 @@ export default function RouteBuilderMap({
 
 					setLaneForm((prev) => ({
 						...prev,
-						laneOrder: lanes.length + 1,
+						laneOrder: uiLanesList.length + 1,
 						totalDistance: dist,
 					}));
 					setShowLaneForm(true);
@@ -340,7 +459,7 @@ export default function RouteBuilderMap({
 		return () => {
 			m.off("click", onClick);
 		};
-	}, [isDrawing, activeOverlay, routeCoords, laneStartPoint, laneEndPoint, lanes.length]);
+	}, [isDrawing, activeOverlay, routeCoords, laneStartPoint, laneEndPoint, uiLanesList.length]);
 
 	// Render route polyline and start/end markers
 	useEffect(() => {
@@ -556,7 +675,7 @@ export default function RouteBuilderMap({
 		if (routeCoords.length < 2) return;
 
 		// Render lane segments
-		lanes.forEach((lane) => {
+		uiLanesList.forEach((lane) => {
 			const leafletRoute = routeCoords.map((c) => L.latLng(c.lat, c.lng));
 			const startIdx = snapToRoute(L.latLng(lane.startLat, lane.startLng), leafletRoute).index;
 			const endIdx = snapToRoute(L.latLng(lane.endLat, lane.endLng), leafletRoute).index;
@@ -667,7 +786,7 @@ export default function RouteBuilderMap({
 			laneMarkersRef.current.forEach((mk) => mk.remove());
 			laneMarkersRef.current = [];
 		};
-	}, [lanes, showStartPoint, showEndPoint, routeCoords]);
+	}, [lanes, uiLanesList, showStartPoint, showEndPoint, routeCoords]);
 
 	// Render current active placing checkpoint markers
 	useEffect(() => {
@@ -680,14 +799,14 @@ export default function RouteBuilderMap({
 
 		if (laneStartPoint) {
 			const currentGreenMk = L.marker([laneStartPoint.lat, laneStartPoint.lng], { 
-				icon: createPinIcon("start", lanes.length + 1) 
+				icon: createPinIcon("start", uiLanesList.length + 1) 
 			}).addTo(m);
 			currentPlacingMarkersRef.current.push(currentGreenMk);
 		}
 
 		if (laneEndPoint) {
 			const currentRedMk = L.marker([laneEndPoint.lat, laneEndPoint.lng], { 
-				icon: createPinIcon("end", lanes.length + 1) 
+				icon: createPinIcon("end", uiLanesList.length + 1) 
 			}).addTo(m);
 			currentPlacingMarkersRef.current.push(currentRedMk);
 		}
@@ -696,7 +815,7 @@ export default function RouteBuilderMap({
 			currentPlacingMarkersRef.current.forEach((mk) => mk.remove());
 			currentPlacingMarkersRef.current = [];
 		};
-	}, [laneStartPoint, laneEndPoint, lanes.length]);
+	}, [laneStartPoint, laneEndPoint, uiLanesList.length]);
 
 	// Parse custom input JSON coordinates
 	useEffect(() => {
@@ -733,7 +852,7 @@ export default function RouteBuilderMap({
 	const saveLaneInfo = () => {
 		if (!laneStartPoint || !laneEndPoint) return;
 
-		const newLane: Lane = {
+		const newLane: UILane = {
 			laneOrder: Number(laneForm.laneOrder),
 			totalDistance: parseFloat(Number(laneForm.totalDistance).toFixed(2)),
 			noOfHouseholds: Number(laneForm.noOfHouseholds),
@@ -745,7 +864,7 @@ export default function RouteBuilderMap({
 			endLng: laneEndPoint.lng,
 		};
 
-		setLanes([...lanes, newLane]);
+		setLanes([...uiLanesList, newLane].map(toDBLane));
 
 		// Clear states
 		setLaneStartPoint(null);

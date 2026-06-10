@@ -577,7 +577,23 @@ export default function PlaybackPage() {
               routePts = feature.coordinates.map((c: any) => L.latLng(c[1], c[0]));
             }
 
-            parsedLanes.forEach((lane: any) => {
+            parsedLanes.forEach((rawLane: any) => {
+              const isDB = rawLane.start_point !== undefined;
+              const startLat = isDB ? (rawLane.start_point?.y ?? 0) : (rawLane.startLat ?? 0);
+              const startLng = isDB ? (rawLane.start_point?.x ?? 0) : (rawLane.startLng ?? 0);
+              const endLat = isDB ? (rawLane.end_point?.y ?? 0) : (rawLane.endLat ?? 0);
+              const endLng = isDB ? (rawLane.end_point?.x ?? 0) : (rawLane.endLng ?? 0);
+              
+              const lane = {
+                startLat,
+                startLng,
+                endLat,
+                endLng,
+                laneOrder: isDB ? (rawLane.lane_order ?? 1) : (rawLane.laneOrder ?? 1),
+                noOfHouseholds: isDB ? (rawLane.no_of_households ?? 0) : (rawLane.noOfHouseholds ?? 0),
+                noOfCommercials: isDB ? (rawLane.no_of_commercial ?? 0) : (rawLane.noOfCommercials ?? 0),
+              };
+
               // Draw highlighted lane segment
               if (routePts.length >= 2) {
                 const startIdx = snapToRoute(L.latLng(lane.startLat, lane.startLng), routePts).index;
