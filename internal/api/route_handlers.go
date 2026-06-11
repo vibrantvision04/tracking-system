@@ -2,11 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"gps-tracking-system/internal/repository"
+	"gps-tracking-system/internal/utils"
 	"net/http"
 	"strconv"
 	"time"
-
-	"gps-tracking-system/internal/repository"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -76,9 +76,9 @@ func (h *Handler) AssignRouteToVehicle(w http.ResponseWriter, r *http.Request) {
 
 	var targetDate time.Time
 	if payload.Date == "" {
-		targetDate = time.Now()
+		targetDate = utils.CurrentTimeInIndia()
 	} else {
-		parsedDate, err := time.Parse("2006-01-02", payload.Date)
+		parsedDate, err := time.ParseInLocation("2006-01-02", payload.Date, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 			return
@@ -120,9 +120,9 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 	dateStr := r.URL.Query().Get("date")
 	var targetDate time.Time
 	if dateStr == "" {
-		targetDate = time.Now()
+		targetDate = utils.CurrentTimeInIndia()
 	} else {
-		parsedDate, err := time.Parse("2006-01-02", dateStr)
+		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 			return
@@ -250,10 +250,10 @@ func (h *Handler) GetVehicleRouteAssignments(w http.ResponseWriter, r *http.Requ
 	dateStr := r.URL.Query().Get("date")
 	var targetDate time.Time
 	if dateStr == "" {
-		targetDate = time.Now()
+		targetDate = utils.CurrentTimeInIndia()
 	} else {
 		var err error
-		targetDate, err = time.Parse("2006-01-02", dateStr)
+		targetDate, err = time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 			return

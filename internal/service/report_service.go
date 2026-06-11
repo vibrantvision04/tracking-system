@@ -154,6 +154,61 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		return p.Ignition || p.Speed > 2
 	}
 
+	isToday := start.Format("2006-01-02") == utils.CurrentTimeInIndia().Format("2006-01-02")
+
+	// Calculate Actual Ignition ON Duration (physical ignition flag is true)
+	var (
+		actualIgnitionSec  int
+		inActualSession    bool
+		actualSessionStart time.Time
+	)
+
+	for i, p := range validData {
+		currActualOn := p.Ignition
+		if i == 0 {
+			if currActualOn {
+				inActualSession = true
+				actualSessionStart = p.Time
+			}
+			continue
+		}
+
+		prevActualOn := validData[i-1].Ignition
+
+		// Rising edge: physical ignition OFF->ON
+		if !prevActualOn && currActualOn {
+			inActualSession = true
+			actualSessionStart = p.Time
+		}
+
+		// Falling edge: physical ignition ON->OFF
+		if prevActualOn && !currActualOn {
+			if inActualSession {
+				dur := int(p.Time.Sub(actualSessionStart).Seconds())
+				if dur > 0 {
+					actualIgnitionSec += dur
+				}
+				inActualSession = false
+			}
+		}
+	}
+
+	if inActualSession && lastPoint != nil {
+		if isToday {
+			// Live running session: add duration up to last point
+			dur := int(lastPoint.Time.Sub(actualSessionStart).Seconds())
+			if dur > 0 {
+				actualIgnitionSec += dur
+			}
+		} else {
+			// Past day: clip at end of day
+			dur := int(end.Sub(actualSessionStart).Seconds())
+			if dur > 0 {
+				actualIgnitionSec += dur
+			}
+		}
+	}
+
 	var (
 		// Ignition session tracking
 		inSession    bool
@@ -235,24 +290,26 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	}
 
 	// ─────────────────────────────────────────────────────────────────
-	// End-of-day clipping
-	// If a session is still open when the day's data ends (vehicle drove
-	// through midnight into the next day), forcibly close it at the day
-	// boundary (end = start + 24h). This gives the current day a definite
-	// EndTime and a complete active-hours count.
-	// The carry-over portion will be accounted for in the next day's report
-	// because the first packet of the next day will also have ignition ON.
+	// End-of-day or Live running session handling
 	// ─────────────────────────────────────────────────────────────────
-	if inSession {
-		clipDur := int(end.Sub(sessionStart).Seconds())
-		if clipDur > 0 {
-			totalActiveSec += clipDur
-		}
-		// EndTime = day boundary (23:59:59.999…)
-		endClip := end.Add(-time.Millisecond)
-		endTime = &endClip
-		// EndPoint = last known location
-		if lastPoint != nil {
+	if inSession && lastPoint != nil {
+		if isToday {
+			// For today, if session is still open, add the duration of the current running session up to the last packet.
+			// Do NOT update EndTime or EndPoint, as no OFF event has occurred.
+			clipDur := int(lastPoint.Time.Sub(sessionStart).Seconds())
+			if clipDur > 0 {
+				totalActiveSec += clipDur
+			}
+		} else {
+			// For past days, if a session was open at the end of the day, forcibly close it at the day boundary.
+			clipDur := int(end.Sub(sessionStart).Seconds())
+			if clipDur > 0 {
+				totalActiveSec += clipDur
+			}
+			// EndTime = day boundary (23:59:59.999…)
+			endClip := end.Add(-time.Millisecond)
+			endTime = &endClip
+			// EndPoint = last known location
 			endLat = lastPoint.Lat
 			endLng = lastPoint.Lng
 		}
@@ -282,9 +339,6 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		avgSpeed = totalDistance / activeHours
 	}
 
-	// actualIgnitionOnDuration stores the COUNT of ignition ON events as a string
-	actualIgnitionOnStr := fmt.Sprintf("%d", ignitionOnCount)
-
 	report := &repository.MovementReport{
 		VehicleID:                vehicleID,
 		IMEI:                     validData[0].IMEI,
@@ -299,8 +353,8 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		TotalIdleDuration:        formatDuration(totalIdleSec),
 		TotalStoppageDuration:    formatDuration(stoppageSec),
 		StoppagesCount:           stoppagesCount,
-		ActualIgnitionOnDuration: actualIgnitionOnStr,          // count of ON events
-		TotalIgnitionOnDuration:  formatDuration(totalActiveSec), // total running duration
+		ActualIgnitionOnDuration: formatDuration(actualIgnitionSec),
+		TotalIgnitionOnDuration:  formatDuration(totalActiveSec),
 		MaxSpeed:                 maxSpeed,
 		StartPoint:               startPointStr,
 		EndPoint:                 endPointStr,

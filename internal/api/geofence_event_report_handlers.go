@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"gps-tracking-system/internal/utils"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,13 +29,13 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 	var reportDate time.Time
 	var err error
 	if dateStr != "" {
-		reportDate, err = time.Parse("2006-01-02", dateStr)
+		reportDate, err = time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 			return
 		}
 	} else {
-		reportDate = time.Now()
+		reportDate = utils.CurrentTimeInIndia()
 	}
 	dateFilter := reportDate.Format("2006-01-02")
 
@@ -140,23 +141,23 @@ func (h *Handler) GetWardGeofenceReport(w http.ResponseWriter, r *http.Request) 
 	var err error
 
 	if fromDateStr != "" {
-		fromDate, err = time.Parse("2006-01-02", fromDateStr)
+		fromDate, err = time.ParseInLocation("2006-01-02", fromDateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid from_date format, use YYYY-MM-DD"})
 			return
 		}
 	} else {
-		fromDate = time.Now()
+		fromDate = utils.CurrentTimeInIndia()
 	}
 
 	if toDateStr != "" {
-		toDate, err = time.Parse("2006-01-02", toDateStr)
+		toDate, err = time.ParseInLocation("2006-01-02", toDateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid to_date format, use YYYY-MM-DD"})
 			return
 		}
 	} else {
-		toDate = time.Now()
+		toDate = utils.CurrentTimeInIndia()
 	}
 
 	query := `

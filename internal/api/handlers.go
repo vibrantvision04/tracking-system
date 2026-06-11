@@ -7,6 +7,7 @@ import (
 	"gps-tracking-system/internal/decoder"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
+	"gps-tracking-system/internal/utils"
 	"hash/crc32"
 	"math"
 	"net/http"
@@ -165,17 +166,82 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 	if limit < 1 { limit = 10 }
 	offset := (page - 1) * limit
 
-	from, err := time.Parse("2006-01-02", fromStr)
+	todayStr := utils.CurrentTimeInIndia().Format("2006-01-02")
+	var hasToday bool
+	var todayTime time.Time
+
+	from, err := time.ParseInLocation("2006-01-02", fromStr, utils.IndianLocation)
 	if err != nil {
-		from = time.Now().AddDate(0, 0, -7)
+		from = utils.CurrentTimeInIndia().AddDate(0, 0, -7)
 	}
-	to, err := time.Parse("2006-01-02", toStr)
+	to, err := time.ParseInLocation("2006-01-02", toStr, utils.IndianLocation)
 	if err != nil {
-		to = time.Now()
+		to = utils.CurrentTimeInIndia()
 	}
 
-	// Trigger real-time report generation/caching asynchronously in the background.
-	// This immediately loads the pre-computed reports from DB and prevents the HTTP request from blocking/timing out.
+	// Truncate to start of day in Indian time
+	from = time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, utils.IndianLocation)
+	to = time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, utils.IndianLocation)
+
+	// Check if today falls within [from, to]
+	currCheck := from
+	for !currCheck.After(to) {
+		if currCheck.Format("2006-01-02") == todayStr {
+			hasToday = true
+			todayTime = currCheck
+			break
+		}
+		currCheck = currCheck.AddDate(0, 0, 1)
+	}
+
+	// Synchronously calculate today's report in parallel so it updates live
+	if hasToday {
+		var targetVehicles []*repository.Vehicle
+		if vehicleID > 0 {
+			vehicle, err := h.vRepo.GetByID(r.Context(), vehicleID)
+			if err == nil {
+				targetVehicles = append(targetVehicles, vehicle)
+			}
+		} else {
+			vehicles, err := h.vRepo.GetAll(r.Context())
+			if err == nil {
+				for i := range vehicles {
+					targetVehicles = append(targetVehicles, &vehicles[i])
+				}
+			}
+		}
+
+		var wg sync.WaitGroup
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		sem := make(chan struct{}, 10) // Concurrency limit of 10
+
+		for _, vehicle := range targetVehicles {
+			if vehicle.GpsDevice == nil {
+				continue
+			}
+			zone := ""
+			ward := ""
+			if vehicle.VehicleType != nil {
+				ward = vehicle.VehicleType.Name
+			}
+
+			wg.Add(1)
+			go func(v *repository.Vehicle, z, w string) {
+				defer wg.Done()
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				case <-ctx.Done():
+					return
+				}
+				_ = h.rService.GenerateDailyReport(ctx, v.ID, todayTime, z, w)
+			}(vehicle, zone, ward)
+		}
+		wg.Wait()
+		cancel()
+	}
+
+	// Trigger real-time report generation/caching asynchronously in the background for past days.
 	go func(vID int, startD, endD time.Time) {
 		// Create a background context for report generation
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -210,9 +276,12 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 			daysCount := 0
 			// Limit to a maximum of 31 days to protect the background worker
 			for !curr.After(endD) && daysCount < 31 {
-				err := h.rService.GenerateDailyReport(ctx, vehicle.ID, curr, zone, ward)
-				if err != nil {
-					fmt.Printf("Background report generation failed for vehicle %d on %s: %v\n", vehicle.ID, curr.Format("2006-01-02"), err)
+				// Skip today as it was already handled synchronously
+				if curr.Format("2006-01-02") != todayStr {
+					err := h.rService.GenerateDailyReport(ctx, vehicle.ID, curr, zone, ward)
+					if err != nil {
+						fmt.Printf("Background report generation failed for vehicle %d on %s: %v\n", vehicle.ID, curr.Format("2006-01-02"), err)
+					}
 				}
 				curr = curr.AddDate(0, 0, 1)
 				daysCount++

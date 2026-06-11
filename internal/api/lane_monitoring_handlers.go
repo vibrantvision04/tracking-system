@@ -1,6 +1,7 @@
 package api
 
 import (
+	"gps-tracking-system/internal/utils"
 	"net/http"
 	"strconv"
 	"strings"
@@ -33,13 +34,13 @@ func (h *Handler) GetLaneMonitoringReport(w http.ResponseWriter, r *http.Request
 	dateStr := r.URL.Query().Get("date")
 	var reportDate time.Time
 	if dateStr != "" {
-		reportDate, err = time.Parse("2006-01-02", dateStr)
+		reportDate, err = time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 			return
 		}
 	} else {
-		reportDate = time.Now()
+		reportDate = utils.CurrentTimeInIndia()
 	}
 	dateFilter := reportDate.Format("2006-01-02")
 

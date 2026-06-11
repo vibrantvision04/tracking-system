@@ -67,11 +67,25 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		// 1. Fetch latest locations
-		keys, err := h.rdb.Keys(ctx, "gps:latest:*").Result()
+		// 1. Fetch latest locations using SCAN (non-blocking, production-safe)
+		// KEYS blocks the entire Redis server for O(N) — SCAN iterates incrementally.
+		var allKeys []string
+		var cursor uint64
+		for {
+			keys, nextCursor, err := h.rdb.Scan(ctx, cursor, "gps:latest:*", 100).Result()
+			if err != nil {
+				break
+			}
+			allKeys = append(allKeys, keys...)
+			cursor = nextCursor
+			if cursor == 0 {
+				break
+			}
+		}
+
 		var snapshot []json.RawMessage
-		if err == nil && len(keys) > 0 {
-			vals, err := h.rdb.MGet(ctx, keys...).Result()
+		if len(allKeys) > 0 {
+			vals, err := h.rdb.MGet(ctx, allKeys...).Result()
 			if err == nil {
 				for _, val := range vals {
 					if strVal, ok := val.(string); ok {
@@ -81,8 +95,20 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// 2. Fetch device statuses
-		statusKeys, _ := h.rdb.Keys(ctx, "gps:status:*").Result()
+		// 2. Fetch device statuses using SCAN
+		var statusKeys []string
+		cursor = 0
+		for {
+			keys, nextCursor, err := h.rdb.Scan(ctx, cursor, "gps:status:*", 100).Result()
+			if err != nil {
+				break
+			}
+			statusKeys = append(statusKeys, keys...)
+			cursor = nextCursor
+			if cursor == 0 {
+				break
+			}
+		}
 		statuses := make(map[string]string)
 		if len(statusKeys) > 0 {
 			sVals, _ := h.rdb.MGet(ctx, statusKeys...).Result()
@@ -100,12 +126,11 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"statuses": statuses,
 		})
 				
-				// Safe send to avoid blocking or panicking
-				select {
-				case c.send <- payload:
-				case <-time.After(1 * time.Second):
-					log.Warn().Msg("Timed out sending snapshot to client")
-				}
+		select {
+		case c.send <- payload:
+		case <-time.After(1 * time.Second):
+			log.Warn().Msg("Timed out sending snapshot to client")
+		}
 	}(client)
 
 	go client.writePump()

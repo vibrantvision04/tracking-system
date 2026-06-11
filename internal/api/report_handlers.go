@@ -21,13 +21,13 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 	fromDateStr := r.URL.Query().Get("from_date")
 	toDateStr := r.URL.Query().Get("to_date")
 
-	fromDate, err := time.Parse("2006-01-02", fromDateStr)
+	fromDate, err := time.ParseInLocation("2006-01-02", fromDateStr, utils.IndianLocation)
 	if err != nil {
-		fromDate = time.Now()
+		fromDate = utils.CurrentTimeInIndia()
 	}
-	toDate, err := time.Parse("2006-01-02", toDateStr)
+	toDate, err := time.ParseInLocation("2006-01-02", toDateStr, utils.IndianLocation)
 	if err != nil {
-		toDate = time.Now()
+		toDate = utils.CurrentTimeInIndia()
 	}
 
 	// Fetch all assignments for the date range
@@ -275,7 +275,7 @@ func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {
 
 func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository, routeRepo *repository.RouteRepository, vehicleID int, routeID int, dateStr string) {
 	// Parse date
-	dayStart, err := time.Parse("2006-01-02", dateStr)
+	dayStart, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 	if err != nil {
 		return
 	}

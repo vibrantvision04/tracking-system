@@ -185,11 +185,11 @@ export default function ReportsPage() {
                     <th className="px-3 py-3 font-bold">ACTIVE HOURS</th>
                     <th className="px-3 py-3 font-bold text-center">TOTAL DISTANCE (KM)</th>
                     <th className="px-3 py-3 font-bold text-center">AVERAGE SPEED (KM/H)</th>
-                    <th className="px-3 py-3 font-bold">ACTUAL IGNITION ON (Count)</th>
-                    <th className="px-3 py-3 font-bold">TOTAL IGNITION ON</th>
-                    <th className="px-3 py-3 font-bold">STOPPAGE DURATION</th>
-                    <th className="px-3 py-3 font-bold">IDLE DURATION</th>
-                    <th className="px-3 py-3 font-bold text-center">STOPPAGES</th>
+                    <th className="px-3 py-3 font-bold">ACTUAL IGNITION ON DURATION</th>
+                    <th className="px-3 py-3 font-bold">TOTAL IGNITION ON DURATION</th>
+                    <th className="px-3 py-3 font-bold">TOTAL STOPPAGE DURATION</th>
+                    <th className="px-3 py-3 font-bold">TOTAL IDLE DURATION</th>
+                    <th className="px-3 py-3 font-bold text-center">TOTAL STOPPAGES</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-theme-text">

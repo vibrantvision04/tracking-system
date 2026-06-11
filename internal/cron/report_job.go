@@ -4,6 +4,7 @@ import (
 	"context"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
+	"gps-tracking-system/internal/utils"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -34,7 +35,7 @@ func (j *ReportJob) SetZoneWardMappings(zones, wards map[string]string) {
 
 func (j *ReportJob) Run() {
 	// Default nightly run is for yesterday
-	yesterday := time.Now().AddDate(0, 0, -1)
+	yesterday := utils.CurrentTimeInIndia().AddDate(0, 0, -1)
 	j.RunForDate(yesterday)
 }
 

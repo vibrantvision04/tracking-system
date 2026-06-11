@@ -49,9 +49,9 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 	// Parse date filter
 	dateStr := r.URL.Query().Get("date")
 	if dateStr == "" {
-		dateStr = time.Now().Format("2006-01-02")
+		dateStr = utils.CurrentTimeInIndia().Format("2006-01-02")
 	}
-	dayStart, err := time.Parse("2006-01-02", dateStr)
+	dayStart, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 	if err != nil {
 		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 		return

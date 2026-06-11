@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"gps-tracking-system/internal/utils"
 	"net/http"
 	"strconv"
 	"time"
@@ -39,7 +40,7 @@ func (h *Handler) GetTemporaryVehicles(w http.ResponseWriter, r *http.Request) {
 
 	var targetDate *string
 	if dateStr != "" && dateStr != "null" {
-		if _, err := time.Parse("2006-01-02", dateStr); err == nil {
+		if _, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation); err == nil {
 			targetDate = &dateStr
 		}
 	}
@@ -120,7 +121,7 @@ func (h *Handler) CreateTemporaryVehicle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	parsedDate, err := time.Parse("2006-01-02", req.AssignmentDate)
+	parsedDate, err := time.ParseInLocation("2006-01-02", req.AssignmentDate, utils.IndianLocation)
 	if err != nil {
 		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 		return
@@ -171,7 +172,7 @@ func (h *Handler) UpdateTemporaryVehicle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	parsedDate, err := time.Parse("2006-01-02", req.AssignmentDate)
+	parsedDate, err := time.ParseInLocation("2006-01-02", req.AssignmentDate, utils.IndianLocation)
 	if err != nil {
 		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 		return
@@ -224,9 +225,9 @@ func (h *Handler) GetRegularVehicleForRoute(w http.ResponseWriter, r *http.Reque
 	dateStr := r.URL.Query().Get("date")
 	var targetDate time.Time
 	if dateStr == "" {
-		targetDate = time.Now()
+		targetDate = utils.CurrentTimeInIndia()
 	} else {
-		parsedDate, err := time.Parse("2006-01-02", dateStr)
+		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 			return

@@ -4,7 +4,7 @@ import (
 	"gps-tracking-system/internal/config"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
-	"time"
+	"gps-tracking-system/internal/utils"
 
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -28,7 +28,7 @@ func StartScheduler(cfg *config.Config, rService *service.ReportService, vRepo *
 	// Also run a periodic update for "Today" every 15 minutes
 	_, err = c.AddFunc("@every 15m", func() {
 		log.Info().Msg("Running periodic movement report update (Today)")
-		job.RunForDate(time.Now())
+		job.RunForDate(utils.CurrentTimeInIndia())
 	})
 
 	if err != nil {

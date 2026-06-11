@@ -19,6 +19,8 @@ interface Props {
 export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const markers = useRef<Record<string, L.Marker>>({});
+  // Cache last rendered icon key (color+emoji) per IMEI — skip icon rebuild when unchanged
+  const iconCache = useRef<Record<string, { color: string; emoji: string }>>({});
   const wardsLayerRef = useRef<L.LayerGroup | null>(null);
   const facilitiesLayerRef = useRef<L.LayerGroup | null>(null);
 
@@ -49,7 +51,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         setLivePos((prev) => ({ ...prev, ...livePosAccumulator.current }));
         livePosAccumulator.current = {};
       }
-    }, 1000); // Flush every 1 second
+    }, 300); // Flush every 300ms — faster sidebar update without per-packet re-renders
     return () => clearInterval(interval);
   }, []);
 
@@ -439,9 +441,9 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     }
   }, [selectedZone, regionsList, zones]);
 
-  // ─── Marker helper ───
   const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string, isLive: boolean, lastTime?: string | null) => {
     if (!mapRef.current) return;
+    if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) return;
     
     const getVehicleEmoji = (type: string) => {
       const t = type.toLowerCase();
@@ -450,26 +452,38 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       if (t.includes("tractor") || t.includes("ferguson")) return "🚜";
       if (t.includes("ambulance")) return "🚑";
       if (t.includes("tata") || t.includes("mahindra")) return "🚚";
-      return "🚗"; // Fallback
+      return "🚗";
     };
 
     const color = isLive ? (speed > 3 ? "#22c55e" : speed > 0 ? "#f59e0b" : "#ef4444") : "#64748b";
     const emoji = getVehicleEmoji(typeName);
     
-    const icon = L.divIcon({
-      className: "",
-      html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
-      iconSize: [24, 24], iconAnchor: [12, 12],
-    });
-    if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) {
-      console.warn("Invalid lat/lng for", imei, lat, lng);
-      return;
-    }
+    const existingMarker = markers.current[imei];
+    const cached = iconCache.current[imei];
 
-    if (markers.current[imei]) {
-      markers.current[imei].setLatLng([lat, lng]).setIcon(icon);
+    if (existingMarker) {
+      // Fast path: only move the marker if it already exists and icon state unchanged
+      existingMarker.setLatLng([lat, lng]);
+
+      if (!cached || cached.color !== color || cached.emoji !== emoji) {
+        // Icon state changed — rebuild icon
+        const icon = L.divIcon({
+          className: "",
+          html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
+          iconSize: [24, 24], iconAnchor: [12, 12],
+        });
+        existingMarker.setIcon(icon);
+        iconCache.current[imei] = { color, emoji };
+      }
     } else {
+      // New marker — always create full icon
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
+        iconSize: [24, 24], iconAnchor: [12, 12],
+      });
       markers.current[imei] = L.marker([lat, lng], { icon }).addTo(mapRef.current);
+      iconCache.current[imei] = { color, emoji };
     }
 
     const timeStr = isLive ? "Live Now" : (lastTime ? `Last seen: ${new Date(lastTime).toLocaleString()}` : "Offline");
@@ -628,9 +642,26 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
             }
             if (msg.type === "snapshot") {
               if (Array.isArray(msg.data)) {
-                const map: Record<string, LivePosition> = {};
-                msg.data.forEach((p: LivePosition) => { map[p.imei] = p; });
-                setLivePos((prev) => ({ ...prev, ...map }));
+                // Apply snapshot in chunks via requestIdleCallback so the map
+                // stays responsive and doesn't freeze on large fleets.
+                const chunkSize = 50;
+                const applyChunk = (offset: number) => {
+                  const chunk = msg.data.slice(offset, offset + chunkSize);
+                  if (chunk.length === 0) return;
+                  setLivePos((prev) => {
+                    const next = { ...prev };
+                    chunk.forEach((p: LivePosition) => { next[p.imei] = p; });
+                    return next;
+                  });
+                  if (offset + chunkSize < msg.data.length) {
+                    if ('requestIdleCallback' in window) {
+                      (window as any).requestIdleCallback(() => applyChunk(offset + chunkSize));
+                    } else {
+                      setTimeout(() => applyChunk(offset + chunkSize), 0);
+                    }
+                  }
+                };
+                applyChunk(0);
               }
               if (msg.statuses) {
                 setStatuses(prev => ({ ...prev, ...msg.statuses }));
