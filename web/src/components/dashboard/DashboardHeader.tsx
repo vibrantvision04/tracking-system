@@ -22,7 +22,7 @@ export default function DashboardHeader() {
       {/* Center: Software Name */}
       <div className="hidden lg:flex flex-col items-center absolute left-1/2 -translate-x-1/2">
         <span className="text-xs font-black text-slate-800 tracking-[0.2em] uppercase">
-          ISWM Core
+          VSWM Core
         </span>
         <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest mt-0.5">
           Enterprise Operations Dashboard

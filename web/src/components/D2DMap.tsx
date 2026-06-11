@@ -1464,7 +1464,7 @@ export default function D2DMap() {
         <div className="flex items-center gap-3">
           <span className="text-xl">📊</span>
           <div>
-            <h1 className="text-sm font-bold tracking-wider text-theme-accent">ISWM - NAGAR NIGAM JAIPUR</h1>
+            <h1 className="text-sm font-bold tracking-wider text-theme-accent">VSWM - NAGAR NIGAM JAIPUR</h1>
             <span className="text-[10px] text-theme-text-dim">Door-to-Door (D2D) Fleet Monitoring Dashboard</span>
           </div>
         </div>

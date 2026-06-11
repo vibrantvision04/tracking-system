@@ -12,7 +12,7 @@ func ExportMovementReportPDF(reports []repository.MovementReport, w io.Writer) e
 	pdf := gofpdf.New("L", "mm", "A4", "")
 	pdf.AddPage()
 	pdf.SetFont("Arial", "B", 16)
-	pdf.Cell(0, 10, "ISWM Jaipur Heritage - Movement Report")
+	pdf.Cell(0, 10, "VSWM Jaipur Heritage - Movement Report")
 	pdf.Ln(12)
 
 	// Table Header

@@ -72,7 +72,7 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 		FROM geofence_events ge
 		JOIN vehicles v ON ge.vehicle_id = v.id
 		JOIN geofences g ON ge.geofence_id = g.id
-		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN regions z ON v.zone_id = z.id
 		LEFT JOIN regions w ON v.ward_id = w.id
 		LEFT JOIN transfer_stations ts ON ts.geofence_id = g.id

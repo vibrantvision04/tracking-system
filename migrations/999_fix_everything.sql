@@ -28,8 +28,8 @@ BEGIN
     END IF;
 END $$;
 
--- 3. Ensure 'vehicle_types_iswm' exists
-CREATE TABLE IF NOT EXISTS vehicle_types_iswm (
+-- 3. Ensure 'vehicle_types_vswm' exists
+CREATE TABLE IF NOT EXISTS vehicle_types_vswm (
     id                    SERIAL PRIMARY KEY,
     vehicle_type_name     TEXT NOT NULL,
     icon_color            TEXT,
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS vehicle_types_iswm (
     updated_at            TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Insert default types for ISWM
-INSERT INTO vehicle_types_iswm (vehicle_type_name, icon_color)
+-- Insert default types for VSWM
+INSERT INTO vehicle_types_vswm (vehicle_type_name, icon_color)
 VALUES 
 ('RCV (Compactor)', '#3b82f6'),
 ('Hopper Tipper', '#10b981'),

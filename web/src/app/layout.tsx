@@ -11,7 +11,7 @@ import "react-toastify/dist/ReactToastify.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ISWM Jaipur Heritage | GPS Vehicle Tracking",
+  title: "VSWM Jaipur Heritage | GPS Vehicle Tracking",
   description: "Real-time GPS tracking & waste management for Jaipur Heritage Municipal Corporation",
 };
 

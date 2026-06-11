@@ -10,7 +10,7 @@ export default function MainHeader() {
         </div>
         <div className="flex flex-col">
           <h1 className="text-sm font-extrabold text-slate-800 tracking-tight leading-none uppercase">
-            ISWM - NAGAR NIGAM JAIPUR
+            VSWM - NAGAR NIGAM JAIPUR
           </h1>
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
             INTEGRATED SOLID WASTE MANAGEMENT SYSTEM

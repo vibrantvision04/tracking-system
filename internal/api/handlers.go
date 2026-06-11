@@ -1093,7 +1093,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
 			JOIN routes r ON va.route_id = r.id AND r.is_active = true
 			JOIN shifts s ON r.shift_id = s.id AND s.is_active = true
-			LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+			LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 			LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 			LEFT JOIN gps_devices d ON m.device_id = d.id
 			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
@@ -1116,7 +1116,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
 			JOIN routes r ON va.route_id = r.id AND r.is_active = true
 			JOIN shifts s ON r.shift_id = s.id AND s.is_active = true
-			LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+			LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 			LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 			LEFT JOIN gps_devices d ON m.device_id = d.id
 			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2

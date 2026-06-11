@@ -1,5 +1,5 @@
 -- ============================================================
--- 025: Seed Operational Data for Jaipur ISWM D2D Dashboard
+-- 025: Seed Operational Data for Jaipur VSWM D2D Dashboard
 -- ============================================================
 
 -- Ensure zone_id and ward_id columns exist on vehicles table

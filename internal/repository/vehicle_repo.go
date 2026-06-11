@@ -57,7 +57,7 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
 			COALESCE(lp.speed, 0)
 		FROM vehicles v
-		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
@@ -120,7 +120,7 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
 			COALESCE(lp.speed, 0)
 		FROM vehicles v
-		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
@@ -160,7 +160,7 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
 			COALESCE(lp.speed, 0)
 		FROM vehicles v
-		LEFT JOIN vehicle_types_iswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
@@ -194,7 +194,7 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 }
 
 func (r *VehicleRepository) GetTypes(ctx context.Context) ([]VehicleType, error) {
-	query := `SELECT id, vehicle_type_name, icon_color FROM vehicle_types_iswm`
+	query := `SELECT id, vehicle_type_name, icon_color FROM vehicle_types_vswm`
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,7 @@ func (r *VehicleRepository) GetTypes(ctx context.Context) ([]VehicleType, error)
 }
 func (r *VehicleRepository) CreateType(ctx context.Context, vt *VehicleType) error {
 	query := `
-		INSERT INTO vehicle_types_iswm (vehicle_type_name, icon_color)
+		INSERT INTO vehicle_types_vswm (vehicle_type_name, icon_color)
 		VALUES ($1, $2)
 		RETURNING id
 	`
@@ -366,7 +366,7 @@ func (r *VehicleRepository) DeleteType(ctx context.Context, id int) error {
 	}
 
 	// 2. Delete the type
-	_, err = r.pool.Exec(ctx, `DELETE FROM vehicle_types_iswm WHERE id = $1`, id)
+	_, err = r.pool.Exec(ctx, `DELETE FROM vehicle_types_vswm WHERE id = $1`, id)
 	return err
 }
 
