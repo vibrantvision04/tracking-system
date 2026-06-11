@@ -6,10 +6,7 @@ import "leaflet/dist/leaflet.css";
 import type { Vehicle, LivePosition } from "@/lib/types";
 import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import { centroid } from "@turf/turf";
-import useSWR from "swr";
-
-const fetcher = (url: string) => api<{ data?: any[], success?: boolean }>(url).then(res => res.data || []);
+import * as turf from "@turf/turf";
 
 interface Props { 
   vehicles: Vehicle[];
@@ -23,7 +20,6 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const iconCache = useRef<Record<string, { color: string; emoji: string }>>({});
   const wardsLayerRef = useRef<L.LayerGroup | null>(null);
   const facilitiesLayerRef = useRef<L.LayerGroup | null>(null);
-
   const box = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -36,12 +32,72 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     }
     return "all";
   });
-  const { data: zones = [] } = useSWR("/api/zones", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
-  const { data: regionsList = [] } = useSWR("/api/regions", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
-  const { data: parkingSpots = [] } = useSWR("/api/parking-spots", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
-  const { data: transferStations = [] } = useSWR("/api/transfer-stations", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
-  const { data: fuelStations = [] } = useSWR("/api/fuel-stations", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
-  const { data: workshops = [] } = useSWR("/api/workshops", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
+  const [zones, setZones] = useState<any[]>([]);
+  const [regionsList, setRegionsList] = useState<any[]>([]);
+
+  const [parkingSpots, setParkingSpots] = useState<any[]>([]);
+  const [transferStations, setTransferStations] = useState<any[]>([]);
+  const [fuelStations, setFuelStations] = useState<any[]>([]);
+  const [workshops, setWorkshops] = useState<any[]>([]);
+
+  // SWR: Load static elements instantly from localStorage cache on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cachedZones = localStorage.getItem("live_zones");
+        const cachedRegions = localStorage.getItem("live_regions");
+        const cachedParking = localStorage.getItem("live_parking_spots");
+        const cachedTransfer = localStorage.getItem("live_transfer_stations");
+        const cachedFuel = localStorage.getItem("live_fuel_stations");
+        const cachedWorkshops = localStorage.getItem("live_workshops");
+
+        if (cachedZones) setZones(JSON.parse(cachedZones));
+        if (cachedRegions) setRegionsList(JSON.parse(cachedRegions));
+        if (cachedParking) setParkingSpots(JSON.parse(cachedParking));
+        if (cachedTransfer) setTransferStations(JSON.parse(cachedTransfer));
+        if (cachedFuel) setFuelStations(JSON.parse(cachedFuel));
+        if (cachedWorkshops) setWorkshops(JSON.parse(cachedWorkshops));
+      } catch (e) {
+        console.warn("Failed to load cached LiveMap layers:", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    Promise.all([
+      api<{ data: any[] }>("/api/zones").then((res) => {
+        setZones(res.data || []);
+        localStorage.setItem("live_zones", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load zones:", err)),
+      
+      api<{ success: boolean; data: any[] }>("/api/regions").then((res) => {
+        if (res.success) {
+          setRegionsList(res.data || []);
+          localStorage.setItem("live_regions", JSON.stringify(res.data || []));
+        }
+      }).catch(err => console.error("LiveMap failed to load regions:", err)),
+      
+      api<{ data: any[] }>("/api/parking-spots").then((res) => {
+        setParkingSpots(res.data || []);
+        localStorage.setItem("live_parking_spots", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load parking spots:", err)),
+      
+      api<{ data: any[] }>("/api/transfer-stations").then((res) => {
+        setTransferStations(res.data || []);
+        localStorage.setItem("live_transfer_stations", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load transfer stations:", err)),
+      
+      api<{ data: any[] }>("/api/fuel-stations").then((res) => {
+        setFuelStations(res.data || []);
+        localStorage.setItem("live_fuel_stations", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load fuel stations:", err)),
+      
+      api<{ data: any[] }>("/api/workshops").then((res) => {
+        setWorkshops(res.data || []);
+        localStorage.setItem("live_workshops", JSON.stringify(res.data || []));
+      }).catch(err => console.error("LiveMap failed to load workshops:", err))
+    ]).catch(err => console.error("LiveMap SWR revalidation failed:", err));
+  }, []);
 
   const livePosAccumulator = useRef<Record<string, LivePosition>>({});
 
@@ -51,7 +107,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         setLivePos((prev) => ({ ...prev, ...livePosAccumulator.current }));
         livePosAccumulator.current = {};
       }
-    }, 300); // Flush every 300ms — faster sidebar update without per-packet re-renders
+    }, 300); // Flush every 300ms for smooth UI updates
     return () => clearInterval(interval);
   }, []);
 
@@ -70,10 +126,6 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       clearTimeout(tid2);
     };
   }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-  }, [selectedZone, vehicles]);
 
   // ─── Init Map ───
   useEffect(() => {
@@ -101,10 +153,9 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
 
     googleMapLayer.addTo(m); // Default layer
     
+    // Initialize Layer groups
     wardsLayerRef.current = L.layerGroup().addTo(m);
     facilitiesLayerRef.current = L.layerGroup().addTo(m);
-    
-
     
     // Add zoom control manually in the bottom right corner
     L.control.zoom({ position: 'bottomright' }).addTo(m);
@@ -120,6 +171,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       m.remove(); 
       mapRef.current = null; 
       markers.current = {}; 
+      iconCache.current = {};
       wardsLayerRef.current = null;
       facilitiesLayerRef.current = null;
     };
@@ -144,7 +196,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
             return;
           }
         }
-        const center = centroid(feature);
+        const center = turf.centroid(feature);
         if (!center || !center.geometry || !center.geometry.coordinates) return;
         const coords = center.geometry.coordinates;
         const latLng = [coords[1], coords[0]] as [number, number];
@@ -271,7 +323,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
               regionGeoJSON.bindPopup(`
                 <div style="font-family:Inter,sans-serif;font-size:11px;padding:4px;color:#1e293b;">
                   <b style="font-size:12px;color:#4f46e5;">${w.region_name}</b><br/>
-                  <span style="color:#64748b;font-weight:bold;"> ${z.region_name || z.name}</span><br/>
+                  <span style="color:#64748b;font-weight:bold;">Vidhansabha: ${z.region_name || z.name}</span><br/>
                   <span style="color:#64748b;">Code: ${w.region_code || "—"}</span>
                 </div>
               `);
@@ -316,7 +368,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           if (bounds.isValid()) {
             mapRef.current.fitBounds(bounds, { padding: [30, 30] });
           }
-        } catch {
+        } catch (e) {
           // ignore
         }
       }
@@ -434,17 +486,21 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           if (bounds.isValid()) {
             mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
           }
-        } catch {
+        } catch (e) {
           // ignore
         }
       }
     }
   }, [selectedZone, regionsList, zones]);
 
+  // ─── Marker helper ───
   const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string, isLive: boolean, lastTime?: string | null) => {
     if (!mapRef.current) return;
-    if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) return;
-    
+    if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) {
+      console.warn("Invalid lat/lng for", imei, lat, lng);
+      return;
+    }
+
     const getVehicleEmoji = (type: string) => {
       const t = type.toLowerCase();
       if (t.includes("feeder") || t.includes("tipper")) return "🚛";
@@ -452,7 +508,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       if (t.includes("tractor") || t.includes("ferguson")) return "🚜";
       if (t.includes("ambulance")) return "🚑";
       if (t.includes("tata") || t.includes("mahindra")) return "🚚";
-      return "🚗";
+      return "🚗"; // Fallback
     };
 
     const color = isLive ? (speed > 3 ? "#22c55e" : speed > 0 ? "#f59e0b" : "#ef4444") : "#64748b";
@@ -462,11 +518,9 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     const cached = iconCache.current[imei];
 
     if (existingMarker) {
-      // Fast path: only move the marker if it already exists and icon state unchanged
       existingMarker.setLatLng([lat, lng]);
 
       if (!cached || cached.color !== color || cached.emoji !== emoji) {
-        // Icon state changed — rebuild icon
         const icon = L.divIcon({
           className: "",
           html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
@@ -476,7 +530,6 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         iconCache.current[imei] = { color, emoji };
       }
     } else {
-      // New marker — always create full icon
       const icon = L.divIcon({
         className: "",
         html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
@@ -503,8 +556,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     `);
   }, []);
 
-  // ─── Initial Marker Placement ───
-  // ─── Marker Management (Filtered) ───
+  // ─── Marker Management (Filtered & Live Position Synced) ───
   useEffect(() => {
     if (!mapRef.current) return;
     
@@ -536,7 +588,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           pos.lat,
           pos.lng,
           pos.speed,
-          !!pos.ignition,
+          pos.ignition !== null ? !!pos.ignition : false,
           v.registration_no,
           v.vehicle_type?.name || "Vehicle",
           true,
@@ -586,8 +638,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: false });
       lastFittedZone.current = selectedZone;
     }
-  }, [vehicles, selectedZone]); // Keep livePos here so it fits as soon as the first snapshot/updates arrive
-
+  }, [vehicles, selectedZone]);
 
   const vehiclesRef = useRef(vehicles);
   useEffect(() => { vehiclesRef.current = vehicles; }, [vehicles]);
@@ -600,7 +651,6 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     let ws: WebSocket | null = null;
     let reconnect: ReturnType<typeof setTimeout>;
     let isMounted = true;
-
     
     const connect = () => {
       if (!isMounted) return;
@@ -618,14 +668,37 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
             const msg = JSON.parse(e.data);
             if (msg.type === "gps_update") {
               const imei = msg.imei;
-              livePosAccumulator.current[imei] = msg;
+              
+              // Normalize to match LivePosition schema and include time
+              const livePosMsg: LivePosition = {
+                imei: msg.imei,
+                lat: msg.lat,
+                lng: msg.lng,
+                speed: msg.speed,
+                angle: msg.angle || 0,
+                ignition: msg.ignition !== undefined ? msg.ignition : null,
+                time: msg.timestamp || msg.time || new Date().toISOString()
+              };
+
+              livePosAccumulator.current[imei] = livePosMsg;
               
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);
               const sz = selectedZoneRef.current;
               const isVisible = !sz || sz === "all" || (v && (v as any).zone_id === parseInt(sz));
               
               if (isVisible) {
-                upsertMarker(msg.imei, msg.lat, msg.lng, msg.speed, !!msg.ignition, v?.registration_no || msg.imei, v?.vehicle_type?.name || "", true);
+                // Instantly update marker on map without layout/render thrashing
+                upsertMarker(
+                  msg.imei,
+                  msg.lat,
+                  msg.lng,
+                  msg.speed,
+                  !!msg.ignition,
+                  v?.registration_no || msg.imei,
+                  v?.vehicle_type?.name || "Vehicle",
+                  true,
+                  livePosMsg.time
+                );
               } else {
                 if (markers.current[msg.imei]) {
                   markers.current[msg.imei].remove();
@@ -642,26 +715,9 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
             }
             if (msg.type === "snapshot") {
               if (Array.isArray(msg.data)) {
-                // Apply snapshot in chunks via requestIdleCallback so the map
-                // stays responsive and doesn't freeze on large fleets.
-                const chunkSize = 50;
-                const applyChunk = (offset: number) => {
-                  const chunk = msg.data.slice(offset, offset + chunkSize);
-                  if (chunk.length === 0) return;
-                  setLivePos((prev) => {
-                    const next = { ...prev };
-                    chunk.forEach((p: LivePosition) => { next[p.imei] = p; });
-                    return next;
-                  });
-                  if (offset + chunkSize < msg.data.length) {
-                    if ('requestIdleCallback' in window) {
-                      (window as any).requestIdleCallback(() => applyChunk(offset + chunkSize));
-                    } else {
-                      setTimeout(() => applyChunk(offset + chunkSize), 0);
-                    }
-                  }
-                };
-                applyChunk(0);
+                const map: Record<string, LivePosition> = {};
+                msg.data.forEach((p: LivePosition) => { map[p.imei] = p; });
+                setLivePos((prev) => ({ ...prev, ...map }));
               }
               if (msg.statuses) {
                 setStatuses(prev => ({ ...prev, ...msg.statuses }));
@@ -679,7 +735,6 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         };
 
         ws.onerror = (err) => {
-          // Only log if we haven't unmounted, otherwise it's likely an abort error
           if (isMounted) console.error("WebSocket Error:", err);
         };
       } catch (err) {
@@ -687,7 +742,6 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       }
     };
 
-    // Connect instantly without delay
     connect();
 
     return () => {

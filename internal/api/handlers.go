@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
 type ResolvedDetails struct {
@@ -927,20 +928,27 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 	var activeShiftID int
 	var activeShiftName string
 	var shiftStart, shiftEnd time.Time
-	now := time.Now()
-	shiftRows, err := h.gpsRepo.Pool().Query(ctx, `SELECT id, shift_name, start_time, end_time FROM shifts WHERE is_active = true`)
+	now := utils.CurrentTimeInIndia()
+	
+	log.Info().
+		Str("time_now", now.Format(time.RFC3339)).
+		Str("location", now.Location().String()).
+		Msg("Evaluating active shift for dashboard")
+
+	shiftRows, err := h.gpsRepo.Pool().Query(ctx, `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE is_active = true`)
 	if err == nil {
 		defer shiftRows.Close()
 		for shiftRows.Next() {
 			var id int
 			var name string
-			var start, end time.Time
-			if err := shiftRows.Scan(&id, &name, &start, &end); err != nil {
+			var startStr, endStr string
+			if err := shiftRows.Scan(&id, &name, &startStr, &endStr); err != nil {
 				continue
 			}
 
-			sh, sm, ss := start.Hour(), start.Minute(), start.Second()
-			eh, em, es := end.Hour(), end.Minute(), end.Second()
+			var sh, sm, ss, eh, em, es int
+			fmt.Sscanf(startStr, "%d:%d:%d", &sh, &sm, &ss)
+			fmt.Sscanf(endStr, "%d:%d:%d", &eh, &em, &es)
 
 			curMin := now.Hour()*60 + now.Minute()
 			stMin := sh*60 + sm
@@ -972,6 +980,14 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			log.Info().
+				Str("shift_name", name).
+				Int("curMin", curMin).
+				Int("stMin", stMin).
+				Int("etMin", etMin).
+				Bool("is_within", isWithinShift).
+				Msg("Evaluated shift times")
+
 			if isWithinShift {
 				activeShiftID = id
 				activeShiftName = name
@@ -982,7 +998,11 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	todayStr := time.Now().Format("2006-01-02")
+	log.Info().
+		Str("detected_active_shift", activeShiftName).
+		Msg("Detected active shift completed")
+
+	todayStr := utils.CurrentTimeInIndia().Format("2006-01-02")
 	
 	// Fetch coverage data for the specific active shift date or today
 	coverageDateStr := todayStr
@@ -996,7 +1016,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 	if !shiftStart.IsZero() && !shiftEnd.IsZero() {
 		alertStart, alertEnd = shiftStart, shiftEnd
 	} else {
-		now := time.Now()
+		now := utils.CurrentTimeInIndia()
 		alertStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 		alertEnd = alertStart.Add(24 * time.Hour)
 	}

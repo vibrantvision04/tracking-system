@@ -72,7 +72,7 @@ func (d *Dispatcher) checkAlerts(ctx context.Context, data decoder.AVLData) {
 
 	// A. OVERSPEED ALERT DETECTION
 	activeOverspeedKey := "alert:overspeed:active:" + data.IMEI
-	if data.Speed > overspeedLimit {
+	if data.Speed > overspeedLimit && d.routeEngine.IsOnAssignedRoute(v.ID, data) {
 		exists, _ := d.rdb.Exists(ctx, activeOverspeedKey).Result()
 		if exists == 0 {
 			// Trigger overspeed start state in Redis and log it to PostgreSQL
@@ -81,7 +81,7 @@ func (d *Dispatcher) checkAlerts(ctx context.Context, data decoder.AVLData) {
 			d.logAlert(ctx, "Over Speeding", data, v.ID, v.RegistrationNo, wardNo, driverName, detail)
 		}
 	} else {
-		// Speed went back under the limit, clear active state in Redis
+		// Speed went back under the limit (or vehicle left its assigned route), clear active state in Redis
 		d.rdb.Del(ctx, activeOverspeedKey)
 	}
 

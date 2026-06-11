@@ -45,7 +45,7 @@ func NewRouteEngine(routeRepo *repository.RouteRepository, vehicleRepo *reposito
 }
 
 func (e *RouteEngine) getShiftIDForTime(t time.Time) int {
-	localTimeStr := t.Local().Format("15:04:05")
+	localTimeStr := t.In(utils.IndianLocation).Format("15:04:05")
 	e.mu.RLock()
 	shiftsCopy := make([]repository.Shift, len(e.shifts))
 	copy(shiftsCopy, e.shifts)
@@ -328,4 +328,74 @@ func (e *RouteEngine) GetCachedVehicle(imei string) *repository.Vehicle {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.imeiVehicles[imei]
+}
+
+func (e *RouteEngine) IsOnAssignedRoute(vehicleID int, data decoder.AVLData) bool {
+	// Find current shift based on packet time
+	shiftID := e.getShiftIDForTime(data.Time)
+	if shiftID == 0 {
+		shiftID = 1 // default fallback
+	}
+	compositeKey := vehicleID*1000 + shiftID
+
+	// 1. Look up assigned route in cache
+	e.mu.RLock()
+	routeID, hasAssignedRoute := e.assignments[compositeKey]
+	e.mu.RUnlock()
+
+	if !hasAssignedRoute {
+		// Try fetching from DB once if missing
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		today := time.Now().Truncate(24 * time.Hour)
+		assignment, err := e.routeRepo.GetAssignedRoute(ctx, vehicleID, today, &shiftID, nil)
+		
+		e.mu.Lock()
+		if err != nil || assignment == nil {
+			e.assignments[compositeKey] = 0
+			e.mu.Unlock()
+			return false
+		}
+		routeID = assignment.RouteID
+		e.assignments[compositeKey] = routeID
+
+		// Load checkpoints
+		checkpoints, _ := e.routeRepo.GetCheckpointsByRoute(ctx, routeID)
+		e.routeCheckpoints[routeID] = checkpoints
+		e.mu.Unlock()
+	}
+
+	if routeID == 0 {
+		return false // No active route assigned today
+	}
+
+	e.mu.RLock()
+	routeCheckpoints := e.routeCheckpoints[routeID]
+	lastPos, hasLastPos := e.lastPositions[vehicleID]
+	e.mu.RUnlock()
+
+	if len(routeCheckpoints) == 0 {
+		// If route is assigned but has no checkpoints, treat it as on-route to prevent false suppression
+		return true
+	}
+
+	// Calculate distance to checkpoints or line segments (using 100 meters tolerance)
+	for _, cp := range routeCheckpoints {
+		distKm := utils.Haversine(data.Lat, data.Lng, cp.Latitude, cp.Longitude)
+		if distKm*1000.0 <= 100.0 {
+			return true
+		}
+	}
+
+	if hasLastPos {
+		for _, cp := range routeCheckpoints {
+			distMeters := distanceToSegment(cp.Latitude, cp.Longitude, lastPos.Lat, lastPos.Lng, data.Lat, data.Lng)
+			if distMeters <= 100.0 {
+				return true
+			}
+		}
+	}
+
+	return false
 }
