@@ -46,10 +46,13 @@ export default function ReportsPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<string>("");
   const limit = 10;
 
-  const load = (d: string, p: number, vId: string) => {
+  const allowHistoricalRecalculation = true; // Set to false to disable recalculation in UI
+
+  const load = (d: string, p: number, vId: string, force: boolean = false) => {
     setLoading(true);
     const vParam = vId ? `&vehicle_id=${vId}` : "";
-    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}${vParam}&force=true`)
+    const forceParam = force ? "&force=true" : "";
+    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}${vParam}${forceParam}`)
       .then((r) => {
         setReports(r.data || []);
         setTotalPages(r.total_pages || 1);
@@ -60,7 +63,7 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    load(date, page, selectedVehicle);
+    load(date, page, selectedVehicle, false);
   }, [date, page, selectedVehicle]);
 
   useEffect(() => {
@@ -157,12 +160,24 @@ export default function ReportsPage() {
                 <input type="date" value={date} readOnly
                   className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500 bg-slate-100 cursor-not-allowed" />
               </div>
-              <div>
+              <div className="flex gap-3">
                 <button 
-                  onClick={() => load(date, 1, selectedVehicle)}
-                  className="px-6 py-2.5 bg-green-600 text-theme-text text-sm font-medium rounded-lg hover:bg-green-700 transition shadow-sm shadow-green-600/20"
+                  onClick={() => load(date, 1, selectedVehicle, false)}
+                  className="px-6 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition shadow-sm shadow-green-600/20"
                 >
                   Load
+                </button>
+                <button 
+                  disabled={!allowHistoricalRecalculation}
+                  onClick={() => load(date, 1, selectedVehicle, true)}
+                  className={`px-6 py-2.5 text-sm font-medium rounded-lg transition shadow-sm ${
+                    allowHistoricalRecalculation
+                      ? "bg-rose-600 text-white hover:bg-rose-700 shadow-rose-600/20 cursor-pointer"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
+                  }`}
+                  title={allowHistoricalRecalculation ? "Force recalculate historical report data for this date" : "Historical recalculation is disabled"}
+                >
+                  Recalculate
                 </button>
               </div>
             </div>

@@ -39,7 +39,9 @@ export default function D2DRouteCoverageReport() {
     api('/api/routes').then((d: any) => d.success && setRoutes(d.data)).catch(console.error);
   }, []);
 
-  const handleLoad = async () => {
+  const allowHistoricalRecalculation = true; // Set to false to disable recalculation in UI
+
+  const handleLoad = async (forceRecalc: boolean = false) => {
     setLoading(true);
     try {
       const query = new URLSearchParams({
@@ -50,6 +52,7 @@ export default function D2DRouteCoverageReport() {
         ...(shiftId && { shift_id: shiftId }),
         ...(routeTypeId && { route_type_id: routeTypeId }),
         ...(routeId && { route_id: routeId }),
+        ...(forceRecalc && { force_recalc: "true" }),
       });
       const res: any = await api(`/api/reports/d2d-coverage?${query.toString()}`);
       if (res.success && res.data) {
@@ -172,13 +175,25 @@ export default function D2DRouteCoverageReport() {
 
         </div>
 
-        <div className="mt-6 pt-4 border-t border-slate-100">
+        <div className="mt-6 pt-4 border-t border-slate-100 flex gap-3">
           <button 
-            onClick={handleLoad}
+            onClick={() => handleLoad(false)}
             disabled={loading}
             className="bg-[#449e48] hover:bg-theme-accent text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
           >
             {loading ? "Loading..." : "Load"}
+          </button>
+          <button 
+            disabled={loading || !allowHistoricalRecalculation}
+            onClick={() => handleLoad(true)}
+            className={`px-6 py-2 rounded text-sm font-medium transition-colors shadow-sm ${
+              allowHistoricalRecalculation
+                ? "bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+                : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
+            }`}
+            title={allowHistoricalRecalculation ? "Force recalculate coverage report for the selected dates" : "Historical recalculation is disabled"}
+          >
+            {loading ? "Loading..." : "Recalculate"}
           </button>
         </div>
       </div>

@@ -176,7 +176,7 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 	}
 
 	// Trigger sequential and speed-limit validation calculation retroactively for this date
-	recalculateCoverage(r.Context(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDate.Format("2006-01-02"))
+	recalculateCoverage(r.Context(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDate.Format("2006-01-02"), h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
 
 	visitedIDs, err := h.routeRepo.GetVisitedCheckpoints(r.Context(), vehicleID, routeID, targetDate)
 	if err != nil {

@@ -126,7 +126,7 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 			}
 
 			// --- Retroactively calculate missing coverage if not 100% (or if forced) ---
-			recalculateCoverage(ctx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date)
+			recalculateCoverage(ctx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
 			h.routeEngine.RefreshCache()
 			// -------------------------------------------------------------------
 
@@ -273,7 +273,7 @@ func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {
 	return utils.Haversine(pLat, pLng, cLat, cLng) * 1000.0
 }
 
-func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository, routeRepo *repository.RouteRepository, vehicleID int, routeID int, dateStr string) {
+func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository, routeRepo *repository.RouteRepository, vehicleID int, routeID int, dateStr string, requireSequential bool, maxSpeed float64) {
 	// Parse date
 	dayStart, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 	if err != nil {
@@ -314,16 +314,33 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 	expectedIdx := 0 // index of the checkpoint we are currently looking for
 
 	// First check the very first point
-	if len(gpsData) > 0 && expectedIdx < len(checkpoints) {
-		cp := checkpoints[expectedIdx]
-		dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
-		if dist <= 10.0 {
-			if gpsData[0].Speed <= 3.0 {
-				physicalHits[cp.ID] = gpsData[0].Time
-				delete(missReasons, cp.ID)
-				expectedIdx++
-			} else {
-				missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(gpsData[0].Speed, 'f', 1, 64) + " km/h)"
+	if len(gpsData) > 0 {
+		if requireSequential {
+			if expectedIdx < len(checkpoints) {
+				cp := checkpoints[expectedIdx]
+				dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
+				if dist <= 10.0 {
+					if gpsData[0].Speed <= maxSpeed {
+						physicalHits[cp.ID] = gpsData[0].Time
+						delete(missReasons, cp.ID)
+						expectedIdx++
+					} else {
+						missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(gpsData[0].Speed, 'f', 1, 64) + " km/h)"
+					}
+				}
+			}
+		} else {
+			// Non-sequential check for the first point
+			for _, cp := range checkpoints {
+				dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
+				if dist <= 10.0 {
+					if gpsData[0].Speed <= maxSpeed {
+						physicalHits[cp.ID] = gpsData[0].Time
+						delete(missReasons, cp.ID)
+					} else {
+						missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(gpsData[0].Speed, 'f', 1, 64) + " km/h)"
+					}
+				}
 			}
 		}
 	}
@@ -352,21 +369,31 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 			}
 
 			if distMeters <= 10.0 {
-				if cpIdx == expectedIdx {
-					// Expected checkpoint! Check speed limit
-					if curr.Speed <= 3.0 {
+				if requireSequential {
+					if cpIdx == expectedIdx {
+						// Expected checkpoint! Check speed limit
+						if curr.Speed <= maxSpeed {
+							physicalHits[cp.ID] = curr.Time
+							delete(missReasons, cp.ID)
+							expectedIdx++
+						} else {
+							missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
+						}
+					} else if cpIdx > expectedIdx {
+						// Out of sequence!
+						if curr.Speed <= maxSpeed {
+							missReasons[cp.ID] = "Out of Sequence (Expected Checkpoint #" + strconv.Itoa(expectedIdx+1) + ")"
+						} else {
+							missReasons[cp.ID] = "Out of Sequence & Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
+						}
+					}
+				} else {
+					// Non-sequential check: any checkpoint within range
+					if curr.Speed <= maxSpeed {
 						physicalHits[cp.ID] = curr.Time
 						delete(missReasons, cp.ID)
-						expectedIdx++
 					} else {
 						missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
-					}
-				} else if cpIdx > expectedIdx {
-					// Out of sequence!
-					if curr.Speed <= 3.0 {
-						missReasons[cp.ID] = "Out of Sequence (Expected Checkpoint #" + strconv.Itoa(expectedIdx+1) + ")"
-					} else {
-						missReasons[cp.ID] = "Out of Sequence & Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
 					}
 				}
 			}

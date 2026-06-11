@@ -17,6 +17,9 @@ type RouteEngine struct {
 	routeRepo   *repository.RouteRepository
 	vehicleRepo *repository.VehicleRepository
 
+	RequireSequentialCheckpoints bool
+	MaxCheckpointSpeedKmh        float64
+
 	// In-memory cache for fast geofence lookups to avoid DB hit per GPS ping
 	mu               sync.RWMutex
 	shifts           []repository.Shift                   // cache of all shifts
@@ -30,17 +33,19 @@ type RouteEngine struct {
 	lastRefresh time.Time
 }
 
-func NewRouteEngine(routeRepo *repository.RouteRepository, vehicleRepo *repository.VehicleRepository) *RouteEngine {
+func NewRouteEngine(routeRepo *repository.RouteRepository, vehicleRepo *repository.VehicleRepository, requireSequentialCheckpoints bool, maxCheckpointSpeedKmh float64) *RouteEngine {
 	return &RouteEngine{
-		routeRepo:        routeRepo,
-		vehicleRepo:      vehicleRepo,
-		assignments:      make(map[int]int),
-		routeCheckpoints: make(map[int][]repository.RouteCheckpoint),
-		visited:          make(map[int]map[int]bool),
-		onRoute:          make(map[int]bool),
-		lastPositions:    make(map[int]decoder.AVLData),
-		imeiVehicles:     make(map[string]*repository.Vehicle),
-		lastRefresh:      time.Now(),
+		routeRepo:                    routeRepo,
+		vehicleRepo:                  vehicleRepo,
+		RequireSequentialCheckpoints: requireSequentialCheckpoints,
+		MaxCheckpointSpeedKmh:        maxCheckpointSpeedKmh,
+		assignments:                  make(map[int]int),
+		routeCheckpoints:             make(map[int][]repository.RouteCheckpoint),
+		visited:                      make(map[int]map[int]bool),
+		onRoute:                      make(map[int]bool),
+		lastPositions:                make(map[int]decoder.AVLData),
+		imeiVehicles:                 make(map[string]*repository.Vehicle),
+		lastRefresh:                  time.Now(),
 	}
 }
 
@@ -206,18 +211,18 @@ func (e *RouteEngine) Process(data decoder.AVLData) {
 		if distMeters <= tolerance {
 			anyHitNow = true
 			if !visitedMap[cp.ID] {
-				// Speed validation: must be <= 3 km/h
-				if data.Speed > 3.0 {
+				// Speed validation: must be <= MaxCheckpointSpeedKmh
+				if data.Speed > e.MaxCheckpointSpeedKmh {
 					log.Warn().
 						Int("vehicle_id", vehicleID).
 						Int("checkpoint_id", cp.ID).
 						Float64("speed", data.Speed).
-						Msg("Checkpoint skipped: Speed Limit Exceeded ( > 3 km/h)")
+						Msgf("Checkpoint skipped: Speed Limit Exceeded ( > %f km/h)", e.MaxCheckpointSpeedKmh)
 					continue
 				}
 
-				// Sequential validation: must be the next expected checkpoint
-				if nextExpectedCP != nil && cp.ID != nextExpectedCP.ID {
+				// Sequential validation: must be the next expected checkpoint if enabled
+				if e.RequireSequentialCheckpoints && nextExpectedCP != nil && cp.ID != nextExpectedCP.ID {
 					log.Warn().
 						Int("vehicle_id", vehicleID).
 						Int("checkpoint_id", cp.ID).

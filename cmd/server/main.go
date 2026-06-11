@@ -62,7 +62,7 @@ func main() {
 	// 6. Initialize Services
 	rService := service.NewReportService(rRepo, gpsRepo, vRepo)
 	tService := service.NewTripService(tRepo, vRepo, gpsRepo, rdb)
-	routeEngine := service.NewRouteEngine(routeRepo, vRepo)
+	routeEngine := service.NewRouteEngine(routeRepo, vRepo, cfg.RequireSequentialCheckpoints, cfg.MaxCheckpointSpeedKmh)
 	routeEngine.RefreshCache()
 
 	// 7. Initialize Ingestion Pipeline
@@ -93,7 +93,7 @@ func main() {
 
 
 	// 12. Start Servers
-	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo, routeEngine, openDepotRepo, cfg.JWTSecret)
+	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo, routeEngine, openDepotRepo, cfg.JWTSecret, cfg.AllowHistoricalRecalculation)
 	router := api.SetupRouter(handler, hub, cfg)
 
 	// API Server (Handles both HTTP and WebSockets)
