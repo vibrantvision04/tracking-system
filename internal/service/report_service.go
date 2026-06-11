@@ -65,159 +65,15 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	}
 
 	// ─────────────────────────────────────────────────────────────────
-	// GPS-based calculations (distance, speed) — unchanged
+	// Phase 1: Operational Bounds & Active Time
 	// ─────────────────────────────────────────────────────────────────
-	var totalDistance float64
-	var maxSpeed float64
-
-	// Pre-identify stoppage segments: ignition OFF + speed 0 for >= 60 seconds.
-	// Ignition ON + speed 0 is IDLE, not a stoppage.
-	// Stationary GPS drift is tolerated up to 30 meters.
-	inStoppage := make([]bool, len(validData))
-	stoppagesCount := 0
-
-	const minStoppageDuration = 60.0 // 60 seconds
-	const maxStoppageRadiusKm = 0.03 // 30 meters
-
-	stoppageStartIndex := -1
-	for i := 0; i < len(validData); i++ {
-		isStoppagePacket := validData[i].Speed == 0 && !validData[i].Ignition
-		if isStoppagePacket {
-			if stoppageStartIndex == -1 {
-				stoppageStartIndex = i
-			} else {
-				distFromStart := utils.Haversine(
-					validData[stoppageStartIndex].Lat, validData[stoppageStartIndex].Lng,
-					validData[i].Lat, validData[i].Lng,
-				)
-				if distFromStart > maxStoppageRadiusKm {
-					dur := validData[i-1].Time.Sub(validData[stoppageStartIndex].Time).Seconds()
-					if dur >= minStoppageDuration {
-						stoppagesCount++
-						for k := stoppageStartIndex; k < i; k++ {
-							inStoppage[k] = true
-						}
-					}
-					stoppageStartIndex = i
-				}
-			}
-		} else {
-			if stoppageStartIndex != -1 {
-				dur := validData[i-1].Time.Sub(validData[stoppageStartIndex].Time).Seconds()
-				if dur >= minStoppageDuration {
-					stoppagesCount++
-					for k := stoppageStartIndex; k < i; k++ {
-						inStoppage[k] = true
-					}
-				}
-				stoppageStartIndex = -1
-			}
-		}
-	}
-	// Check the trailing stoppage segment if it extended to end-of-day
-	if stoppageStartIndex != -1 {
-		dur := validData[len(validData)-1].Time.Sub(validData[stoppageStartIndex].Time).Seconds()
-		if dur >= minStoppageDuration {
-			stoppagesCount++
-			for k := stoppageStartIndex; k < len(validData); k++ {
-				inStoppage[k] = true
-			}
-		}
-	}
-
-	// Distance and max speed loop
-	var lastPoint *decoder.AVLData
-	var stoppageSec int
-	for i, p := range validData {
-		if i > 0 {
-			if utils.IsValidGPSTransition(*lastPoint, p) {
-				dist := utils.Haversine(lastPoint.Lat, lastPoint.Lng, p.Lat, p.Lng)
-				totalDistance += dist
-			}
-			duration := p.Time.Sub(lastPoint.Time).Seconds()
-			if duration > 0 && duration < 3600 {
-				if inStoppage[i] && inStoppage[i-1] {
-					stoppageSec += int(duration)
-				}
-			}
-		}
-		if p.Speed > maxSpeed {
-			maxSpeed = p.Speed
-		}
-		lastPoint = &validData[i]
-	}
-
-	// ─────────────────────────────────────────────────────────────────
-	// Ignition state-machine — drives all operational time fields
-	// ─────────────────────────────────────────────────────────────────
-	// Use the physical ignition flag from the Teltonika device (IO 239/1).
-	// Do NOT fall back to speed > 2 — that conflates movement with ignition
-	// and creates fragmented sessions and incorrect durations.
+	// Legacy fallback: Many devices have broken physical ignition wires.
+	// We MUST fall back to speed > 2 km/h to avoid missing Active Hours.
 	ignitionOn := func(p decoder.AVLData) bool {
-		return p.Ignition
-	}
-
-	isToday := start.Format("2006-01-02") == utils.CurrentTimeInIndia().Format("2006-01-02")
-
-	// Calculate Actual Ignition ON Duration (physical ignition flag is true)
-	var (
-		actualIgnitionSec  int
-		inActualSession    bool
-		actualSessionStart time.Time
-	)
-
-	for i, p := range validData {
-		currActualOn := p.Ignition
-		if i == 0 {
-			if currActualOn {
-				inActualSession = true
-				actualSessionStart = p.Time
-			}
-			continue
-		}
-
-		prevActualOn := validData[i-1].Ignition
-
-		// Rising edge: physical ignition OFF->ON
-		if !prevActualOn && currActualOn {
-			inActualSession = true
-			actualSessionStart = p.Time
-		}
-
-		// Falling edge: physical ignition ON->OFF
-		if prevActualOn && !currActualOn {
-			if inActualSession {
-				dur := int(p.Time.Sub(actualSessionStart).Seconds())
-				if dur > 0 {
-					actualIgnitionSec += dur
-				}
-				inActualSession = false
-			}
-		}
-	}
-
-	if inActualSession && lastPoint != nil {
-		if isToday {
-			// Live running session: add duration up to last point
-			dur := int(lastPoint.Time.Sub(actualSessionStart).Seconds())
-			if dur > 0 {
-				actualIgnitionSec += dur
-			}
-		} else {
-			// Past day: clip at end of day
-			dur := int(end.Sub(actualSessionStart).Seconds())
-			if dur > 0 {
-				actualIgnitionSec += dur
-			}
-		}
+		return p.Ignition || p.Speed > 2
 	}
 
 	var (
-		// Ignition session tracking
-		inSession    bool
-		sessionStart time.Time
-
-		// Aggregated results
 		startTime *time.Time
 		endTime   *time.Time
 		startLat  float64
@@ -225,122 +81,240 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		endLat    float64
 		endLng    float64
 
-		ignitionOnCount int // count of rising edges (OFF→ON)
-		totalActiveSec  int // sum of completed ON→OFF session durations
-		totalIdleSec    int // ignition ON + speed=0 within sessions
+		totalActiveSec    int
+		actualIgnitionSec int
+		ignitionOnCount   int
+
+		inSession       bool
+		inActualSession bool
+		sessionStart    time.Time
+		actualSessionStart time.Time
 	)
+
+	isToday := start.Format("2006-01-02") == utils.CurrentTimeInIndia().Format("2006-01-02")
 
 	for i, p := range validData {
 		currOn := ignitionOn(p)
+		currActualOn := p.Ignition
 
-		// Calculate idle: within an active ignition session, if speed is 0 AND
-		// ignition is still ON, that is idle (engine running, not moving).
-		// If ignition is OFF + speed 0, that is a stoppage (handled separately).
-		if inSession && i > 0 {
-			dt := p.Time.Sub(validData[i-1].Time).Seconds()
-			if dt > 0 && dt < 3600 && p.Speed == 0 && p.Ignition {
-				totalIdleSec += int(dt)
+		// --- Actual Ignition Tracking ---
+		if i == 0 {
+			if currActualOn {
+				inActualSession = true
+				actualSessionStart = p.Time
+			}
+		} else {
+			prevActualOn := validData[i-1].Ignition
+			if !prevActualOn && currActualOn {
+				inActualSession = true
+				actualSessionStart = p.Time
+			}
+			if prevActualOn && !currActualOn {
+				if inActualSession {
+					dur := int(p.Time.Sub(actualSessionStart).Seconds())
+					if dur > 0 {
+						actualIgnitionSec += dur
+					}
+					inActualSession = false
+				}
 			}
 		}
 
+		// --- Total Active Tracking ---
 		if i == 0 {
-			// Initialise state from the first packet.
-			// Use the actual packet timestamp as session start — NOT midnight.
-			// Anchoring to 00:00:00 would add hours of phantom active time
-			// if the first packet arrives at e.g. 05:30 AM.
 			if currOn {
 				inSession = true
 				sessionStart = p.Time
-
 				t := p.Time
 				startTime = &t
 				startLat = p.Lat
 				startLng = p.Lng
 				ignitionOnCount++
 			}
-			continue
-		}
-
-		prevOn := ignitionOn(validData[i-1])
-
-		// Rising edge: ignition turned ON (OFF→ON)
-		if !prevOn && currOn {
-			inSession = true
-			sessionStart = p.Time
-
-			if startTime == nil {
-				t := p.Time
-				startTime = &t
-				startLat = p.Lat
-				startLng = p.Lng
-			}
-			ignitionOnCount++
-		}
-
-		// Falling edge: ignition turned OFF (ON→OFF)
-		if prevOn && !currOn {
-			if inSession {
-				sessionDur := int(p.Time.Sub(sessionStart).Seconds())
-				if sessionDur > 0 {
-					totalActiveSec += sessionDur
-				}
-				inSession = false
-			}
-			t := p.Time
-			endTime = &t
-			endLat = p.Lat
-			endLng = p.Lng
-		}
-	}
-
-	// ─────────────────────────────────────────────────────────────────
-	// End-of-day or Live running session handling
-	// ─────────────────────────────────────────────────────────────────
-	if inSession && lastPoint != nil {
-		if isToday {
-			// For today, if session is still open, add the duration of the current running session up to the last packet.
-			// Do NOT update EndTime or EndPoint, as no OFF event has occurred.
-			clipDur := int(lastPoint.Time.Sub(sessionStart).Seconds())
-			if clipDur > 0 {
-				totalActiveSec += clipDur
-			}
 		} else {
-			// For past days, if a session was open at the end of the day, forcibly close it at the day boundary.
-			clipDur := int(end.Sub(sessionStart).Seconds())
-			if clipDur > 0 {
-				totalActiveSec += clipDur
+			prevOn := ignitionOn(validData[i-1])
+			if !prevOn && currOn {
+				inSession = true
+				sessionStart = p.Time
+				if startTime == nil {
+					t := p.Time
+					startTime = &t
+					startLat = p.Lat
+					startLng = p.Lng
+				}
+				ignitionOnCount++
 			}
-			// EndTime = day boundary (23:59:59.999…)
-			endClip := end.Add(-time.Millisecond)
-			endTime = &endClip
-			// EndPoint = last known location
-			endLat = lastPoint.Lat
-			endLng = lastPoint.Lng
+			if prevOn && !currOn {
+				if inSession {
+					dur := int(p.Time.Sub(sessionStart).Seconds())
+					if dur > 0 {
+						totalActiveSec += dur
+					}
+					inSession = false
+				}
+				t := p.Time
+				endTime = &t
+				endLat = p.Lat
+				endLng = p.Lng
+			}
+		}
+	}
+
+	// Close open sessions at the end of the day or live point
+	lastP := validData[len(validData)-1]
+	if inActualSession {
+		clipEnd := lastP.Time
+		if !isToday { clipEnd = end }
+		dur := int(clipEnd.Sub(actualSessionStart).Seconds())
+		if dur > 0 { actualIgnitionSec += dur }
+	}
+	if inSession {
+		clipEnd := lastP.Time
+		if !isToday {
+			clipEnd = end.Add(-time.Millisecond)
+			t := clipEnd
+			endTime = &t
+			endLat = lastP.Lat
+			endLng = lastP.Lng
+		}
+		dur := int(clipEnd.Sub(sessionStart).Seconds())
+		if dur > 0 { totalActiveSec += dur }
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	// Phase 2: Slice to Operational Window
+	// ─────────────────────────────────────────────────────────────────
+	var opData []decoder.AVLData
+	if startTime != nil {
+		// Use last point if endTime is still nil (e.g., ran all day and still running)
+		activeEnd := lastP.Time
+		if endTime != nil {
+			activeEnd = *endTime
+		}
+		for _, p := range validData {
+			if !p.Time.Before(*startTime) && !p.Time.After(activeEnd) {
+				opData = append(opData, p)
+			}
 		}
 	}
 
 	// ─────────────────────────────────────────────────────────────────
-	// Build start/end point JSON strings
+	// Phase 3: Metrics strictly within the Operational Window
 	// ─────────────────────────────────────────────────────────────────
-	startPointStr := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", startLng, startLat)
-	endPointStr := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", endLng, endLat)
+	var (
+		totalDistance float64
+		maxSpeed      float64
+		stoppageSec   int
+		totalIdleSec  int
+		stoppagesCount int
+	)
 
-	// Fallback: if no ignition events detected, use first/last GPS points
-	if startTime == nil {
+	if len(opData) > 0 {
+		// Pre-calculate stoppages (speed == 0 for >= 60s)
+		inStoppage := make([]bool, len(opData))
+		stoppageStartIndex := -1
+		const minStoppageDuration = 60.0
+		const maxStoppageRadiusKm = 0.03
+
+		for i := 0; i < len(opData); i++ {
+			if opData[i].Speed == 0 {
+				if stoppageStartIndex == -1 {
+					stoppageStartIndex = i
+				} else {
+					dist := utils.Haversine(
+						opData[stoppageStartIndex].Lat, opData[stoppageStartIndex].Lng,
+						opData[i].Lat, opData[i].Lng,
+					)
+					if dist > maxStoppageRadiusKm {
+						dur := opData[i-1].Time.Sub(opData[stoppageStartIndex].Time).Seconds()
+						if dur >= minStoppageDuration {
+							stoppagesCount++
+							for k := stoppageStartIndex; k < i; k++ {
+								inStoppage[k] = true
+							}
+						}
+						stoppageStartIndex = i
+					}
+				}
+			} else {
+				if stoppageStartIndex != -1 {
+					dur := opData[i-1].Time.Sub(opData[stoppageStartIndex].Time).Seconds()
+					if dur >= minStoppageDuration {
+						stoppagesCount++
+						for k := stoppageStartIndex; k < i; k++ {
+							inStoppage[k] = true
+						}
+					}
+					stoppageStartIndex = -1
+				}
+			}
+		}
+		if stoppageStartIndex != -1 {
+			dur := opData[len(opData)-1].Time.Sub(opData[stoppageStartIndex].Time).Seconds()
+			if dur >= minStoppageDuration {
+				stoppagesCount++
+				for k := stoppageStartIndex; k < len(opData); k++ {
+					inStoppage[k] = true
+				}
+			}
+		}
+
+		var lastOp *decoder.AVLData
+		for i, p := range opData {
+			if p.Speed > maxSpeed {
+				maxSpeed = p.Speed
+			}
+			
+			if i > 0 {
+				if utils.IsValidGPSTransition(*lastOp, p) {
+					totalDistance += utils.Haversine(lastOp.Lat, lastOp.Lng, p.Lat, p.Lng)
+				}
+				
+				dt := p.Time.Sub(lastOp.Time).Seconds()
+				if dt > 0 && dt < 3600 {
+					// Stoppage Time: Any time inside a detected stoppage block
+					if inStoppage[i] && inStoppage[i-1] {
+						stoppageSec += int(dt)
+					}
+					// Idle Time: Engine ON AND Speed == 0
+					if p.Speed == 0 && ignitionOn(p) {
+						totalIdleSec += int(dt)
+					}
+				}
+			}
+			lastOp = &opData[i]
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	// Phase 4: Finalize Metrics
+	// ─────────────────────────────────────────────────────────────────
+	startPointStr := "{}"
+	endPointStr := "{}"
+	if startTime != nil {
+		startPointStr = fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", startLng, startLat)
+		if endTime != nil {
+			endPointStr = fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", endLng, endLat)
+		} else {
+			endPointStr = fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", validData[len(validData)-1].Lng, validData[len(validData)-1].Lat)
+		}
+	} else {
+		// Fallback if NO activity at all
 		t := validData[0].Time
 		startTime = &t
 		startPointStr = fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", validData[0].Lng, validData[0].Lat)
 	}
-	// endTime may still be nil only if there were zero ignition events at all
-	// (handled by the fallback below if needed — but distance/stoppage still store).
 
-	// ─────────────────────────────────────────────────────────────────
-	// Average speed = total distance / active hours
-	// ─────────────────────────────────────────────────────────────────
+	// Movement Duration is Active Time minus Idle Time
+	movementSec := totalActiveSec - totalIdleSec
+	if movementSec < 0 {
+		movementSec = 0
+	}
+
 	avgSpeed := 0.0
-	if totalActiveSec > 0 {
-		activeHours := float64(totalActiveSec) / 3600.0
-		avgSpeed = totalDistance / activeHours
+	if movementSec > 0 {
+		movementHours := float64(movementSec) / 3600.0
+		avgSpeed = totalDistance / movementHours
 	}
 
 	report := &repository.MovementReport{
