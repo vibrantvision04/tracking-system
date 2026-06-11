@@ -36,6 +36,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
 		"speed":     data.Speed,
 		"ignition":  data.Ignition,
 		"timestamp": data.Time,
+		"heading":   data.Heading,
 	}
 	jsonData, _ := json.Marshal(payload)
 	err := d.rdb.Publish(ctx, "gps:live:"+data.IMEI, jsonData).Err()

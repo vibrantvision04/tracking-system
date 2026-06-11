@@ -8,6 +8,51 @@ import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import * as turf from "@turf/turf";
 
+// ─── Smooth marker slide animation ───
+function slideMarkerTo(
+  marker: L.Marker,
+  target: [number, number],
+  durationMs: number,
+  animStore: Record<string, number>,
+  key: string
+) {
+  if (animStore[key]) {
+    cancelAnimationFrame(animStore[key]);
+    delete animStore[key];
+  }
+  const start = marker.getLatLng();
+  const end = L.latLng(target);
+  const dist = start.distanceTo(end);
+  if (dist <= 1 || dist >= 5000 || durationMs <= 0) {
+    marker.setLatLng(end);
+    return;
+  }
+  const t0 = performance.now();
+  function step(now: number) {
+    const t = Math.min((now - t0) / durationMs, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    marker.setLatLng([
+      start.lat + (end.lat - start.lat) * ease,
+      start.lng + (end.lng - start.lng) * ease,
+    ]);
+    if (t < 1) animStore[key] = requestAnimationFrame(step);
+    else delete animStore[key];
+  }
+  animStore[key] = requestAnimationFrame(step);
+}
+
+// Inject live-pulse CSS once
+if (typeof document !== "undefined" && !document.getElementById("lm-pulse")) {
+  const s = document.createElement("style");
+  s.id = "lm-pulse";
+  s.textContent = `
+    @keyframes lm-pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.45)}70%{box-shadow:0 0 0 10px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+    .lm-moving{animation:lm-pulse 2s ease-out infinite}
+    .lm-ws-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;flex-shrink:0}
+  `;
+  document.head.appendChild(s);
+}
+
 interface Props { 
   vehicles: Vehicle[];
   showMenu?: boolean;
@@ -18,6 +63,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const markers = useRef<Record<string, L.Marker>>({});
   // Cache last rendered icon key (color+emoji) per IMEI — skip icon rebuild when unchanged
   const iconCache = useRef<Record<string, { color: string; emoji: string }>>({});
+  const animFrames = useRef<Record<string, number>>({});
   const wardsLayerRef = useRef<L.LayerGroup | null>(null);
   const facilitiesLayerRef = useRef<L.LayerGroup | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -25,6 +71,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const [search, setSearch] = useState("");
   const [livePos, setLivePos] = useState<Record<string, LivePosition>>({});
   const [statuses, setStatuses] = useState<Record<string, string>>({});
+  const [wsConnected, setWsConnected] = useState(false);
   const [selectedZone, setSelectedZone] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       const cached = localStorage.getItem("selectedZone");
@@ -173,6 +220,8 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       mapRef.current = null; 
       markers.current = {}; 
       iconCache.current = {};
+      Object.values(animFrames.current).forEach(id => cancelAnimationFrame(id));
+      animFrames.current = {};
       wardsLayerRef.current = null;
       facilitiesLayerRef.current = null;
     };
@@ -518,25 +567,23 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     const existingMarker = markers.current[imei];
     const cached = iconCache.current[imei];
 
+    const movingClass = isLive && speed > 3 ? "lm-moving" : "";
+    const mkIcon = () => L.divIcon({
+      className: "",
+      html: `<div class="${movingClass}" style="width:26px;height:26px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:${isLive ? `0 0 8px ${color}` : "none"};transition:background .3s,box-shadow .3s">${emoji}</div>`,
+      iconSize: [26, 26], iconAnchor: [13, 13],
+    });
+
     if (existingMarker) {
-      existingMarker.setLatLng([lat, lng]);
+      // Smooth slide to new position (1s ease-out for moving vehicles)
+      slideMarkerTo(existingMarker, [lat, lng], speed > 0 ? 1000 : 0, animFrames.current, imei);
 
       if (!cached || cached.color !== color || cached.emoji !== emoji) {
-        const icon = L.divIcon({
-          className: "",
-          html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
-          iconSize: [24, 24], iconAnchor: [12, 12],
-        });
-        existingMarker.setIcon(icon);
+        existingMarker.setIcon(mkIcon());
         iconCache.current[imei] = { color, emoji };
       }
     } else {
-      const icon = L.divIcon({
-        className: "",
-        html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:${isLive ? `0 0 10px ${color}` : "none"}">${emoji}</div>`,
-        iconSize: [24, 24], iconAnchor: [12, 12],
-      });
-      markers.current[imei] = L.marker([lat, lng], { icon }).addTo(mapRef.current);
+      markers.current[imei] = L.marker([lat, lng], { icon: mkIcon() }).addTo(mapRef.current);
       iconCache.current[imei] = { color, emoji };
     }
 
@@ -660,7 +707,10 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         ws = new WebSocket(url);
         
         ws.onopen = () => {
-          if (isMounted) console.log("WebSocket connected to", url);
+          if (isMounted) {
+            console.log("WebSocket connected to", url);
+            setWsConnected(true);
+          }
         };
 
         ws.onmessage = (e) => {
@@ -676,7 +726,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
                 lat: msg.lat,
                 lng: msg.lng,
                 speed: msg.speed,
-                angle: msg.angle || 0,
+                angle: msg.heading ?? msg.angle ?? 0,
                 ignition: msg.ignition !== undefined ? msg.ignition : null,
                 time: msg.timestamp || msg.time || new Date().toISOString()
               };
@@ -717,7 +767,18 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
             if (msg.type === "snapshot") {
               if (Array.isArray(msg.data)) {
                 const map: Record<string, LivePosition> = {};
-                msg.data.forEach((p: LivePosition) => { map[p.imei] = p; });
+                msg.data.forEach((p: any) => {
+                  if (!p.imei) return;
+                  map[p.imei] = {
+                    imei: p.imei,
+                    lat: p.lat,
+                    lng: p.lng,
+                    speed: p.speed || 0,
+                    angle: p.heading ?? p.angle ?? 0,
+                    ignition: p.ignition ?? null,
+                    time: p.time || new Date().toISOString(),
+                  };
+                });
                 setLivePos((prev) => ({ ...prev, ...map }));
               }
               if (msg.statuses) {
@@ -731,6 +792,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
 
         ws.onclose = (e) => {
           if (!isMounted) return;
+          setWsConnected(false);
           console.log("WebSocket closed:", e.code, e.reason);
           reconnect = setTimeout(connect, 3000);
         };
@@ -796,6 +858,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[300px] max-h-[calc(100%-32px)] bg-slate-100/95 backdrop-blur-2xl rounded-xl border border-slate-700 z-[1000] flex flex-col shadow-2xl shadow-black/40 text-slate-200">
           {/* Stats Row */}
           <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 text-[11px] font-semibold">
+            <span className="lm-ws-dot" style={{ background: wsConnected ? "#22c55e" : "#ef4444" }} title={wsConnected ? "Live Connected" : "Disconnected"} />
             <span className="text-green-400">● {counts.running}</span>
             <span className="text-amber-400">● {counts.idle}</span>
             <span className="text-red-400">● {counts.stopped}</span>

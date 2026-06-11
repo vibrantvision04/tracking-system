@@ -70,7 +70,8 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	var totalDistance float64
 	var maxSpeed float64
 
-	// Pre-identify stoppage segments (speed < 5 at a fixed place for >= 60 seconds)
+	// Pre-identify stoppage segments: ignition OFF + speed 0 for >= 60 seconds.
+	// Ignition ON + speed 0 is IDLE, not a stoppage.
 	// Stationary GPS drift is tolerated up to 30 meters.
 	inStoppage := make([]bool, len(validData))
 	stoppagesCount := 0
@@ -80,7 +81,8 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 
 	stoppageStartIndex := -1
 	for i := 0; i < len(validData); i++ {
-		if validData[i].Speed == 0 {
+		isStoppagePacket := validData[i].Speed == 0 && !validData[i].Ignition
+		if isStoppagePacket {
 			if stoppageStartIndex == -1 {
 				stoppageStartIndex = i
 			} else {
@@ -148,10 +150,11 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	// ─────────────────────────────────────────────────────────────────
 	// Ignition state-machine — drives all operational time fields
 	// ─────────────────────────────────────────────────────────────────
-	// A packet is considered "ignition on" if the ignition flag is set OR
-	// the vehicle is moving (speed > 2 km/h).
+	// Use the physical ignition flag from the Teltonika device (IO 239/1).
+	// Do NOT fall back to speed > 2 — that conflates movement with ignition
+	// and creates fragmented sessions and incorrect durations.
 	ignitionOn := func(p decoder.AVLData) bool {
-		return p.Ignition || p.Speed > 2
+		return p.Ignition
 	}
 
 	isToday := start.Format("2006-01-02") == utils.CurrentTimeInIndia().Format("2006-01-02")
@@ -230,25 +233,26 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	for i, p := range validData {
 		currOn := ignitionOn(p)
 
-		// Calculate idle: within an active session, if speed is 0, accumulate idle time
+		// Calculate idle: within an active ignition session, if speed is 0 AND
+		// ignition is still ON, that is idle (engine running, not moving).
+		// If ignition is OFF + speed 0, that is a stoppage (handled separately).
 		if inSession && i > 0 {
 			dt := p.Time.Sub(validData[i-1].Time).Seconds()
-			if dt > 0 && dt < 3600 && p.Speed == 0 {
+			if dt > 0 && dt < 3600 && p.Speed == 0 && p.Ignition {
 				totalIdleSec += int(dt)
 			}
 		}
 
 		if i == 0 {
 			// Initialise state from the first packet.
-			// If ignition is already ON at the very first packet of this day, the
-			// vehicle may have been driving through midnight (carry-over session).
-			// We anchor the session to the day-start boundary (00:00:00) so the
-			// duration correctly starts from midnight, not from the packet timestamp.
+			// Use the actual packet timestamp as session start — NOT midnight.
+			// Anchoring to 00:00:00 would add hours of phantom active time
+			// if the first packet arrives at e.g. 05:30 AM.
 			if currOn {
 				inSession = true
-				sessionStart = start // day-boundary (00:00:00)
+				sessionStart = p.Time
 
-				t := start // StartTime = midnight (carry-over) or actual first-packet time
+				t := p.Time
 				startTime = &t
 				startLat = p.Lat
 				startLng = p.Lng

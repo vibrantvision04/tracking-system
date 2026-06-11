@@ -43,7 +43,7 @@ func (r *GPSRepository) BulkInsert(ctx context.Context, data []decoder.AVLData) 
 			d.Time,
 			d.Lat,
 			d.Lng,
-			int16(d.Speed),
+			d.Speed,
 			int16(ign),
 			d.Odometer,
 			float32(d.HDOP),
@@ -74,7 +74,7 @@ func (r *GPSRepository) GetLatest(ctx context.Context, imei string) (*decoder.AV
 	
 	var d decoder.AVLData
 	var ign int16
-	var speed int16
+	var speed float64
 	var heading int16
 	err := r.pool.QueryRow(ctx, query, imei).Scan(
 		&d.IMEI, &d.Time, &d.Lat, &d.Lng, &speed, &heading, &d.Altitude, &d.Satellites, &ign,
@@ -83,7 +83,7 @@ func (r *GPSRepository) GetLatest(ctx context.Context, imei string) (*decoder.AV
 		return nil, err
 	}
 	d.Ignition = (ign == 1)
-	d.Speed = float64(speed)
+	d.Speed = speed
 	d.Heading = int(heading)
 	return &d, nil
 }
@@ -107,7 +107,7 @@ func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, 
 	for rows.Next() {
 		var d decoder.AVLData
 		var ign int16
-		var speed int16
+		var speed float64
 		var heading int16
 		err := rows.Scan(
 			&d.IMEI, &d.Time, &d.Lat, &d.Lng, &speed, &heading, &d.Altitude, &d.Satellites, &ign,
@@ -116,7 +116,7 @@ func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, 
 			return nil, err
 		}
 		d.Ignition = (ign == 1)
-		d.Speed = float64(speed)
+		d.Speed = speed
 		d.Heading = int(heading)
 		data = append(data, d)
 	}
@@ -143,7 +143,7 @@ func (r *GPSRepository) GetAllByTimeWindow(ctx context.Context, start, end time.
 		var vID int
 		var d decoder.AVLData
 		var ign int16
-		var speed int16
+		var speed float64
 		var heading int16
 		err := rows.Scan(
 			&vID, &d.IMEI, &d.Time, &d.Lat, &d.Lng, &speed, &heading, &d.Altitude, &d.Satellites, &ign,
@@ -152,7 +152,7 @@ func (r *GPSRepository) GetAllByTimeWindow(ctx context.Context, start, end time.
 			return nil, err
 		}
 		d.Ignition = (ign == 1)
-		d.Speed = float64(speed)
+		d.Speed = speed
 		d.Heading = int(heading)
 		result[vID] = append(result[vID], d)
 	}

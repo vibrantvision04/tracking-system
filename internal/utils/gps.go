@@ -34,9 +34,11 @@ func IsValidGPSTransition(prev, curr decoder.AVLData) bool {
 	}
 
 	// 2. Reject GPS drift while stationary: small movements (< 0.015 km = 15m) when
-	//    both points report speed < 3 km/h. Stationary GPS devices commonly drift
+	//    both points report speed = 0. Stationary GPS devices commonly drift
 	//    10-50m, which adds 0.5-2 km/day of fake distance.
-	if prev.Speed < 3 && curr.Speed < 3 && distKm < 0.015 {
+	//    Do NOT filter speed 1-2 km/h — that is legitimate low-speed movement
+	//    (e.g., garbage collection runs in narrow lanes).
+	if prev.Speed == 0 && curr.Speed == 0 && distKm < 0.015 {
 		return false
 	}
 
