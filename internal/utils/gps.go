@@ -43,10 +43,10 @@ func IsValidGPSTransition(prev, curr decoder.AVLData) bool {
 	if !prevOn && !currOn {
 		thresholdKm = 0.030 // 30 meters when parked
 	} else {
-		thresholdKm = 0.012 // 12 meters when active (to shave off minor coordinate jitter)
+		thresholdKm = 0.015 // 15 meters when active (to shave off active coordinate jitter)
 	}
 
-	if prev.Speed <= 5.0 && curr.Speed <= 5.0 && distKm < thresholdKm {
+	if prev.Speed <= 8.0 && curr.Speed <= 8.0 && distKm < thresholdKm {
 		return false
 	}
 
