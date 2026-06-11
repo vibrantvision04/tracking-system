@@ -38,11 +38,13 @@ func (s *TripService) Process(ctx context.Context, data decoder.AVLData) {
 	// Get previous ignition state
 	prevIgnition, _ := s.rdb.Get(ctx, stateKey).Bool()
 
+	updateLastPoint := false
 	if data.Ignition && !prevIgnition {
 		// Trip Start
 		s.handleTripStart(ctx, data)
 		s.rdb.Set(ctx, distKey, 0, 24*time.Hour)
 		s.rdb.Set(ctx, maxSpeedKey, data.Speed, 24*time.Hour)
+		updateLastPoint = true
 	} else if !data.Ignition && prevIgnition {
 		// Trip End
 		s.handleTripEnd(ctx, data)
@@ -55,8 +57,13 @@ func (s *TripService) Process(ctx context.Context, data decoder.AVLData) {
 				if utils.IsValidGPSTransition(prevPoint, data) {
 					dist := utils.Haversine(prevPoint.Lat, prevPoint.Lng, data.Lat, data.Lng)
 					s.rdb.IncrByFloat(ctx, distKey, dist)
+					updateLastPoint = true
 				}
+			} else {
+				updateLastPoint = true
 			}
+		} else {
+			updateLastPoint = true
 		}
 
 		// Update max speed
@@ -67,8 +74,10 @@ func (s *TripService) Process(ctx context.Context, data decoder.AVLData) {
 	}
 	
 	// Update last point and state
-	lastPointVal, _ := json.Marshal(data)
-	s.rdb.Set(ctx, lastPointKey, lastPointVal, 24*time.Hour)
+	if updateLastPoint {
+		lastPointVal, _ := json.Marshal(data)
+		s.rdb.Set(ctx, lastPointKey, lastPointVal, 24*time.Hour)
+	}
 	s.rdb.Set(ctx, stateKey, data.Ignition, 0)
 }
 

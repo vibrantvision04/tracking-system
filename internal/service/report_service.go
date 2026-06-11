@@ -281,19 +281,21 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	var totalIgnitionSec float64
 	var idleSec float64
 
-	// Distance, Max Speed
+	// Distance, Max Speed (calculated on the full calendar day's validData to prevent truncation)
 	var lastOp *decoder.AVLData
-	for i := 0; i < len(opData); i++ {
-		p := opData[i]
+	for i := 0; i < len(validData); i++ {
+		p := validData[i]
 		if p.Speed > maxSpeed {
 			maxSpeed = p.Speed
 		}
-		if i > 0 {
-			if utils.IsValidGPSTransition(*lastOp, p) {
-				totalDistance += utils.Haversine(lastOp.Lat, lastOp.Lng, p.Lat, p.Lng)
-			}
+		if lastOp == nil {
+			lastOp = &validData[i]
+			continue
 		}
-		lastOp = &opData[i]
+		if utils.IsValidGPSTransition(*lastOp, p) {
+			totalDistance += utils.Haversine(lastOp.Lat, lastOp.Lng, p.Lat, p.Lng)
+			lastOp = &validData[i] // Correct: only update lastOp on valid transitions
+		}
 	}
 
 	// Average Speed inside ward
