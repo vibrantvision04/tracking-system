@@ -17,10 +17,6 @@ func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	return R * c
 }
 
-// MinDriftThresholdMeters is the threshold in meters to filter out stationary GPS drift.
-// Tweak this value directly in code to tune distance calculation sensitivity (e.g. 5.0, 8.0, 10.0, 15.0).
-var MinDriftThresholdMeters = 15.0
-
 // IsValidGPSTransition checks whether a GPS point transition is physically plausible.
 // Rejects GPS jumps, drift, and impossible speeds to ensure accurate distance calculation.
 func IsValidGPSTransition(prev, curr decoder.AVLData) bool {
@@ -37,10 +33,20 @@ func IsValidGPSTransition(prev, curr decoder.AVLData) bool {
 		return false
 	}
 
-	// 2. Reject GPS drift while stationary: small movements (< MinDriftThresholdMeters) when
-	//    both points report low speed (<= 3.0 km/h). Stationary GPS devices commonly drift
-	//    10-50m with fluctuating speed reports of 1-3 km/h, which adds fake distance.
-	if prev.Speed <= 5.0 && curr.Speed <= 5.0 && distKm < (MinDriftThresholdMeters/1000.0) {
+	// 2. Reject GPS drift while stationary:
+	//    If virtual ignition is OFF: the vehicle is parked. We reject any low-speed movement (<= 5.0 km/h) under 30 meters.
+	//    If virtual ignition is ON: the vehicle is active. We only reject small coordinate fluctuations under 5 meters.
+	prevOn := prev.Ignition || prev.Speed > 2.0
+	currOn := curr.Ignition || curr.Speed > 2.0
+
+	var thresholdKm float64
+	if !prevOn && !currOn {
+		thresholdKm = 0.030 // 30 meters when parked
+	} else {
+		thresholdKm = 0.005 // 5 meters when active
+	}
+
+	if prev.Speed <= 5.0 && curr.Speed <= 5.0 && distKm < thresholdKm {
 		return false
 	}
 
