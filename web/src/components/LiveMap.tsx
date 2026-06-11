@@ -103,9 +103,10 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (Object.keys(livePosAccumulator.current).length > 0) {
-        setLivePos((prev) => ({ ...prev, ...livePosAccumulator.current }));
+      const pending = { ...livePosAccumulator.current };
+      if (Object.keys(pending).length > 0) {
         livePosAccumulator.current = {};
+        setLivePos((prev) => ({ ...prev, ...pending }));
       }
     }, 300); // Flush every 300ms for smooth UI updates
     return () => clearInterval(interval);
