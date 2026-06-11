@@ -107,13 +107,26 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 	return err
 }
 
-// FinalizeReportsForDate stamps all movement reports for the given date as
-// finalized (is_finalized = true). After this call, Upsert will refuse to
-// overwrite those rows, turning them into a permanent historical snapshot.
 func (r *ReportRepository) FinalizeReportsForDate(ctx context.Context, date time.Time) error {
 	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	_, err := r.pool.Exec(ctx,
 		`UPDATE movement_reports SET is_finalized = true WHERE report_date = $1`,
+		day,
+	)
+	return err
+}
+
+func (r *ReportRepository) UnfinalizeReportsForDate(ctx context.Context, date time.Time, vehicleID int) error {
+	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	if vehicleID > 0 {
+		_, err := r.pool.Exec(ctx,
+			`UPDATE movement_reports SET is_finalized = false WHERE report_date = $1 AND vehicle_id = $2`,
+			day, vehicleID,
+		)
+		return err
+	}
+	_, err := r.pool.Exec(ctx,
+		`UPDATE movement_reports SET is_finalized = false WHERE report_date = $1`,
 		day,
 	)
 	return err

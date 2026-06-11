@@ -47,7 +47,7 @@ export default function ReportsPage() {
   const load = (d: string, p: number, vId: string) => {
     setLoading(true);
     const vParam = vId ? `&vehicle_id=${vId}` : "";
-    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}${vParam}`)
+    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}${vParam}&force=true`)
       .then((r) => {
         setReports(r.data || []);
         setTotalPages(r.total_pages || 1);

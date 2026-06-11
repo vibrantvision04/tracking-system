@@ -195,8 +195,11 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 		currCheck = currCheck.AddDate(0, 0, 1)
 	}
 
-	// Synchronously calculate today's report in parallel so it updates live
-	if hasToday {
+	forceRegen := r.URL.Query().Get("force") == "true"
+
+	// Synchronously calculate report in parallel so it updates live
+	// We do this if forceRegen is true (for all requested days), or if the requested range includes today (only for today).
+	if hasToday || forceRegen {
 		var targetVehicles []*repository.Vehicle
 		if vehicleID > 0 {
 			vehicle, err := h.vRepo.GetByID(r.Context(), vehicleID)
@@ -226,69 +229,92 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 				ward = vehicle.VehicleType.Name
 			}
 
-			wg.Add(1)
-			go func(v *repository.Vehicle, z, w string) {
-				defer wg.Done()
-				select {
-				case sem <- struct{}{}:
-					defer func() { <-sem }()
-				case <-ctx.Done():
-					return
-				}
-				_ = h.rService.GenerateDailyReport(ctx, v.ID, todayTime, z, w)
-			}(vehicle, zone, ward)
+			// Determine which days to regenerate synchronously
+			startD := from
+			endD := to
+			if !forceRegen {
+				// Only regenerate today synchronously if not forcing
+				startD = todayTime
+				endD = todayTime
+			}
+
+			curr := startD
+			for !curr.After(endD) {
+				dayToRegen := curr
+				wg.Add(1)
+				go func(v *repository.Vehicle, z, w string, date time.Time) {
+					defer wg.Done()
+					select {
+					case sem <- struct{}{}:
+						defer func() { <-sem }()
+					case <-ctx.Done():
+						return
+					}
+					
+					// If forcing regeneration, unfinalize the report for this date/vehicle first
+					if forceRegen {
+						_ = h.rService.UnfinalizeForDate(ctx, date, v.ID)
+					}
+					
+					_ = h.rService.GenerateDailyReport(ctx, v.ID, date, z, w)
+				}(vehicle, zone, ward, dayToRegen)
+				
+				curr = curr.AddDate(0, 0, 1)
+			}
 		}
 		wg.Wait()
 		cancel()
 	}
 
 	// Trigger real-time report generation/caching asynchronously in the background for past days.
-	go func(vID int, startD, endD time.Time) {
-		// Create a background context for report generation
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
+	if !forceRegen {
+		go func(vID int, startD, endD time.Time) {
+			// Create a background context for report generation
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer cancel()
 
-		var targetVehicles []*repository.Vehicle
-		if vID > 0 {
-			vehicle, err := h.vRepo.GetByID(ctx, vID)
-			if err == nil {
-				targetVehicles = append(targetVehicles, vehicle)
-			}
-		} else {
-			vehicles, err := h.vRepo.GetAll(ctx)
-			if err == nil {
-				for i := range vehicles {
-					targetVehicles = append(targetVehicles, &vehicles[i])
+			var targetVehicles []*repository.Vehicle
+			if vID > 0 {
+				vehicle, err := h.vRepo.GetByID(ctx, vID)
+				if err == nil {
+					targetVehicles = append(targetVehicles, vehicle)
 				}
-			}
-		}
-
-		for _, vehicle := range targetVehicles {
-			if vehicle.GpsDevice == nil {
-				continue
-			}
-			zone := ""
-			ward := ""
-			if vehicle.VehicleType != nil {
-				ward = vehicle.VehicleType.Name
-			}
-
-			curr := startD
-			daysCount := 0
-			// Limit to a maximum of 31 days to protect the background worker
-			for !curr.After(endD) && daysCount < 31 {
-				// Skip today as it was already handled synchronously
-				if curr.Format("2006-01-02") != todayStr {
-					err := h.rService.GenerateDailyReport(ctx, vehicle.ID, curr, zone, ward)
-					if err != nil {
-						fmt.Printf("Background report generation failed for vehicle %d on %s: %v\n", vehicle.ID, curr.Format("2006-01-02"), err)
+			} else {
+				vehicles, err := h.vRepo.GetAll(ctx)
+				if err == nil {
+					for i := range vehicles {
+						targetVehicles = append(targetVehicles, &vehicles[i])
 					}
 				}
-				curr = curr.AddDate(0, 0, 1)
-				daysCount++
 			}
-		}
-	}(vehicleID, from, to)
+
+			for _, vehicle := range targetVehicles {
+				if vehicle.GpsDevice == nil {
+					continue
+				}
+				zone := ""
+				ward := ""
+				if vehicle.VehicleType != nil {
+					ward = vehicle.VehicleType.Name
+				}
+
+				curr := startD
+				daysCount := 0
+				// Limit to a maximum of 31 days to protect the background worker
+				for !curr.After(endD) && daysCount < 31 {
+					// Skip today as it was already handled synchronously
+					if curr.Format("2006-01-02") != todayStr {
+						err := h.rService.GenerateDailyReport(ctx, vehicle.ID, curr, zone, ward)
+						if err != nil {
+							fmt.Printf("Background report generation failed for vehicle %d on %s: %v\n", vehicle.ID, curr.Format("2006-01-02"), err)
+						}
+					}
+					curr = curr.AddDate(0, 0, 1)
+					daysCount++
+				}
+			}
+		}(vehicleID, from, to)
+	}
 
 	reports, total, err := h.rService.GetReports(r.Context(), vehicleID, from, to, limit, offset)
 	if err != nil {

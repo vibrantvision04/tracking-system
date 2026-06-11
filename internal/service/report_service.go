@@ -374,11 +374,12 @@ func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to 
 	return s.repo.Get(ctx, vehicleID, from, to, limit, offset)
 }
 
-// FinalizeForDate marks all movement reports for the given calendar date as
-// finalized (is_finalized = true). After finalization the Upsert guard in the
-// repository prevents any further modification of those rows.
 func (s *ReportService) FinalizeForDate(ctx context.Context, date time.Time) error {
 	return s.repo.FinalizeReportsForDate(ctx, date)
+}
+
+func (s *ReportService) UnfinalizeForDate(ctx context.Context, date time.Time, vehicleID int) error {
+	return s.repo.UnfinalizeReportsForDate(ctx, date, vehicleID)
 }
 
 func formatDuration(seconds int) string {
