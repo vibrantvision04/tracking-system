@@ -100,7 +100,7 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 			  WHERE NOT movement_reports.is_finalized`
 	
 	_, err := r.pool.Exec(ctx, query,
-		rep.IMEI, rep.VehicleID, rep.ReportDate.Format("2006-01-02"), rep.AverageSpeed, rep.TotalDistance, rep.StartPoint, rep.EndPoint,
+		rep.IMEI, rep.VehicleID, rep.ReportDate, rep.AverageSpeed, rep.TotalDistance, rep.StartPoint, rep.EndPoint,
 		rep.StartTime, rep.EndTime, rep.Alert, rep.TotalActiveDuration, rep.TotalIdleDuration,
 		rep.TotalStoppageDuration, rep.InParkingDuration, rep.ActualIgnitionOnDuration,
 		rep.TotalIgnitionOnDuration, rep.TotalRunningDuration, rep.TotalRunningTime,
@@ -115,7 +115,7 @@ func (r *ReportRepository) FinalizeReportsForDate(ctx context.Context, date time
 	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	_, err := r.pool.Exec(ctx,
 		`UPDATE movement_reports SET is_finalized = true WHERE report_date = $1`,
-		day.Format("2006-01-02"),
+		day,
 	)
 	return err
 }
@@ -125,13 +125,13 @@ func (r *ReportRepository) UnfinalizeReportsForDate(ctx context.Context, date ti
 	if vehicleID > 0 {
 		_, err := r.pool.Exec(ctx,
 			`UPDATE movement_reports SET is_finalized = false WHERE report_date = $1 AND vehicle_id = $2`,
-			day.Format("2006-01-02"), vehicleID,
+			day, vehicleID,
 		)
 		return err
 	}
 	_, err := r.pool.Exec(ctx,
 		`UPDATE movement_reports SET is_finalized = false WHERE report_date = $1`,
-		day.Format("2006-01-02"),
+		day,
 	)
 	return err
 }
@@ -157,17 +157,17 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 
 	if vehicleID > 0 {
 		query = baseQuery + `WHERE r.vehicle_id = $1 AND r.report_date BETWEEN $2 AND $3 ORDER BY r.report_date DESC LIMIT $4 OFFSET $5`
-		rows, err = r.pool.Query(ctx, query, vehicleID, from.Format("2006-01-02"), to.Format("2006-01-02"), limit, offset)
+		rows, err = r.pool.Query(ctx, query, vehicleID, from, to, limit, offset)
 		
-		err = r.pool.QueryRow(ctx, countQuery+`WHERE vehicle_id = $1 AND report_date BETWEEN $2 AND $3`, vehicleID, from.Format("2006-01-02"), to.Format("2006-01-02")).Scan(&totalCount)
+		err = r.pool.QueryRow(ctx, countQuery+`WHERE vehicle_id = $1 AND report_date BETWEEN $2 AND $3`, vehicleID, from, to).Scan(&totalCount)
 		if err != nil {
 			return nil, 0, err
 		}
 	} else {
 		query = baseQuery + `WHERE r.report_date BETWEEN $1 AND $2 ORDER BY r.report_date DESC LIMIT $3 OFFSET $4`
-		rows, err = r.pool.Query(ctx, query, from.Format("2006-01-02"), to.Format("2006-01-02"), limit, offset)
+		rows, err = r.pool.Query(ctx, query, from, to, limit, offset)
 
-		err = r.pool.QueryRow(ctx, countQuery+`WHERE report_date BETWEEN $1 AND $2`, from.Format("2006-01-02"), to.Format("2006-01-02")).Scan(&totalCount)
+		err = r.pool.QueryRow(ctx, countQuery+`WHERE report_date BETWEEN $1 AND $2`, from, to).Scan(&totalCount)
 		if err != nil {
 			return nil, 0, err
 		}
