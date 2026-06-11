@@ -44,6 +44,8 @@ type MovementReport struct {
 	OverspeedCount            string    `json:"overspeed_count"`
 	OverspeedTime             string    `json:"overspeed_time"`
 	IsFinalized               bool      `json:"is_finalized"`
+	MinorStoppages            int       `json:"minor_stoppages"`
+	MajorStoppages            int       `json:"major_stoppages"`
 }
 
 type ReportRepository struct {
@@ -62,8 +64,8 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 			   total_ignition_on_duration, total_running_duration, total_running_time, 
 			   day_running_time, night_running_time, fuel_in_ltr, fuel_consumption, 
 			   speed_limit, max_speed, min_speed, overspeed_distance, overspeed_count, overspeed_time,
-			   zone, ward, stoppages_count)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+			   zone, ward, stoppages_count, minor_stoppages, major_stoppages)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
 			  ON CONFLICT (imei, report_date) DO UPDATE SET
 			  average_speed = EXCLUDED.average_speed,
 			  total_distance = EXCLUDED.total_distance,
@@ -92,7 +94,9 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 			  overspeed_time = EXCLUDED.overspeed_time,
 			  zone = EXCLUDED.zone,
 			  ward = EXCLUDED.ward,
-			  stoppages_count = EXCLUDED.stoppages_count
+			  stoppages_count = EXCLUDED.stoppages_count,
+			  minor_stoppages = EXCLUDED.minor_stoppages,
+			  major_stoppages = EXCLUDED.major_stoppages
 			  WHERE NOT movement_reports.is_finalized`
 	
 	_, err := r.pool.Exec(ctx, query,
@@ -102,7 +106,7 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 		rep.TotalIgnitionOnDuration, rep.TotalRunningDuration, rep.TotalRunningTime,
 		rep.DayRunningTime, rep.NightRunningTime, rep.FuelInLtr, rep.FuelConsumption,
 		rep.SpeedLimit, rep.MaxSpeed, rep.MinSpeed, rep.OverspeedDistance, rep.OverspeedCount, rep.OverspeedTime,
-		rep.Zone, rep.Ward, rep.StoppagesCount,
+		rep.Zone, rep.Ward, rep.StoppagesCount, rep.MinorStoppages, rep.MajorStoppages,
 	)
 	return err
 }
@@ -144,7 +148,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 			  COALESCE(r.total_ignition_on_duration, ''), COALESCE(r.total_running_duration, ''), COALESCE(r.total_running_time, ''), 
 			  COALESCE(r.day_running_time, ''), COALESCE(r.night_running_time, ''), COALESCE(r.fuel_in_ltr, 0.0), COALESCE(r.fuel_consumption, 0.0), 
 			  COALESCE(r.speed_limit, 0.0), COALESCE(r.max_speed, 0.0), COALESCE(r.min_speed, 0.0), COALESCE(r.overspeed_distance, 0.0), COALESCE(r.overspeed_count, '0'), COALESCE(r.overspeed_time, '0'),
-			  COALESCE(r.zone, ''), COALESCE(r.ward, ''), COALESCE(r.stoppages_count, 0)
+			  COALESCE(r.zone, ''), COALESCE(r.ward, ''), COALESCE(r.stoppages_count, 0), COALESCE(r.minor_stoppages, 0), COALESCE(r.major_stoppages, 0)
 			  FROM movement_reports r
 			  JOIN vehicles v ON r.vehicle_id = v.id
 			  LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id `
@@ -184,7 +188,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 			&rep.TotalIgnitionOnDuration, &rep.TotalRunningDuration, &rep.TotalRunningTime,
 			&rep.DayRunningTime, &rep.NightRunningTime, &rep.FuelInLtr, &rep.FuelConsumption,
 			&rep.SpeedLimit, &rep.MaxSpeed, &rep.MinSpeed, &rep.OverspeedDistance, &rep.OverspeedCount, &rep.OverspeedTime,
-			&rep.Zone, &rep.Ward, &rep.StoppagesCount,
+			&rep.Zone, &rep.Ward, &rep.StoppagesCount, &rep.MinorStoppages, &rep.MajorStoppages,
 		)
 		if err != nil {
 			return nil, 0, err

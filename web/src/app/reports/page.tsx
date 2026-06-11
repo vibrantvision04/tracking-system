@@ -21,6 +21,8 @@ interface MovementReport {
   total_stoppage_duration: string;
   total_idle_duration: string;
   stoppages_count: number;
+  minor_stoppages: number;
+  major_stoppages: number;
 }
 
 interface ReportsResponse {
@@ -189,17 +191,19 @@ export default function ReportsPage() {
                     <th className="px-3 py-3 font-bold">TOTAL IGNITION ON DURATION</th>
                     <th className="px-3 py-3 font-bold">TOTAL STOPPAGE DURATION</th>
                     <th className="px-3 py-3 font-bold">TOTAL IDLE DURATION</th>
+                    <th className="px-3 py-3 font-bold text-center">MINOR STOPPAGES</th>
+                    <th className="px-3 py-3 font-bold text-center">MAJOR STOPPAGES</th>
                     <th className="px-3 py-3 font-bold text-center">TOTAL STOPPAGES</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-theme-text">
                   {loading ? (
                     <tr>
-                      <td colSpan={18} className="px-4 py-8 text-center text-theme-text-dim">Loading reports...</td>
+                      <td colSpan={20} className="px-4 py-8 text-center text-theme-text-dim">Loading reports...</td>
                     </tr>
                   ) : reports.length === 0 ? (
                     <tr>
-                      <td colSpan={18} className="px-4 py-8 text-center text-theme-text-dim">No reports found for this date.</td>
+                      <td colSpan={20} className="px-4 py-8 text-center text-theme-text-dim">No reports found for this date.</td>
                     </tr>
                   ) : (
                     reports.map((r, i) => (
@@ -221,6 +225,8 @@ export default function ReportsPage() {
                         <td className="px-3 py-3 font-mono">{r.total_ignition_on_duration}</td>
                         <td className="px-3 py-3 font-mono">{r.total_stoppage_duration}</td>
                         <td className="px-3 py-3 font-mono">{r.total_idle_duration}</td>
+                        <td className="px-3 py-3 font-semibold text-center text-slate-600">{r.minor_stoppages}</td>
+                        <td className="px-3 py-3 font-semibold text-center text-slate-600">{r.major_stoppages}</td>
                         <td className="px-3 py-3 font-bold text-center text-indigo-600">{r.stoppages_count}</td>
                       </tr>
                     ))
