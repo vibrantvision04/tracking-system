@@ -288,6 +288,13 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		if p.Speed > maxSpeed {
 			maxSpeed = p.Speed
 		}
+		
+		// Skip distance accumulation if the vehicle is stationary (ignition is OFF) to prevent parked drift
+		if !isIgnitionOn(p) {
+			lastOp = nil // Reset segment so we start fresh when ignition turns ON
+			continue
+		}
+
 		if lastOp == nil {
 			lastOp = &validData[i]
 			continue
