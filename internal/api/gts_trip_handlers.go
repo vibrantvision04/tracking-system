@@ -426,7 +426,7 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 					}
 
 					minStayPassed := sessionMaxContinuousIgnitionOnTime >= 60*time.Second
-					speedValid := sessionMaxSpeed <= 5.0
+					speedValid := true // Temporarily removed 5 km/h limitation as per user request
 					dumpZoneValid := sessionTouchedDump
 
 					if eligibleForDump && minStayPassed && speedValid && dumpZoneValid {
@@ -453,9 +453,7 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 						if !minStayPassed {
 							rList = append(rList, fmt.Sprintf("Ignition ON < 60s (was %ds)", int(sessionMaxContinuousIgnitionOnTime.Seconds())))
 						}
-						if !speedValid {
-							rList = append(rList, fmt.Sprintf("Speed > 5km/h (max %.1f)", sessionMaxSpeed))
-						}
+						// Speed validation removed
 						if !dumpZoneValid {
 							rList = append(rList, "Didn't touch dump zone radius")
 						}
