@@ -251,9 +251,12 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 				}
 				zone := ""
 				ward := ""
-				if vehicle.VehicleType != nil {
-					ward = vehicle.VehicleType.Name
-				}
+				// NOTE: zone and ward are intentionally left empty here.
+				// report_service.GenerateDailyReport resolves them from:
+				//   zone → vehicle_regions table (Vehicle-Zone Mapping page)
+				//   ward → vehicle_route_assignments → route_wards (Route to Vehicle & Shift page)
+				_ = zone
+				_ = ward
 
 				wg.Add(1)
 				go func(v *repository.Vehicle, z, w string, targetDt time.Time) {
