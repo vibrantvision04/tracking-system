@@ -248,19 +248,22 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 func (h *Handler) GetVehicleRouteAssignments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	dateStr := r.URL.Query().Get("date")
-	var targetDate time.Time
-	if dateStr == "" {
-		targetDate = utils.CurrentTimeInIndia()
+
+	var assignments []repository.VehicleRouteAssignmentDetail
+	var err error
+
+	if dateStr == "all" || dateStr == "" {
+		assignments, err = h.routeRepo.GetAllVehicleRouteAssignments(ctx)
 	} else {
-		var err error
+		var targetDate time.Time
 		targetDate, err = time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 		if err != nil {
 			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
 			return
 		}
+		assignments, err = h.routeRepo.GetVehicleRouteAssignmentsByDate(ctx, targetDate)
 	}
 
-	assignments, err := h.routeRepo.GetVehicleRouteAssignmentsByDate(ctx, targetDate)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch assignments: " + err.Error()})
 		return

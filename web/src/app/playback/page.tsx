@@ -501,34 +501,37 @@ export default function PlaybackPage() {
       });
     };
 
-    let filtered = routesList;
+    const selectedVeh = selectedImei ? vehicles.find(v => v.gps_device?.imei === selectedImei) : null;
+    let filtered: any[] = [];
 
-    // 1. Zone Filter
-    if (selectedZoneId) {
-      filtered = filtered.filter(route => {
-        const routeWard = regionsList.find(r => r.region_type_id === 3 && r.id === route.ward_id);
-        return routeWard && routeWard.parent_id === parseInt(selectedZoneId);
-      });
+    if (selectedImei) {
+      // If a vehicle is selected, show ONLY its dedicated route
+      if (selectedRouteId && selectedRouteId !== "all") {
+        filtered = routesList.filter(route => String(route.id) === selectedRouteId);
+      } else if (selectedVeh && (selectedVeh as any).ward_id) {
+        filtered = routesList.filter(route => route.ward_id === (selectedVeh as any).ward_id);
+      }
+    } else if (selectedWardId) {
+      // If a ward is selected, show all routes in that ward (or filter by specific route if chosen)
+      filtered = routesList.filter(route => route.ward_id === parseInt(selectedWardId));
+      if (selectedRouteId && selectedRouteId !== "all") {
+        filtered = filtered.filter(route => String(route.id) === selectedRouteId);
+      }
+    } else {
+      // No ward or vehicle selected -> do not draw any routes
+      filtered = [];
     }
 
-    // 2. Ward Filter
-    if (selectedWardId) {
-      filtered = filtered.filter(route => route.ward_id === parseInt(selectedWardId));
-    }
-
-    // 3. Shift Filter
-    if (selectedShift && selectedShift !== "all") {
+    // Shift Filter (only apply when not filtered to a single vehicle)
+    if (selectedShift && selectedShift !== "all" && !selectedImei) {
       filtered = filtered.filter(route => {
         return route.shift_name === selectedShift || 
                (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
       });
     }
 
-    // 4. Route Filter (if a specific route is selected)
-    const isSingleRouteSelected = selectedRouteId && selectedRouteId !== "all";
-    if (isSingleRouteSelected) {
-      filtered = filtered.filter(route => String(route.id) === selectedRouteId);
-    }
+    // Determine if we are rendering a single route with detailed lane/pin elements
+    const isSingleRouteSelected = (selectedRouteId && selectedRouteId !== "all") || (selectedImei !== "");
 
     filtered.forEach((route) => {
       if (!route.geojson) return;
@@ -675,22 +678,12 @@ export default function PlaybackPage() {
   }, [routesList, selectedZoneId, selectedWardId, selectedShift, selectedRouteId, regionsList, showPlannedRoute]);
 
   const filteredRoutesDropdownList = (() => {
-    let filtered = routesList;
-
-    // 1. Zone Filter
-    if (selectedZoneId) {
-      filtered = filtered.filter(route => {
-        const routeWard = regionsList.find(r => r.region_type_id === 3 && r.id === route.ward_id);
-        return routeWard && routeWard.parent_id === parseInt(selectedZoneId);
-      });
+    if (!selectedWardId) {
+      return [];
     }
+    let filtered = routesList.filter(route => route.ward_id === parseInt(selectedWardId));
 
-    // 2. Ward Filter
-    if (selectedWardId) {
-      filtered = filtered.filter(route => route.ward_id === parseInt(selectedWardId));
-    }
-
-    // 3. Shift Filter
+    // Shift Filter
     if (selectedShift && selectedShift !== "all") {
       filtered = filtered.filter(route => {
         return route.shift_name === selectedShift || 
@@ -752,29 +745,91 @@ export default function PlaybackPage() {
   // Automatically select the vehicle's assigned route when a vehicle is selected in playback
   useEffect(() => {
     if (!selectedImei || vehicles.length === 0 || routesList.length === 0) return;
+    if (routeIdParam) return; // Honor explicit URL parameter instead
 
     const veh = vehicles.find(v => v.gps_device?.imei === selectedImei);
     if (!veh) return;
 
-    // Find route assigned to this vehicle's ward
-    if ((veh as any).ward_id) {
-      const match = routesList.find(r => r.ward_id === (veh as any).ward_id);
-      if (match) {
-        setSelectedRouteId(String(match.id));
-        
-        // Also select the shift of the route
-        if (match.shift_name) {
-          const matchedShift = shiftsList.find(s => 
-            s.shift_name === match.shift_name || 
-            s.shift_name.toLowerCase().includes(match.shift_name.toLowerCase().split(" ")[0])
-          );
-          if (matchedShift) {
-            setSelectedShift(matchedShift.shift_name);
+    // Fetch assignment for this vehicle from database first
+    api<{ success: boolean; data: any[] }>(`/api/vehicle-route-assignments?date=${date}`)
+      .then((res) => {
+        if (res.success && res.data) {
+          const assignment = res.data.find((a: any) => a.vehicle_id === veh.id);
+          if (assignment) {
+            setSelectedRouteId(String(assignment.route_id));
+            if (assignment.shift_name) {
+              const matchedShift = shiftsList.find(s => 
+                s.shift_name === assignment.shift_name || 
+                s.shift_name.toLowerCase().includes(assignment.shift_name.toLowerCase().split(" ")[0])
+              );
+              if (matchedShift) {
+                setSelectedShift(matchedShift.shift_name);
+              }
+            }
+            return; // Found direct assignment!
           }
+        }
+        
+        // Fallback: Find route assigned to this vehicle's ward
+        if ((veh as any).ward_id) {
+          const match = routesList.find(r => r.ward_id === (veh as any).ward_id);
+          if (match) {
+            setSelectedRouteId(String(match.id));
+            
+            // Also select the shift of the route
+            if (match.shift_name) {
+              const matchedShift = shiftsList.find(s => 
+                s.shift_name === match.shift_name || 
+                s.shift_name.toLowerCase().includes(match.shift_name.toLowerCase().split(" ")[0])
+              );
+              if (matchedShift) {
+                setSelectedShift(matchedShift.shift_name);
+              }
+            }
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback: Find route assigned to this vehicle's ward
+        if ((veh as any).ward_id) {
+          const match = routesList.find(r => r.ward_id === (veh as any).ward_id);
+          if (match) {
+            setSelectedRouteId(String(match.id));
+            
+            // Also select the shift of the route
+            if (match.shift_name) {
+              const matchedShift = shiftsList.find(s => 
+                s.shift_name === match.shift_name || 
+                s.shift_name.toLowerCase().includes(match.shift_name.toLowerCase().split(" ")[0])
+              );
+              if (matchedShift) {
+                setSelectedShift(matchedShift.shift_name);
+              }
+            }
+          }
+        }
+      });
+  }, [selectedImei, vehicles, routesList, shiftsList, date, routeIdParam]);
+
+  // Set selected route, ward, and zone when routeIdParam URL argument is present
+  useEffect(() => {
+    if (routeIdParam && routesList.length > 0) {
+      const route = routesList.find(r => String(r.id) === routeIdParam);
+      if (route) {
+        setSelectedRouteId(routeIdParam);
+        if (route.ward_id) {
+          setSelectedWardId(String(route.ward_id));
+          const wardRegion = regionsList.find(reg => reg.id === route.ward_id);
+          if (wardRegion && wardRegion.parent_id) {
+            setSelectedZoneId(String(wardRegion.parent_id));
+          }
+        }
+        if (route.shift_name) {
+          setSelectedShift(route.shift_name);
         }
       }
     }
-  }, [selectedImei, vehicles, routesList, shiftsList]);
+  }, [routeIdParam, routesList, regionsList]);
 
   // Init Leaflet map
   useEffect(() => {

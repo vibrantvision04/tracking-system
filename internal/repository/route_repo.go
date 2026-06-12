@@ -106,37 +106,60 @@ func (r *RouteRepository) GetCheckpointsByRoute(ctx context.Context, routeID int
 
 // Assignments
 func (r *RouteRepository) AssignRoute(ctx context.Context, vehicleID, routeID, shiftID int, date time.Time) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
 	query := `
 		INSERT INTO vehicle_route_assignments (vehicle_id, route_id, shift_id, assigned_date, is_active)
 		VALUES ($1, $2, $3, $4, true)
 		ON CONFLICT (vehicle_id, shift_id, assigned_date)
 		DO UPDATE SET route_id = EXCLUDED.route_id, is_active = true, updated_at = NOW()
 	`
-	_, err := r.db.Exec(ctx, query, vehicleID, routeID, shiftID, date.Format("2006-01-02"))
-	return err
+	_, err = tx.Exec(ctx, query, vehicleID, routeID, shiftID, date.Format("2006-01-02"))
+	if err != nil {
+		return err
+	}
+
+	// Sync Route Ward and Zone back to the Vehicle
+	var wardID *int
+	err = tx.QueryRow(ctx, `SELECT ward_id FROM route_wards WHERE route_id = $1 LIMIT 1`, routeID).Scan(&wardID)
+	if err == nil && wardID != nil {
+		var zoneID *int
+		err = tx.QueryRow(ctx, `SELECT parent_id FROM regions WHERE id = $1`, *wardID).Scan(&zoneID)
+		if err == nil && zoneID != nil {
+			_, _ = tx.Exec(ctx, `UPDATE vehicles SET ward_id = $1, zone_id = $2 WHERE id = $3`, *wardID, *zoneID, vehicleID)
+		} else {
+			_, _ = tx.Exec(ctx, `UPDATE vehicles SET ward_id = $1, zone_id = NULL WHERE id = $2`, *wardID, vehicleID)
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *RouteRepository) GetAssignedRoute(ctx context.Context, vehicleID int, date time.Time, shiftID *int, timeOfDay *string) (*VehicleRouteAssignment, error) {
 	query := `SELECT va.id, va.vehicle_id, va.route_id, va.shift_id, va.assigned_date, va.is_active
               FROM vehicle_route_assignments va
               JOIN shifts s ON va.shift_id = s.id
-              WHERE va.vehicle_id = $1 AND va.assigned_date = $2 AND va.is_active = true`
+              WHERE va.vehicle_id = $1 AND va.is_active = true`
 	
 	var args []interface{}
-	args = append(args, vehicleID, date.Format("2006-01-02"))
+	args = append(args, vehicleID)
 	
 	if shiftID != nil {
-		query += " AND va.shift_id = $3"
+		query += " AND va.shift_id = $2"
 		args = append(args, *shiftID)
 	} else if timeOfDay != nil {
 		query += ` AND (
-			(s.start_time <= s.end_time AND ($3::TIME >= s.start_time AND $3::TIME <= s.end_time))
+			(s.start_time <= s.end_time AND ($2::TIME >= s.start_time AND $2::TIME <= s.end_time))
 			OR
-			(s.start_time > s.end_time AND ($3::TIME >= s.start_time OR $3::TIME <= s.end_time))
+			(s.start_time > s.end_time AND ($2::TIME >= s.start_time OR $2::TIME <= s.end_time))
 		)`
 		args = append(args, *timeOfDay)
 	}
-	query += " LIMIT 1"
+	query += " ORDER BY va.assigned_date DESC LIMIT 1"
 
 	var a VehicleRouteAssignment
 	err := r.db.QueryRow(ctx, query, args...).
@@ -182,6 +205,39 @@ func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, 
 		ORDER BY va.id DESC
 	`
 	rows, err := r.db.Query(ctx, query, date.Format("2006-01-02"))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []VehicleRouteAssignmentDetail
+	for rows.Next() {
+		var d VehicleRouteAssignmentDetail
+		if err := rows.Scan(&d.ID, &d.VehicleID, &d.VehicleRegNo, &d.RouteID, &d.RouteName, &d.ShiftID, &d.ShiftName, &d.AssignedDate, &d.IsActive); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
+	return list, nil
+}
+
+func (r *RouteRepository) GetAllVehicleRouteAssignments(ctx context.Context) ([]VehicleRouteAssignmentDetail, error) {
+	query := `
+		SELECT 
+			va.id,
+			va.vehicle_id, COALESCE(v.registration_no, '') as vehicle_reg_no,
+			va.route_id, COALESCE(r.route_name, '') as route_name,
+			va.shift_id, COALESCE(s.shift_name, '') as shift_name,
+			TO_CHAR(va.assigned_date, 'YYYY-MM-DD') as assigned_date,
+			va.is_active
+		FROM vehicle_route_assignments va
+		JOIN vehicles v ON va.vehicle_id = v.id
+		JOIN routes r ON va.route_id = r.id
+		JOIN shifts s ON va.shift_id = s.id
+		WHERE va.is_active = true
+		ORDER BY va.id DESC
+	`
+	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}

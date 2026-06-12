@@ -85,8 +85,7 @@ export default function RouteShiftVehicle() {
 
   const loadAssignments = async () => {
     try {
-      const date = new Date().toLocaleDateString('en-CA');
-      const res = await api<{ success: boolean; data: AssignmentDetail[] }>(`/api/vehicle-route-assignments?date=${date}`);
+      const res = await api<{ success: boolean; data: AssignmentDetail[] }>('/api/vehicle-route-assignments');
       if (res.success) {
         setAssignments(res.data || []);
       }
@@ -100,7 +99,7 @@ export default function RouteShiftVehicle() {
     loadAssignments();
   }, []);
 
-  // Filter routes based on selected Ward and Shift in the form
+  // Filter routes based on selected Ward and Shift in the form, and exclude already assigned routes on the selected date
   const getFilteredRoutesForDropdown = () => {
     return routes.filter(r => {
       if (selectedWard && r.ward_id !== parseInt(selectedWard)) {
@@ -108,6 +107,30 @@ export default function RouteShiftVehicle() {
       }
       if (selectedShift && r.shift_id !== parseInt(selectedShift)) {
         return false;
+      }
+      // Dropdown Filter: One route of one shift can be assigned to only one vehicle.
+      if (selectedShift) {
+        const isAssigned = assignments.some(a => 
+          String(a.shift_id) === selectedShift && 
+          a.route_id === r.id && 
+          a.id !== editingId
+        );
+        if (isAssigned) return false;
+      }
+      return true;
+    });
+  };
+
+  // Filter vehicles based on selected Shift, excluding already assigned vehicles
+  const getFilteredVehiclesForDropdown = () => {
+    return vehicles.filter(v => {
+      if (selectedShift) {
+        const isAssigned = assignments.some(a => 
+          String(a.shift_id) === selectedShift && 
+          a.vehicle_id === v.id && 
+          a.id !== editingId
+        );
+        if (isAssigned) return false;
       }
       return true;
     });
@@ -239,9 +262,11 @@ export default function RouteShiftVehicle() {
         {/* Assignment Form Card */}
         {isFormOpen && (
           <div className="bg-white rounded-xl border border-gray-150 shadow-sm p-6 space-y-6 animate-fade-in">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-              {editingId ? "✏️ Edit Route Assignment" : "📋 Create Route Assignment"}
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                {editingId ? "✏️ Edit Route Assignment" : "📋 Create Route Assignment"}
+              </h2>
+            </div>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                 
@@ -308,7 +333,7 @@ export default function RouteShiftVehicle() {
                     className="w-full bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 text-xs text-gray-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition cursor-pointer"
                   >
                     <option value="">Select Vehicle</option>
-                    {vehicles.map(v => (
+                    {getFilteredVehiclesForDropdown().map(v => (
                       <option key={v.id} value={v.id}>{v.registration_no}</option>
                     ))}
                   </select>
