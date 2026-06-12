@@ -36,6 +36,9 @@ type Vehicle struct {
 	LastLat        float64      `json:"last_lat"`
 	LastLng        float64      `json:"last_lng"`
 	LastTime       *time.Time   `json:"last_time"`
+	AssignedRouteName string    `json:"assigned_route_name,omitempty"`
+	AssignedZoneID    int       `json:"assigned_zone_id,omitempty"`
+	AssignedZoneName  string    `json:"assigned_zone_name,omitempty"`
 }
 
 type VehicleRepository struct {
@@ -49,18 +52,32 @@ func NewVehicleRepository(pool *pgxpool.Pool) *VehicleRepository {
 func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 	// Joining with vehicle_types and gps_devices via mapping table
 	// Also pulls speed from latest_gps_data to compute live status
+	// Also resolves current active route and zone assignments
 	query := `
 		SELECT 
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
 			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
-			COALESCE(lp.speed, 0)
+			COALESCE(lp.speed, 0),
+			COALESCE(r.route_name, '') as assigned_route_name,
+			COALESCE(z.id, 0) as assigned_zone_id,
+			COALESCE(z.region_name, '') as assigned_zone_name
 		FROM vehicles v
 		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
+		LEFT JOIN (
+			SELECT DISTINCT ON (vehicle_id) vehicle_id, route_id
+			FROM vehicle_route_assignments
+			WHERE is_active = true
+			ORDER BY vehicle_id, assigned_date DESC, id DESC
+		) va ON v.id = va.vehicle_id
+		LEFT JOIN routes r ON va.route_id = r.id
+		LEFT JOIN route_wards rw ON r.id = rw.route_id
+		LEFT JOIN regions w ON rw.ward_id = w.id
+		LEFT JOIN regions z ON w.parent_id = z.id
 		ORDER BY v.id
 	`
 	rows, err := r.pool.Query(ctx, query)
@@ -83,6 +100,7 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
 			&v.LastLat, &v.LastLng, &v.LastTime,
 			&speed,
+			&v.AssignedRouteName, &v.AssignedZoneID, &v.AssignedZoneName,
 		)
 		if err == nil {
 			v.VehicleTypeID = vTypeId

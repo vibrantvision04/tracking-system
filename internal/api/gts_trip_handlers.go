@@ -114,19 +114,19 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 		SELECT 
 			v.id, 
 			COALESCE(v.registration_no, ''), 
-			w.id AS ward_id, 
+			COALESCE(w.id, 0) AS ward_id, 
 			COALESCE(w.region_name, ''), 
-			z.id AS zone_id, 
-			COALESCE(z.region_name, ''),
+			COALESCE(z.region_name, '') AS zone_name,
 			g_ward.polygon,
 			vra.route_id
 		FROM vehicles v
-		JOIN vehicle_regions vr ON v.id = vr.vehicle_id
-		JOIN regions w ON vr.region_id = w.id AND w.region_type_id = 3
-		LEFT JOIN regions z ON w.parent_id = z.id
-		LEFT JOIN geofences g_ward ON w.geofence_id = g_ward.id
+		LEFT JOIN vehicle_regions vr ON v.id = vr.vehicle_id
+		LEFT JOIN regions z ON COALESCE(vr.region_id, v.zone_id) = z.id AND z.region_type_id = 2
 		LEFT JOIN vehicle_route_assignments vra ON v.id = vra.vehicle_id AND vra.assigned_date = $1 AND vra.is_active = true
 		LEFT JOIN routes r ON vra.route_id = r.id
+		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards rw WHERE route_id = vra.route_id LIMIT 1) rw ON true
+		LEFT JOIN regions w ON COALESCE(rw.ward_id, v.ward_id) = w.id AND w.region_type_id = 3
+		LEFT JOIN geofences g_ward ON w.geofence_id = g_ward.id
 		WHERE 1=1
 	`
 	args := []interface{}{dayStart}
@@ -143,7 +143,7 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 		argIdx++
 	}
 	if filterZoneID > 0 {
-		query += fmt.Sprintf(" AND w.parent_id = $%d", argIdx)
+		query += fmt.Sprintf(" AND z.id = $%d", argIdx)
 		args = append(args, filterZoneID)
 		argIdx++
 	}

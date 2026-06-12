@@ -13,7 +13,13 @@ import DeleteButton from "@/components/ui/DeleteButton";
 import EditButton from "@/components/ui/EditButton";
 import Table from "@/components/shared/Table";
 
-interface Vehicle { id: number; registration_no: string; }
+interface Vehicle { 
+  id: number; 
+  registration_no: string; 
+  assigned_route_name?: string;
+  assigned_zone_id?: number;
+  assigned_zone_name?: string;
+}
 interface Zone { id: number; region_name: string; }
 interface VehicleRegionMapping { id: number; vehicle_id: number; vehicle_name: string; region_id: number; region_name: string; created_at: string; }
 
@@ -80,6 +86,19 @@ export default function VehicleRegionPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFormOpen]);
+
+  // Auto-snap zone selection when a vehicle with an active route assignment is selected
+  useEffect(() => {
+    if (formData.vehicle_id) {
+      const veh = vehicles.find(v => String(v.id) === String(formData.vehicle_id));
+      if (veh && veh.assigned_zone_id && veh.assigned_zone_id > 0) {
+        setFormData(prev => ({ ...prev, region_id: String(veh.assigned_zone_id) }));
+      }
+    }
+  }, [formData.vehicle_id, vehicles]);
+
+  const selectedVehicleObj = vehicles.find(v => String(v.id) === String(formData.vehicle_id));
+  const isZoneLocked = selectedVehicleObj && selectedVehicleObj.assigned_zone_id && selectedVehicleObj.assigned_zone_id > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,22 +169,30 @@ export default function VehicleRegionPage() {
                     className="w-full px-4 py-2.5 bg-theme-surface border border-theme-border rounded-xl text-sm text-theme-text outline-none focus:border-emerald-500 transition"
                   >
                     <option value="" className="bg-theme-surface">Select Vehicle</option>
-                    {vehicles.map(v => (
-                      <option key={v.id} value={v.id} className="bg-theme-surface">{v.registration_no}</option>
-                    ))}
+                    {vehicles
+                      .filter(v => isEditing || !mappings.some(m => m.vehicle_id === v.id) || String(formData.vehicle_id) === String(v.id))
+                      .map(v => (
+                        <option key={v.id} value={v.id} className="bg-theme-surface">{v.registration_no}</option>
+                      ))}
                   </select>
                   {formErrors.vehicle_id && <span className="text-[10px] font-semibold text-rose-500 mt-1 block">{formErrors.vehicle_id}</span>}
                   
                   <select
                     value={formData.region_id}
                     onChange={e => setFormData({ ...formData, region_id: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-theme-surface border border-theme-border rounded-xl text-sm text-theme-text outline-none focus:border-emerald-500 transition"
+                    disabled={!!isZoneLocked}
+                    className="w-full px-4 py-2.5 bg-theme-surface border border-theme-border rounded-xl text-sm text-theme-text outline-none focus:border-emerald-500 transition disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <option value="" className="bg-theme-surface">Select Zone</option>
                     {zones.map(z => (
                       <option key={z.id} value={z.id} className="bg-theme-surface">{z.region_name}</option>
                     ))}
                   </select>
+                  {isZoneLocked && (
+                    <span className="text-[10px] font-medium text-amber-500 mt-1 block">
+                      Locked to {selectedVehicleObj.assigned_zone_name} because vehicle is assigned to Route: {selectedVehicleObj.assigned_route_name}
+                    </span>
+                  )}
                   {formErrors.region_id && <span className="text-[10px] font-semibold text-rose-500 mt-1 block">{formErrors.region_id}</span>}
                 </div>
                 <div className="flex gap-3 pt-2 border-t border-theme-border">

@@ -413,7 +413,7 @@ export default function RouteShiftVehicle() {
                   </tr>
                 ) : (
                   currentData.map((item, idx) => (
-                    <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                    <tr key={`${item.id}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                       <td className="py-4 px-6 text-center text-gray-400 font-mono text-[11px]">
                         {(currentPage - 1) * itemsPerPage + idx + 1}
                       </td>

@@ -83,18 +83,21 @@ func (h *Handler) RebuildCache() {
 
 	for _, v := range vehicles {
 		m := map[string]interface{}{
-			"id":              v.ID,
-			"registration_no": v.RegistrationNo,
-			"chassis_no":      v.ChassisNo,
-			"is_owned":        v.IsOwned,
-			"vehicle_type_id": v.VehicleTypeID,
-			"is_active":       v.IsActive,
-			"vehicle_type":    v.VehicleType,
-			"gps_device":      v.GpsDevice,
-			"status":          v.Status,
-			"last_lat":        v.LastLat,
-			"last_lng":        v.LastLng,
-			"last_time":       v.LastTime,
+			"id":                  v.ID,
+			"registration_no":     v.RegistrationNo,
+			"chassis_no":          v.ChassisNo,
+			"is_owned":            v.IsOwned,
+			"vehicle_type_id":     v.VehicleTypeID,
+			"is_active":           v.IsActive,
+			"vehicle_type":        v.VehicleType,
+			"gps_device":          v.GpsDevice,
+			"status":              v.Status,
+			"last_lat":            v.LastLat,
+			"last_lng":            v.LastLng,
+			"last_time":           v.LastTime,
+			"assigned_route_name": v.AssignedRouteName,
+			"assigned_zone_id":    v.AssignedZoneID,
+			"assigned_zone_name":  v.AssignedZoneName,
 		}
 		
 		

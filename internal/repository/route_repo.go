@@ -131,6 +131,13 @@ func (r *RouteRepository) AssignRoute(ctx context.Context, vehicleID, routeID, s
 		err = tx.QueryRow(ctx, `SELECT parent_id FROM regions WHERE id = $1`, *wardID).Scan(&zoneID)
 		if err == nil && zoneID != nil {
 			_, _ = tx.Exec(ctx, `UPDATE vehicles SET ward_id = $1, zone_id = $2 WHERE id = $3`, *wardID, *zoneID, vehicleID)
+			
+			// Automatically create/update entry inside vehicle-zone mapping (vehicle_regions table)
+			_, _ = tx.Exec(ctx, `
+				INSERT INTO vehicle_regions (vehicle_id, region_id)
+				VALUES ($1, $2)
+				ON CONFLICT (vehicle_id) DO UPDATE SET region_id = $2
+			`, vehicleID, *zoneID)
 		} else {
 			_, _ = tx.Exec(ctx, `UPDATE vehicles SET ward_id = $1, zone_id = NULL WHERE id = $2`, *wardID, vehicleID)
 		}
@@ -324,7 +331,8 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 		JOIN vehicles v ON va.vehicle_id = v.id
 		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
 		LEFT JOIN regions w ON rw.ward_id = w.id
-		LEFT JOIN regions z ON w.parent_id = z.id
+		LEFT JOIN vehicle_regions vr ON v.id = vr.vehicle_id
+		LEFT JOIN regions z ON COALESCE(vr.region_id, v.zone_id) = z.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
 		WHERE va.assigned_date >= $1 AND va.assigned_date <= $2 AND va.is_active = true

@@ -48,22 +48,58 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	end := start.Add(24 * time.Hour)
 
-	// Auto-lookup zone and ward if not provided
-	var zoneName, wardName string
+	// Resolve Zone from vehicle_regions mapping (Vehicle-Zone Assignments page)
+	var zoneName string
 	err := s.gRepo.Pool().QueryRow(ctx, `
-		SELECT COALESCE(z.region_name, ''), COALESCE(w.region_name, '')
-		FROM vehicles v
-		LEFT JOIN regions z ON v.zone_id = z.id
-		LEFT JOIN regions w ON v.ward_id = w.id
-		WHERE v.id = $1
-	`, vehicleID).Scan(&zoneName, &wardName)
-	if err == nil {
-		if zone == "" {
-			zone = zoneName
-		}
-		if ward == "" {
-			ward = wardName
-		}
+		SELECT COALESCE(r.region_name, '')
+		FROM vehicle_regions vr
+		JOIN regions r ON vr.region_id = r.id
+		WHERE vr.vehicle_id = $1
+	`, vehicleID).Scan(&zoneName)
+	if err != nil || zoneName == "" {
+		// Fallback to vehicle's default zone_id in vehicles table
+		_ = s.gRepo.Pool().QueryRow(ctx, `
+			SELECT COALESCE(r.region_name, '')
+			FROM vehicles v
+			LEFT JOIN regions r ON v.zone_id = r.id
+			WHERE v.id = $1
+		`, vehicleID).Scan(&zoneName)
+	}
+
+	// Resolve Ward from vehicle_route_assignments mapping (Route to Vehicle & Shift page)
+	var wardName string
+	err = s.gRepo.Pool().QueryRow(ctx, `
+		WITH active_assignment AS (
+			SELECT route_id 
+			FROM vehicle_route_assignments 
+			WHERE vehicle_id = $1 AND is_active = true 
+			ORDER BY assigned_date DESC LIMIT 1
+		),
+		assigned_route_ward AS (
+			SELECT rw.ward_id 
+			FROM active_assignment aa
+			JOIN route_wards rw ON aa.route_id = rw.route_id
+			LIMIT 1
+		)
+		SELECT COALESCE(r.region_name, '')
+		FROM assigned_route_ward arw
+		JOIN regions r ON arw.ward_id = r.id
+	`, vehicleID).Scan(&wardName)
+	if err != nil || wardName == "" {
+		// Fallback to vehicle's default ward_id in vehicles table
+		_ = s.gRepo.Pool().QueryRow(ctx, `
+			SELECT COALESCE(r.region_name, '')
+			FROM vehicles v
+			LEFT JOIN regions r ON v.ward_id = r.id
+			WHERE v.id = $1
+		`, vehicleID).Scan(&wardName)
+	}
+
+	if zone == "" {
+		zone = zoneName
+	}
+	if ward == "" {
+		ward = wardName
 	}
 
 	// Fetch ward polygon GeoJSON for geofencing

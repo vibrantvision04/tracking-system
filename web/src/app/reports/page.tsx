@@ -222,7 +222,7 @@ export default function ReportsPage() {
                     </tr>
                   ) : (
                     reports.map((r, i) => (
-                      <tr key={r.id} className="hover:bg-theme-surface transition">
+                      <tr key={`${r.id}-${i}`} className="hover:bg-theme-surface transition">
                         <td className="px-3 py-3">{(page - 1) * limit + i + 1}</td>
                         <td className="px-3 py-3 whitespace-nowrap">{new Date(r.report_date).toLocaleDateString()}</td>
                         <td className="px-3 py-3 font-bold text-slate-900 whitespace-nowrap">{r.registration_no}</td>
