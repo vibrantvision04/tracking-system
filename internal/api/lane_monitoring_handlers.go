@@ -57,9 +57,10 @@ func (h *Handler) GetLaneMonitoringReport(w http.ResponseWriter, r *http.Request
 		// Fallback to vehicle_route_assignments
 		err = db.QueryRow(ctx, `
 			SELECT vehicle_id FROM vehicle_route_assignments
-			WHERE route_id = $1 AND assigned_date = $2 AND is_active = true
+			WHERE route_id = $1 AND is_active = true
+			ORDER BY assigned_date DESC, id DESC
 			LIMIT 1
-		`, routeID, dateFilter).Scan(&vehicleID)
+		`, routeID).Scan(&vehicleID)
 	}
 
 	// 2. Fetch all checkpoints for the route

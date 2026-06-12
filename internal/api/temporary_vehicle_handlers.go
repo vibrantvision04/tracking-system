@@ -222,27 +222,17 @@ func (h *Handler) GetRegularVehicleForRoute(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	dateStr := r.URL.Query().Get("date")
-	var targetDate time.Time
-	if dateStr == "" {
-		targetDate = utils.CurrentTimeInIndia()
-	} else {
-		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
-		if err != nil {
-			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
-			return
-		}
-		targetDate = parsedDate
-	}
+	// targetDate is no longer used for the fallback vehicle query
 
 	var registrationNo string
 	err = db.QueryRow(ctx, `
 		SELECT v.registration_no 
 		FROM vehicle_route_assignments va 
 		JOIN vehicles v ON va.vehicle_id = v.id 
-		WHERE va.route_id = $1 AND va.assigned_date = $2 AND va.is_active = true 
+		WHERE va.route_id = $1 AND va.is_active = true 
+		ORDER BY va.assigned_date DESC, va.id DESC
 		LIMIT 1
-	`, routeID, targetDate.Format("2006-01-02")).Scan(&registrationNo)
+	`, routeID).Scan(&registrationNo)
 
 	if err != nil {
 		// No regular vehicle found, return success: true but empty vehicle name

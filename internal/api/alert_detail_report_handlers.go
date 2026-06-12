@@ -67,7 +67,12 @@ func (h *Handler) GetAlertDetailReport(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN regions w ON v.ward_id = w.id
 		LEFT JOIN regions z ON v.zone_id = z.id
-		LEFT JOIN vehicle_route_assignments vra ON v.id = vra.vehicle_id AND vra.assigned_date = DATE(a.time_reported)
+		LEFT JOIN (
+			SELECT DISTINCT ON (vehicle_id) vehicle_id, route_id
+			FROM vehicle_route_assignments
+			WHERE is_active = true
+			ORDER BY vehicle_id, assigned_date DESC, id DESC
+		) vra ON v.id = vra.vehicle_id
 		LEFT JOIN routes rt ON vra.route_id = rt.id
 		LEFT JOIN shifts s ON rt.shift_id = s.id
 		WHERE DATE(a.time_reported) = $1

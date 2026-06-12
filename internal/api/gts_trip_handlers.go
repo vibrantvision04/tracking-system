@@ -122,15 +122,20 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 		FROM vehicles v
 		LEFT JOIN vehicle_regions vr ON v.id = vr.vehicle_id
 		LEFT JOIN regions z ON COALESCE(vr.region_id, v.zone_id) = z.id AND z.region_type_id = 2
-		LEFT JOIN vehicle_route_assignments vra ON v.id = vra.vehicle_id AND vra.assigned_date = $1 AND vra.is_active = true
+		LEFT JOIN (
+			SELECT DISTINCT ON (vehicle_id) vehicle_id, route_id
+			FROM vehicle_route_assignments
+			WHERE is_active = true
+			ORDER BY vehicle_id, assigned_date DESC, id DESC
+		) vra ON v.id = vra.vehicle_id
 		LEFT JOIN routes r ON vra.route_id = r.id
 		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards rw WHERE route_id = vra.route_id LIMIT 1) rw ON true
 		LEFT JOIN regions w ON COALESCE(rw.ward_id, v.ward_id) = w.id AND w.region_type_id = 3
 		LEFT JOIN geofences g_ward ON w.geofence_id = g_ward.id
 		WHERE 1=1
 	`
-	args := []interface{}{dayStart}
-	argIdx := 2
+	args := []interface{}{}
+	argIdx := 1
 
 	if filterVehicleID > 0 {
 		query += fmt.Sprintf(" AND v.id = $%d", argIdx)

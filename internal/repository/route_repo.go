@@ -197,7 +197,7 @@ func (r *RouteRepository) GetShifts(ctx context.Context) ([]Shift, error) {
 
 func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, date time.Time) ([]VehicleRouteAssignmentDetail, error) {
 	query := `
-		SELECT 
+		SELECT DISTINCT ON (va.vehicle_id)
 			va.id,
 			va.vehicle_id, COALESCE(v.registration_no, '') as vehicle_reg_no,
 			va.route_id, COALESCE(r.route_name, '') as route_name,
@@ -208,10 +208,10 @@ func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, 
 		JOIN vehicles v ON va.vehicle_id = v.id
 		JOIN routes r ON va.route_id = r.id
 		JOIN shifts s ON va.shift_id = s.id
-		WHERE va.assigned_date = $1 AND va.is_active = true
-		ORDER BY va.id DESC
+		WHERE va.is_active = true
+		ORDER BY va.vehicle_id, va.assigned_date DESC, va.id DESC
 	`
-	rows, err := r.db.Query(ctx, query, date.Format("2006-01-02"))
+	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, 
 
 func (r *RouteRepository) GetAllVehicleRouteAssignments(ctx context.Context) ([]VehicleRouteAssignmentDetail, error) {
 	query := `
-		SELECT 
+		SELECT DISTINCT ON (va.vehicle_id)
 			va.id,
 			va.vehicle_id, COALESCE(v.registration_no, '') as vehicle_reg_no,
 			va.route_id, COALESCE(r.route_name, '') as route_name,
@@ -242,7 +242,7 @@ func (r *RouteRepository) GetAllVehicleRouteAssignments(ctx context.Context) ([]
 		JOIN routes r ON va.route_id = r.id
 		JOIN shifts s ON va.shift_id = s.id
 		WHERE va.is_active = true
-		ORDER BY va.id DESC
+		ORDER BY va.vehicle_id, va.assigned_date DESC, va.id DESC
 	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
@@ -404,13 +404,17 @@ func (r *RouteRepository) GetDashboardCoverageData(ctx context.Context, date str
 	// First get the active assignments and total checkpoints for each vehicle
 	queryAssignments := `
 		SELECT va.vehicle_id, r.id, COUNT(rc.id) as total_checkpoints
-		FROM vehicle_route_assignments va
+		FROM (
+			SELECT DISTINCT ON (vehicle_id) vehicle_id, route_id
+			FROM vehicle_route_assignments
+			WHERE is_active = true
+			ORDER BY vehicle_id, assigned_date DESC, id DESC
+		) va
 		JOIN routes r ON va.route_id = r.id
 		LEFT JOIN route_checkpoints rc ON r.id = rc.route_id
-		WHERE va.assigned_date = $1 AND va.is_active = true
 		GROUP BY va.vehicle_id, r.id
 	`
-	rows, err := r.db.Query(ctx, queryAssignments, date)
+	rows, err := r.db.Query(ctx, queryAssignments)
 	if err != nil {
 		return nil, err
 	}

@@ -1072,7 +1072,12 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 				COALESCE(v.ward_id, 0), COALESCE(w.region_name, '15 - Ward - 15'),
 				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.captured_at
 			FROM vehicles v
-			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
+			JOIN (
+				SELECT DISTINCT ON (vehicle_id) vehicle_id, route_id
+				FROM vehicle_route_assignments
+				WHERE is_active = true
+				ORDER BY vehicle_id, assigned_date DESC, id DESC
+			) va ON v.id = va.vehicle_id
 			JOIN routes r ON va.route_id = r.id AND r.is_active = true
 			JOIN shifts s ON r.shift_id = s.id AND s.is_active = true
 			LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
@@ -1081,10 +1086,9 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
 			LEFT JOIN regions w ON v.ward_id = w.id AND w.region_type_id = 3
 			LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
-			WHERE va.assigned_date = $1 AND s.id = $2
+			WHERE s.id = $1
 		`
-		assignedDateStr := shiftStart.Format("2006-01-02")
-		rows, err = h.gpsRepo.Pool().Query(ctx, query, assignedDateStr, activeShiftID)
+		rows, err = h.gpsRepo.Pool().Query(ctx, query, activeShiftID)
 	} else {
 		query := `
 			SELECT 
@@ -1095,7 +1099,12 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 				COALESCE(v.ward_id, 0), COALESCE(w.region_name, '15 - Ward - 15'),
 				COALESCE(lp.lat, 0.0), COALESCE(lp.lng, 0.0), lp.captured_at
 			FROM vehicles v
-			JOIN vehicle_route_assignments va ON v.id = va.vehicle_id AND va.is_active = true
+			JOIN (
+				SELECT DISTINCT ON (vehicle_id) vehicle_id, route_id
+				FROM vehicle_route_assignments
+				WHERE is_active = true
+				ORDER BY vehicle_id, assigned_date DESC, id DESC
+			) va ON v.id = va.vehicle_id
 			JOIN routes r ON va.route_id = r.id AND r.is_active = true
 			JOIN shifts s ON r.shift_id = s.id AND s.is_active = true
 			LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
@@ -1104,9 +1113,8 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 			LEFT JOIN regions z ON v.zone_id = z.id AND z.region_type_id = 2
 			LEFT JOIN regions w ON v.ward_id = w.id AND w.region_type_id = 3
 			LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
-			WHERE va.assigned_date = $1
 		`
-		rows, err = h.gpsRepo.Pool().Query(ctx, query, todayStr)
+		rows, err = h.gpsRepo.Pool().Query(ctx, query)
 	}
 
 	if err != nil {
