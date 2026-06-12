@@ -14,11 +14,13 @@ import (
 )
 
 type GTSTripReportRow struct {
-	VehicleID      int    `json:"vehicle_id"`
-	RegistrationNo string `json:"registration_no"`
-	ZoneName       string `json:"zone_name"`
-	WardName       string `json:"ward_name"`
-	TripCount      int    `json:"trip_count"`
+	VehicleID        int      `json:"vehicle_id"`
+	RegistrationNo   string   `json:"registration_no"`
+	ZoneName         string   `json:"zone_name"`
+	WardName         string   `json:"ward_name"`
+	TripCount        int      `json:"trip_count"`
+	RejectedCount    int      `json:"rejected_count"`
+	RejectionReasons []string `json:"rejection_reasons"`
 }
 
 type TransferStationInfo struct {
@@ -235,17 +237,21 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 		if len(gpsData) == 0 {
 			// No data, trip count is 0
 			results = append(results, GTSTripReportRow{
-				VehicleID:      task.ID,
-				RegistrationNo: task.RegistrationNo,
-				ZoneName:       task.ZoneName,
-				WardName:       task.WardName,
-				TripCount:      0,
+				VehicleID:        task.ID,
+				RegistrationNo:   task.RegistrationNo,
+				ZoneName:         task.ZoneName,
+				WardName:         task.WardName,
+				TripCount:        0,
+				RejectedCount:    0,
+				RejectionReasons: []string{"No GPS data available"},
 			})
 			continue
 		}
 
 		// 4. Chronological State-Machine Validation Engine
 		tripCount := 0
+		rejectedCount := 0
+		var rejectionReasons []string
 		eligibleForDump := false
 		var cooldownUntil *time.Time
 		var lastInsideWardTime *time.Time
@@ -323,13 +329,14 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 			// --- ELIGIBILITY EVALUATION ---
 			if tripCount == 0 {
 				// Phase 1 Eligibility Rules
-				if insideWardDuration >= 10*time.Minute && len(laneCheckpointsValidated) >= 1 && routeDistanceCovered > 0 {
+				routeActivitySatisfied := len(checkpoints) == 0 || len(laneCheckpointsValidated) >= 1
+				if insideWardDuration >= 10*time.Minute && routeActivitySatisfied && routeDistanceCovered > 0 {
 					eligibleForDump = true
 				}
 			} else {
 				// Phase 4 Eligibility Rules
 				wardTimeSatisfied := insideWardDuration >= 10*time.Minute
-				routeActivitySatisfied := len(laneCheckpointsValidated) >= 1 || routeDistanceCovered > 0
+				routeActivitySatisfied := len(checkpoints) == 0 || len(laneCheckpointsValidated) >= 1 || routeDistanceCovered > 0
 				if cooldownComplete && wardTimeSatisfied && routeActivitySatisfied {
 					eligibleForDump = true
 				}
@@ -435,6 +442,32 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 						insideWardDuration = 0
 						laneCheckpointsValidated = make(map[int]bool)
 						routeDistanceCovered = 0.0
+					} else {
+						// REJECTED TRIP
+						rejectedCount++
+						reasonStr := fmt.Sprintf("[%s] Rejected: ", pt.Time.Format("15:04"))
+						var rList []string
+						if !eligibleForDump {
+							rList = append(rList, "Not eligible (ward stay < 10m or no route activity)")
+						}
+						if !minStayPassed {
+							rList = append(rList, fmt.Sprintf("Ignition ON < 60s (was %ds)", int(sessionMaxContinuousIgnitionOnTime.Seconds())))
+						}
+						if !speedValid {
+							rList = append(rList, fmt.Sprintf("Speed > 5km/h (max %.1f)", sessionMaxSpeed))
+						}
+						if !dumpZoneValid {
+							rList = append(rList, "Didn't touch dump zone radius")
+						}
+						if len(rList) > 0 {
+							reasonStr += rList[0]
+							for i := 1; i < len(rList); i++ {
+								reasonStr += ", " + rList[i]
+							}
+						} else {
+							reasonStr += "Unknown reason"
+						}
+						rejectionReasons = append(rejectionReasons, reasonStr)
 					}
 				}
 			}
@@ -445,11 +478,13 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 		}
 
 		results = append(results, GTSTripReportRow{
-			VehicleID:      task.ID,
-			RegistrationNo: task.RegistrationNo,
-			ZoneName:       task.ZoneName,
-			WardName:       task.WardName,
-			TripCount:      tripCount,
+			VehicleID:        task.ID,
+			RegistrationNo:   task.RegistrationNo,
+			ZoneName:         task.ZoneName,
+			WardName:         task.WardName,
+			TripCount:        tripCount,
+			RejectedCount:    rejectedCount,
+			RejectionReasons: rejectionReasons,
 		})
 	}
 

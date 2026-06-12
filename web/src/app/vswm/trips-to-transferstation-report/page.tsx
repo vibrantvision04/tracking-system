@@ -13,6 +13,8 @@ interface GTSTripRow {
 	zone_name: string;
 	ward_name: string;
 	trip_count: number;
+	rejected_count: number;
+	rejection_reasons: string[];
 }
 
 export default function GTSTripReportPage() {
@@ -267,7 +269,13 @@ export default function GTSTripReportPage() {
 										WARD
 									</span>,
 									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
-										TRIPS TO TRANSFER STATION
+										VALID TRIPS
+									</span>,
+									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider text-red-600">
+										REJECTED TRIPS
+									</span>,
+									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider text-red-600">
+										REJECTION REASONS
 									</span>,
 								]}
 								isLoading={loading}
@@ -290,8 +298,22 @@ export default function GTSTripReportPage() {
 										<td className="py-3 px-5 text-slate-600 text-[12px] print:text-black">
 											{row.ward_name || "—"}
 										</td>
-										<td className="py-3 px-5 text-slate-800 font-bold text-[12px] print:text-black">
+										<td className="px-6 py-4 text-xs font-semibold text-emerald-700">
 											{row.trip_count}
+										</td>
+										<td className="px-6 py-4 text-xs font-semibold text-red-600">
+											{row.rejected_count}
+										</td>
+										<td className="px-6 py-4 text-[11px] text-slate-500 max-w-[300px]">
+											{row.rejection_reasons && row.rejection_reasons.length > 0 ? (
+												<ul className="list-disc pl-4 space-y-1">
+													{row.rejection_reasons.map((reason, i) => (
+														<li key={i}>{reason}</li>
+													))}
+												</ul>
+											) : (
+												<span className="text-slate-300">-</span>
+											)}
 										</td>
 									</tr>
 								))}
