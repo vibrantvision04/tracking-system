@@ -146,7 +146,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Put("/vehicle-departments/{id}", h.UpdateVehicleDepartment)
 		r.Delete("/vehicle-departments/{id}", h.DeleteVehicleDepartment)
 
-		// Reports
+		// Reports (existing — DO NOT MODIFY)
 		r.Get("/reports/d2d-coverage", h.GetD2DRouteCoverageReport)
 		r.Get("/reports/alert-detail", h.GetAlertDetailReport)
 		r.Get("/reports/lane-monitoring", h.GetLaneMonitoringReport)
@@ -154,6 +154,14 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Get("/reports/geofence-event", h.GetGeofenceEventReport)
 		r.Get("/reports/ward-geofence", h.GetWardGeofenceReport)
 		r.Get("/reports/gts-trips", h.GetGTSTripReport)
+
+		// Ultimate Reports — new independent module (does not affect existing Reports)
+		r.Get("/ultimate-reports/daily-excel", h.GetUltimateDailyExcelReport)
+		r.Get("/ultimate-reports/template", h.DownloadUltimateTemplate)
+		r.Get("/ultimate-reports/list", h.GetUltimateReportList)
+		r.Get("/ultimate-reports/exceptions", h.GetDailyExceptions)
+		r.Post("/ultimate-reports/exceptions", h.CreateDailyException)
+		r.Delete("/ultimate-reports/exceptions", h.DeleteDailyException)
 
 
 

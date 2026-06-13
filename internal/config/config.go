@@ -28,6 +28,8 @@ type Config struct {
 	RequireSequentialCheckpoints bool
 	MaxCheckpointSpeedKmh        float64
 	AllowHistoricalRecalculation bool
+	// Ultimate Reports engine
+	ReportTemplatePath           string // REPORT_TEMPLATE_PATH env var
 }
 
 func LoadConfig() *Config {
@@ -66,7 +68,20 @@ func LoadConfig() *Config {
 		RequireSequentialCheckpoints: getEnvBool("REQUIRE_SEQUENTIAL_CHECKPOINTS", false),
 		MaxCheckpointSpeedKmh:        getEnvFloat("MAX_CHECKPOINT_SPEED_KMH", 10.0),
 		AllowHistoricalRecalculation: true, // Hardcoded boolean directly in code
+		ReportTemplatePath:           getTemplatePath(),
 	}
+}
+
+func getTemplatePath() string {
+	path := getEnv("REPORT_TEMPLATE_PATH", "./storage/report-templates")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		// Fallback for when running via `go run main.go` inside cmd/server/
+		fallback := "../../storage/report-templates"
+		if _, err := os.Stat(fallback); err == nil {
+			return fallback
+		}
+	}
+	return path
 }
 
 func getEnv(key, fallback string) string {

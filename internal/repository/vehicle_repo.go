@@ -39,6 +39,10 @@ type Vehicle struct {
 	AssignedRouteName string    `json:"assigned_route_name,omitempty"`
 	AssignedZoneID    int       `json:"assigned_zone_id,omitempty"`
 	AssignedZoneName  string    `json:"assigned_zone_name,omitempty"`
+	AssignedWardID    int       `json:"assigned_ward_id,omitempty"`
+	AssignedRouteID   int       `json:"assigned_route_id,omitempty"`
+	ZoneID         *int         `json:"zone_id,omitempty"`
+	WardID         *int         `json:"ward_id,omitempty"`
 }
 
 type VehicleRepository struct {
@@ -62,7 +66,10 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			COALESCE(lp.speed, 0),
 			COALESCE(r.route_name, '') as assigned_route_name,
 			COALESCE(z.id, 0) as assigned_zone_id,
-			COALESCE(z.region_name, '') as assigned_zone_name
+			COALESCE(z.region_name, '') as assigned_zone_name,
+			v.zone_id, v.ward_id,
+			COALESCE(w.id, 0) as assigned_ward_id,
+			COALESCE(r.id, 0) as assigned_route_id
 		FROM vehicles v
 		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
@@ -101,6 +108,8 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			&v.LastLat, &v.LastLng, &v.LastTime,
 			&speed,
 			&v.AssignedRouteName, &v.AssignedZoneID, &v.AssignedZoneName,
+			&v.ZoneID, &v.WardID,
+			&v.AssignedWardID, &v.AssignedRouteID,
 		)
 		if err == nil {
 			v.VehicleTypeID = vTypeId
@@ -136,7 +145,8 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
 			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active,
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
-			COALESCE(lp.speed, 0)
+			COALESCE(lp.speed, 0),
+			v.zone_id, v.ward_id
 		FROM vehicles v
 		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
@@ -156,6 +166,7 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
 		&v.LastLat, &v.LastLng, &v.LastTime,
 		&speed,
+		&v.ZoneID, &v.WardID,
 	)
 	if err != nil {
 		return nil, err
@@ -176,7 +187,8 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
 			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
-			COALESCE(lp.speed, 0)
+			COALESCE(lp.speed, 0),
+			v.zone_id, v.ward_id
 		FROM vehicles v
 		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
@@ -196,6 +208,7 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
 		&v.LastLat, &v.LastLng, &v.LastTime,
 		&speed,
+		&v.ZoneID, &v.WardID,
 	)
 	if err != nil {
 		return nil, err

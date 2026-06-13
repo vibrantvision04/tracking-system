@@ -9,6 +9,7 @@ import (
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
 	"gps-tracking-system/internal/tcp"
+	"gps-tracking-system/internal/ultimatereport"
 	"gps-tracking-system/internal/worker"
 	"gps-tracking-system/internal/ws"
 	"net/http"
@@ -94,6 +95,24 @@ func main() {
 
 	// 12. Start Servers
 	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo, routeEngine, openDepotRepo, cfg.JWTSecret, cfg.AllowHistoricalRecalculation)
+
+	// Ultimate Reports engine — independent module, wired separately so NewHandler signature stays unchanged
+	urRepo := ultimatereport.NewUltimateReportRepository(db)
+	urSvc := ultimatereport.NewUltimateReportService(urRepo)
+	urEngine := ultimatereport.NewExcelEngine(cfg.ReportTemplatePath)
+	handler.SetUltimateReportEngine(urSvc, urEngine, cfg.ReportTemplatePath)
+	// Register the Ultimate Daily Report in the pluggable registry
+	ultimateReportDef := &ultimatereport.ReportDefinition{
+		ID:           "ultimate-daily",
+		Name:         "Ultimate Report",
+		TemplateName: "ultimate-report.xlsx",
+		Description:  "Daily fleet performance report with zone-wise coverage, distance, speed, and trip data",
+	}
+	ultimateReportDef.Builder = func(ctx context.Context, date time.Time) (*ultimatereport.ReportData, error) {
+		return urSvc.BuildReportData(ctx, date)
+	}
+	ultimatereport.Register(ultimateReportDef)
+
 	router := api.SetupRouter(handler, hub, cfg)
 
 	// API Server (Handles both HTTP and WebSockets)

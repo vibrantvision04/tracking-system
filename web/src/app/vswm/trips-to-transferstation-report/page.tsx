@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
+import SearchableDropdown from "@/components/shared/SearchableDropdown";
 
 interface GTSTripRow {
 	vehicle_id: number;
@@ -27,6 +28,21 @@ export default function GTSTripReportPage() {
 	const [routeTypes, setRouteTypes] = useState<any[]>([]);
 	const [vehicles, setVehicles] = useState<any[]>([]);
 
+	const [zoneSearch, setZoneSearch] = useState("");
+	const [wardSearch, setWardSearch] = useState("");
+	const [routeTypeSearch, setRouteTypeSearch] = useState("");
+	const [vehicleSearch, setVehicleSearch] = useState("");
+
+	const [zoneOpen, setZoneOpen] = useState(false);
+	const [wardOpen, setWardOpen] = useState(false);
+	const [routeTypeOpen, setRouteTypeOpen] = useState(false);
+	const [vehicleOpen, setVehicleOpen] = useState(false);
+
+	const zoneRef = useRef<HTMLDivElement>(null);
+	const wardRef = useRef<HTMLDivElement>(null);
+	const routeTypeRef = useRef<HTMLDivElement>(null);
+	const vehicleRef = useRef<HTMLDivElement>(null);
+
 	// Filter states
 	const [selectedZone, setSelectedZone] = useState("");
 	const [selectedWard, setSelectedWard] = useState("");
@@ -36,6 +52,17 @@ export default function GTSTripReportPage() {
 		const today = new Date();
 		return today.toISOString().split("T")[0];
 	});
+
+	useEffect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			if (zoneRef.current && !zoneRef.current.contains(e.target as Node)) setZoneOpen(false);
+			if (wardRef.current && !wardRef.current.contains(e.target as Node)) setWardOpen(false);
+			if (routeTypeRef.current && !routeTypeRef.current.contains(e.target as Node)) setRouteTypeOpen(false);
+			if (vehicleRef.current && !vehicleRef.current.contains(e.target as Node)) setVehicleOpen(false);
+		};
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, []);
 
 	// Fetch option lists on mount
 	useEffect(() => {
@@ -140,84 +167,94 @@ export default function GTSTripReportPage() {
 				<Card className="border border-slate-200 bg-white rounded-xl shadow-sm print:hidden">
 					<CardContent className="p-6">
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-							{/* Zone Filter */}
-							<div className="flex flex-col">
-								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-									Zone
-								</span>
-								<select
-									value={selectedZone}
-									onChange={(e) => {
-										setSelectedZone(e.target.value);
-										setSelectedWard(""); // Reset ward when zone changes
-									}}
-									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-								>
-									<option value="">Select Zone</option>
-									{zones.map((z) => (
-										<option key={z.id} value={z.id}>
-											{z.region_name}
-										</option>
-									))}
-								</select>
-							</div>
+							<SearchableDropdown
+								label="Zone"
+								selectedName={zones.find(z => z.id.toString() === selectedZone)?.region_name || "Select Zone"}
+								isSelected={!!selectedZone}
+								isOpen={zoneOpen}
+								setOpen={setZoneOpen}
+								search={zoneSearch}
+								setSearch={setZoneSearch}
+								items={zones.filter(z => z.region_name.toLowerCase().includes(zoneSearch.toLowerCase()))}
+								onSelect={(id) => {
+									if (selectedZone === id.toString()) {
+										setSelectedZone("");
+									} else {
+										setSelectedZone(id.toString());
+									}
+									setSelectedWard("");
+									setZoneOpen(false);
+								}}
+								dropdownRef={zoneRef}
+								keyField="id"
+								displayField="region_name"
+							/>
 
-							{/* Ward Filter */}
-							<div className="flex flex-col">
-								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-									Ward
-								</span>
-								<select
-									value={selectedWard}
-									onChange={(e) => setSelectedWard(e.target.value)}
-									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-								>
-									<option value="">Select Ward</option>
-									{filteredWards.map((w) => (
-										<option key={w.id} value={w.id}>
-											{w.region_name}
-										</option>
-									))}
-								</select>
-							</div>
+							<SearchableDropdown
+								label="Ward"
+								selectedName={filteredWards.find(w => w.id.toString() === selectedWard)?.region_name || "Select Ward"}
+								isSelected={!!selectedWard}
+								isOpen={wardOpen}
+								setOpen={setWardOpen}
+								search={wardSearch}
+								setSearch={setWardSearch}
+								items={filteredWards.filter(w => w.region_name.toLowerCase().includes(wardSearch.toLowerCase()))}
+								onSelect={(id) => {
+									if (selectedWard === id.toString()) {
+										setSelectedWard("");
+									} else {
+										setSelectedWard(id.toString());
+									}
+									setWardOpen(false);
+								}}
+								dropdownRef={wardRef}
+								keyField="id"
+								displayField="region_name"
+							/>
 
-							{/* Route Type Filter */}
-							<div className="flex flex-col">
-								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-									Route Type
-								</span>
-								<select
-									value={selectedRouteType}
-									onChange={(e) => setSelectedRouteType(e.target.value)}
-									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-								>
-									<option value="">Select Route Type</option>
-									{routeTypes.map((rt) => (
-										<option key={rt.id} value={rt.id}>
-											{rt.name}
-										</option>
-									))}
-								</select>
-							</div>
+							<SearchableDropdown
+								label="Route Type"
+								selectedName={routeTypes.find(rt => rt.id.toString() === selectedRouteType)?.name || "Select Route Type"}
+								isSelected={!!selectedRouteType}
+								isOpen={routeTypeOpen}
+								setOpen={setRouteTypeOpen}
+								search={routeTypeSearch}
+								setSearch={setRouteTypeSearch}
+								items={routeTypes.filter(rt => rt.name.toLowerCase().includes(routeTypeSearch.toLowerCase()))}
+								onSelect={(id) => {
+									if (selectedRouteType === id.toString()) {
+										setSelectedRouteType("");
+									} else {
+										setSelectedRouteType(id.toString());
+									}
+									setRouteTypeOpen(false);
+								}}
+								dropdownRef={routeTypeRef}
+								keyField="id"
+								displayField="name"
+							/>
 
-							{/* Vehicle RTO Filter */}
-							<div className="flex flex-col">
-								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-									Vehicle(s) RTO
-								</span>
-								<select
-									value={selectedVehicle}
-									onChange={(e) => setSelectedVehicle(e.target.value)}
-									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-								>
-									<option value="">Select Vehicle</option>
-									{vehicles.map((v) => (
-										<option key={v.id} value={v.id}>
-											{v.registration_no}
-										</option>
-									))}
-								</select>
-							</div>
+							<SearchableDropdown
+								label="Vehicle(s) RTO"
+								selectedName={vehicles.find(v => v.id.toString() === selectedVehicle)?.registration_no || "Select Vehicle"}
+								isSelected={!!selectedVehicle}
+								isOpen={vehicleOpen}
+								setOpen={setVehicleOpen}
+								search={vehicleSearch}
+								setSearch={setVehicleSearch}
+								items={vehicles.filter(v => v.registration_no.toLowerCase().includes(vehicleSearch.toLowerCase()))}
+								onSelect={(id) => {
+									if (selectedVehicle === id.toString()) {
+										setSelectedVehicle("");
+									} else {
+										setSelectedVehicle(id.toString());
+									}
+									setVehicleOpen(false);
+								}}
+								dropdownRef={vehicleRef}
+								keyField="id"
+								displayField="registration_no"
+							/>
 
 							{/* Date Filter */}
 							<div className="flex flex-col">

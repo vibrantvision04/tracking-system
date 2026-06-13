@@ -10,6 +10,7 @@ import { api, post } from "@/lib/api";
 import { toast } from "react-toastify";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { centroid } from "@turf/turf";
+import SearchableSelect from "@/components/ui/SearchableSelect";
 
 interface D2DAlert {
   id: number;
@@ -1456,6 +1457,28 @@ export default function D2DMap() {
   const filteredUnauthorized = unauthorizedVehicles.filter(a => filterItem(a.reg_no, a.ward_no));
   const filteredOther = otherVehicles.filter(ov => filterItem(ov.reg_no, ov.ward_no));
 
+  const zoneOptions = zonesList.map(z => ({ value: z.region_name, label: z.region_name }));
+
+  const wardOptions = [
+    { value: "", label: "All Wards" },
+    ...distinctWards.map(w => ({ value: w.split(" - ")[0], label: w }))
+  ];
+
+  const shiftOptions = [
+    { value: "all", label: "All Shifts" },
+    ...shiftsList.map(s => ({ value: s.shift_name, label: s.shift_name }))
+  ];
+
+  const routeOptions = [
+    { value: "", label: "All Routes" },
+    ...filteredRoutesDropdownList.map(r => ({ value: String(r.id), label: r.route_name }))
+  ];
+
+  const routeTypeOptions = [
+    { value: "", label: "All Route Types" },
+    ...routeTypesList.map(rt => ({ value: rt.name, label: rt.name }))
+  ];
+
   return (
     <div className="flex flex-col h-screen w-full bg-theme-base text-theme-text overflow-hidden font-sans">
       
@@ -1471,92 +1494,75 @@ export default function D2DMap() {
 
         {/* Dropdowns */}
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
+          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
             <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Zone</span>
-            <select
+            <SearchableSelect
               value={selectedZone}
-              onChange={(e) => {
-                setSelectedZone(e.target.value);
+              onChange={(val) => {
+                setSelectedZone(val);
                 setSelectedWard(""); // Reset selected ward when zone changes
                 setSelectedRouteId(""); // Reset selected route when zone changes
                 setSelectedVehicleId(null); // Deselect vehicle when filters change
               }}
-              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
-            >
-              {zonesList.map(z => (
-                <option key={z.id} value={z.region_name}>{z.region_name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Select Ward</span>
-            <select
-              value={selectedWard}
-              onChange={(e) => {
-                setSelectedWard(e.target.value);
-                setSelectedRouteId(""); // Reset selected route when ward changes
-                setSelectedVehicleId(null); // Deselect vehicle when filters change
-              }}
-              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
-            >
-              <option value="">All Wards</option>
-              {distinctWards.map(w => {
-                const clean = w.split(" - ")[0];
-                return <option key={w} value={clean}>{w}</option>;
-              })}
-            </select>
-          </div>
-
-          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Shift</span>
-            <select
-              value={selectedShift}
-              onChange={(e) => {
-                setSelectedShift(e.target.value);
-                setSelectedRouteId(""); // Reset route selection when shift changes
-                setSelectedVehicleId(null); // Deselect vehicle when filters change
-              }}
-              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
-            >
-              <option value="all">All Shifts</option>
-              {shiftsList.map(s => (
-                <option key={s.id} value={s.shift_name}>{s.shift_name}</option>
-              ))}
-            </select>
+              options={zoneOptions}
+              placeholder="Select Zone"
+              className="w-full"
+            />
           </div>
 
           <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Route</span>
-            <select
-              value={selectedRouteId}
-              onChange={(e) => {
-                setSelectedRouteId(e.target.value);
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Select Ward</span>
+            <SearchableSelect
+              value={selectedWard}
+              onChange={(val) => {
+                setSelectedWard(val);
+                setSelectedRouteId(""); // Reset selected route when ward changes
                 setSelectedVehicleId(null); // Deselect vehicle when filters change
               }}
-              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
-            >
-              <option value="">All Routes</option>
-              {filteredRoutesDropdownList.map(r => (
-                <option key={r.id} value={String(r.id)}>{r.route_name}</option>
-              ))}
-            </select>
+              options={wardOptions}
+              placeholder="All Wards"
+              className="w-full"
+            />
           </div>
 
-          <div className="flex flex-col min-w-[130px] flex-1 lg:flex-initial">
+          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Shift</span>
+            <SearchableSelect
+              value={selectedShift}
+              onChange={(val) => {
+                setSelectedShift(val);
+                setSelectedRouteId(""); // Reset route selection when shift changes
+                setSelectedVehicleId(null); // Deselect vehicle when filters change
+              }}
+              options={shiftOptions}
+              placeholder="All Shifts"
+              className="w-full"
+            />
+          </div>
+
+          <div className="flex flex-col min-w-[170px] flex-1 lg:flex-initial">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Route</span>
+            <SearchableSelect
+              value={selectedRouteId}
+              onChange={(val) => {
+                setSelectedRouteId(val);
+                setSelectedVehicleId(null); // Deselect vehicle when filters change
+              }}
+              options={routeOptions}
+              placeholder="All Routes"
+              className="w-full"
+            />
+          </div>
+
+          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
             <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Route Type</span>
-            <select
+            <SearchableSelect
               value={selectedRouteType}
-              onChange={(e) => setSelectedRouteType(e.target.value)}
-              className="w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded-lg text-xs text-theme-text focus:border-emerald-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition duration-200 cursor-pointer"
-            >
-              <option value="">All Route Types</option>
-              {routeTypesList.map((rt) => (
-                <option key={rt.id} value={rt.name}>
-                  {rt.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedRouteType(val)}
+              options={routeTypeOptions}
+              placeholder="All Route Types"
+              className="w-full"
+            />
           </div>
           
           <div className="flex items-center gap-2 px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text font-medium shrink-0 ml-auto lg:ml-0 h-[32px] mt-4 lg:mt-0">

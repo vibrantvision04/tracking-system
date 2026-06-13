@@ -268,6 +268,7 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 		var sessionMaxSpeed float64
 		sessionTouchedDump := false
 		sessionTSID := 0
+		var sessionStartTime *time.Time
 
 		var prevPt *decoder.AVLData
 
@@ -299,44 +300,46 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 				lastInsideWardTime = nil
 			}
 
-			// --- ROUTE ACTIVITY VALIDATION ---
 			// Check if within any checkpoint
-			isOnRoute := false
 			for _, cp := range checkpoints {
 				distToCP := utils.Haversine(pt.Lat, pt.Lng, cp.Latitude, cp.Longitude) * 1000.0
 				if distToCP <= cp.RadiusMeters {
 					laneCheckpointsValidated[cp.ID] = true
-					isOnRoute = true
 				}
 			}
 
 			// Calculate route distance covered (speed > 3 km/h on route)
 			if pt.Speed > 3.0 && prevPt != nil {
 				dist := utils.Haversine(prevPt.Lat, prevPt.Lng, pt.Lat, pt.Lng) // in km
-				if len(checkpoints) == 0 {
-					// Fallback: if no checkpoints, any movement inside ward is route activity
-					if isInsideWard {
-						routeDistanceCovered += dist
-					}
-				} else {
-					// Otherwise, must be near a checkpoint to count as on the route
-					if isOnRoute {
-						routeDistanceCovered += dist
-					}
+				if isInsideWard {
+					routeDistanceCovered += dist
 				}
 			}
 
 			// --- ELIGIBILITY EVALUATION ---
+			wardTimeSatisfied := insideWardDuration >= 10*time.Minute
+			routeActivitySatisfied := false
+
+			if len(checkpoints) > 0 {
+				if len(laneCheckpointsValidated) >= 1 {
+					// Hitting a checkpoint is ultimate proof of route activity
+					routeActivitySatisfied = true
+					// If they hit a checkpoint, forgive the ward stay time (in case of inaccurate polygons)
+					wardTimeSatisfied = true
+				} else {
+					routeActivitySatisfied = routeDistanceCovered > 0
+				}
+			} else {
+				routeActivitySatisfied = routeDistanceCovered > 0
+			}
+
 			if tripCount == 0 {
 				// Phase 1 Eligibility Rules
-				routeActivitySatisfied := len(checkpoints) == 0 || len(laneCheckpointsValidated) >= 1
-				if insideWardDuration >= 10*time.Minute && routeActivitySatisfied && routeDistanceCovered > 0 {
+				if wardTimeSatisfied && routeActivitySatisfied {
 					eligibleForDump = true
 				}
 			} else {
 				// Phase 4 Eligibility Rules
-				wardTimeSatisfied := insideWardDuration >= 10*time.Minute
-				routeActivitySatisfied := len(checkpoints) == 0 || len(laneCheckpointsValidated) >= 1 || routeDistanceCovered > 0
 				if cooldownComplete && wardTimeSatisfied && routeActivitySatisfied {
 					eligibleForDump = true
 				}
@@ -361,6 +364,8 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 				sessionTouchedDump = false
 				sessionMaxContinuousIgnitionOnTime = 0
 				sessionTSID = enteredTS.ID
+				tStart := pt.Time
+				sessionStartTime = &tStart
 				if pt.Ignition {
 					t := pt.Time
 					sessionIgnitionOnStartTime = &t
@@ -429,6 +434,11 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 					speedValid := true // Temporarily removed 5 km/h limitation as per user request
 					dumpZoneValid := sessionTouchedDump
 
+					var sessionDuration time.Duration
+					if sessionStartTime != nil {
+						sessionDuration = pt.Time.Sub(*sessionStartTime)
+					}
+
 					if eligibleForDump && minStayPassed && speedValid && dumpZoneValid {
 						// VALID TRIP!
 						tripCount++
@@ -440,12 +450,18 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 						// Reset state for subsequent trip checks
 						eligibleForDump = false
 						insideWardDuration = 0
-						laneCheckpointsValidated = make(map[int]bool)
 						routeDistanceCovered = 0.0
 					} else {
 						// REJECTED TRIP
-						rejectedCount++
-						reasonStr := fmt.Sprintf("[%s] Rejected: ", pt.Time.Format("15:04"))
+
+						// Ignore pass-bys and GPS bounces
+						// If the vehicle didn't touch the dump zone AND stayed in the TS geofence for less than 2 minutes,
+						// it was a drive-by or GPS jitter. Do not count as a trip.
+						if !dumpZoneValid && sessionDuration < 2*time.Minute {
+							// Ignored
+						} else {
+							rejectedCount++
+							reasonStr := fmt.Sprintf("[%s] Rejected: ", pt.Time.Format("15:04"))
 						var rList []string
 						if !eligibleForDump {
 							rList = append(rList, "Not eligible (ward stay < 10m or no route activity)")
@@ -466,6 +482,7 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 							reasonStr += "Unknown reason"
 						}
 						rejectionReasons = append(rejectionReasons, reasonStr)
+						} // End of else block for ignored session
 					}
 				}
 			}

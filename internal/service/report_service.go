@@ -44,6 +44,105 @@ func pointInPolygon(lat, lng float64, polygon []geofencePoint) bool {
 	return isInside
 }
 
+func pointInAnyPolygon(lat, lng float64, polygons [][]geofencePoint) bool {
+	for _, poly := range polygons {
+		if pointInPolygon(lat, lng, poly) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseGeoJSONPolygons(geoJSONStr string) [][]geofencePoint {
+	if geoJSONStr == "" {
+		return nil
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(geoJSONStr), &raw); err != nil {
+		return nil
+	}
+
+	var polygons [][]geofencePoint
+
+	var parseCoordinates = func(coordsI interface{}, geomType string) {
+		if geomType == "Polygon" {
+			rings, ok := coordsI.([]interface{})
+			if !ok || len(rings) == 0 {
+				return
+			}
+			outerRing, ok := rings[0].([]interface{})
+			if !ok {
+				return
+			}
+			var poly []geofencePoint
+			for _, ptI := range outerRing {
+				pt, ok := ptI.([]interface{})
+				if ok && len(pt) >= 2 {
+					lng, ok1 := pt[0].(float64)
+					lat, ok2 := pt[1].(float64)
+					if ok1 && ok2 {
+						poly = append(poly, geofencePoint{Lat: lat, Lng: lng})
+					}
+				}
+			}
+			if len(poly) > 0 {
+				polygons = append(polygons, poly)
+			}
+		} else if geomType == "MultiPolygon" {
+			polys, ok := coordsI.([]interface{})
+			if !ok {
+				return
+			}
+			for _, polyI := range polys {
+				rings, ok := polyI.([]interface{})
+				if !ok || len(rings) == 0 {
+					continue
+				}
+				outerRing, ok := rings[0].([]interface{})
+				if !ok {
+					continue
+				}
+				var poly []geofencePoint
+				for _, ptI := range outerRing {
+					pt, ok := ptI.([]interface{})
+					if ok && len(pt) >= 2 {
+						lng, ok1 := pt[0].(float64)
+						lat, ok2 := pt[1].(float64)
+						if ok1 && ok2 {
+							poly = append(poly, geofencePoint{Lat: lat, Lng: lng})
+						}
+					}
+				}
+				if len(poly) > 0 {
+					polygons = append(polygons, poly)
+				}
+			}
+		}
+	}
+
+	t, _ := raw["type"].(string)
+	if t == "FeatureCollection" {
+		features, ok := raw["features"].([]interface{})
+		if ok {
+			for _, fI := range features {
+				f, ok := fI.(map[string]interface{})
+				if ok {
+					geomI, ok := f["geometry"].(map[string]interface{})
+					if ok {
+						geomType, _ := geomI["type"].(string)
+						parseCoordinates(geomI["coordinates"], geomType)
+					}
+				}
+			}
+		}
+	} else {
+		parseCoordinates(raw["coordinates"], t)
+	}
+
+	return polygons
+}
+
 func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, date time.Time, zone, ward string) error {
 	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	end := start.Add(24 * time.Hour)
@@ -102,19 +201,26 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		ward = wardName
 	}
 
-	// Fetch ward polygon GeoJSON for geofencing
+	// Fetch ward polygon GeoJSON for geofencing (resolve via route first, fallback to vehicle's default ward)
 	var wardGeoJSON string
 	_ = s.gRepo.Pool().QueryRow(ctx, `
 		SELECT COALESCE(g.polygon::text, '')
 		FROM vehicles v
-		JOIN regions w ON v.ward_id = w.id
+		LEFT JOIN (
+			SELECT route_id
+			FROM vehicle_route_assignments
+			WHERE vehicle_id = $1 AND is_active = true
+			ORDER BY assigned_date DESC LIMIT 1
+		) vra ON true
+		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards rw WHERE route_id = vra.route_id LIMIT 1) rw ON true
+		JOIN regions w ON COALESCE(rw.ward_id, v.ward_id) = w.id
 		JOIN geofences g ON w.geofence_id = g.id
 		WHERE v.id = $1
 	`, vehicleID).Scan(&wardGeoJSON)
 
-	var wardPolygon []geofencePoint
+	var wardPolygons [][]geofencePoint
 	if wardGeoJSON != "" {
-		_ = json.Unmarshal([]byte(wardGeoJSON), &wardPolygon)
+		wardPolygons = parseGeoJSONPolygons(wardGeoJSON)
 	}
 
 	// Fetch GPS data for the day
@@ -220,89 +326,64 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	// ─────────────────────────────────────────────────────────────────
 	// 3. Stoppage Identification and Classification
 	// ─────────────────────────────────────────────────────────────────
-	type stoppageEvent struct {
-		startTime time.Time
-		endTime   time.Time
-		duration  float64
-	}
-	var stoppages []stoppageEvent
-
-	if len(opData) > 0 {
-		stoppageStartIndex := -1
-		const minStoppageDuration = 60.0
-		const maxStoppageRadiusKm = 0.03
-
-		for i := 0; i < len(opData); i++ {
-			if opData[i].Speed == 0 {
-				if stoppageStartIndex == -1 {
-					stoppageStartIndex = i
-				} else {
-					dist := utils.Haversine(
-						opData[stoppageStartIndex].Lat, opData[stoppageStartIndex].Lng,
-						opData[i].Lat, opData[i].Lng,
-					)
-					if dist > maxStoppageRadiusKm {
-						dur := opData[i-1].Time.Sub(opData[stoppageStartIndex].Time).Seconds()
-						if dur >= minStoppageDuration {
-							stoppages = append(stoppages, stoppageEvent{
-								startTime: opData[stoppageStartIndex].Time,
-								endTime:   opData[i-1].Time,
-								duration:  dur,
-							})
-						}
-						stoppageStartIndex = i
-					}
-				}
-			} else {
-				if stoppageStartIndex != -1 {
-					dur := opData[i-1].Time.Sub(opData[stoppageStartIndex].Time).Seconds()
-					if dur >= minStoppageDuration {
-						stoppages = append(stoppages, stoppageEvent{
-							startTime: opData[stoppageStartIndex].Time,
-							endTime:   opData[i-1].Time,
-							duration:  dur,
-						})
-					}
-					stoppageStartIndex = -1
-				}
-			}
-		}
-		if stoppageStartIndex != -1 {
-			dur := opData[len(opData)-1].Time.Sub(opData[stoppageStartIndex].Time).Seconds()
-			if dur >= minStoppageDuration {
-				stoppages = append(stoppages, stoppageEvent{
-					startTime: opData[stoppageStartIndex].Time,
-					endTime:   opData[len(opData)-1].Time,
-					duration:  dur,
-				})
-			}
-		}
-	}
-
+	var stoppages []repository.Stoppage
+	var totalStoppageSec float64
 	var minorStoppagesCount int
 	var majorStoppagesCount int
-	var minorStoppageSec float64
-	var majorStoppageSec float64
 
-	for _, s := range stoppages {
-		if s.duration < 600.0 { // less than 10 minutes
-			minorStoppagesCount++
-			minorStoppageSec += s.duration
-		} else { // 10 minutes or more
-			majorStoppagesCount++
-			majorStoppageSec += s.duration
+	if len(opData) > 0 {
+		stoppageStartIdx := -1
+		for i := 0; i < len(opData); i++ {
+			p := opData[i]
+			isOffStationary := p.Speed == 0 && !p.Ignition
+
+			if isOffStationary {
+				if stoppageStartIdx == -1 {
+					stoppageStartIdx = i
+				}
+			} else {
+				if stoppageStartIdx != -1 {
+					durSec := int(opData[i].Time.Sub(opData[stoppageStartIdx].Time).Seconds())
+					if durSec > 0 {
+						stoppage := repository.Stoppage{
+							StartPointIndex: stoppageStartIdx,
+							EndPointIndex:   i,
+							StartPoint:      toRepositoryStoppagePoint(opData[stoppageStartIdx]),
+							EndPoint:        toRepositoryStoppagePoint(opData[i]),
+							Duration:        durSec,
+						}
+						stoppages = append(stoppages, stoppage)
+						totalStoppageSec += float64(durSec)
+
+						if durSec < 600 {
+							minorStoppagesCount++
+						} else {
+							majorStoppagesCount++
+						}
+					}
+					stoppageStartIdx = -1
+				}
+			}
 		}
-	}
+		if stoppageStartIdx != -1 && stoppageStartIdx < len(opData)-1 {
+			lastIdx := len(opData) - 1
+			durSec := int(opData[lastIdx].Time.Sub(opData[stoppageStartIdx].Time).Seconds())
+			if durSec > 0 {
+				stoppage := repository.Stoppage{
+					StartPointIndex: stoppageStartIdx,
+					EndPointIndex:   lastIdx,
+					StartPoint:      toRepositoryStoppagePoint(opData[stoppageStartIdx]),
+					EndPoint:        toRepositoryStoppagePoint(opData[lastIdx]),
+					Duration:        durSec,
+				}
+				stoppages = append(stoppages, stoppage)
+				totalStoppageSec += float64(durSec)
 
-	totalStoppagesCount := minorStoppagesCount + majorStoppagesCount
-	totalStoppageSec := minorStoppageSec + majorStoppageSec
-
-	// Flag pings inside stoppages to bound idle calculations
-	inStoppage := make([]bool, len(opData))
-	for _, s := range stoppages {
-		for k := 0; k < len(opData); k++ {
-			if !opData[k].Time.Before(s.startTime) && !opData[k].Time.After(s.endTime) {
-				inStoppage[k] = true
+				if durSec < 600 {
+					minorStoppagesCount++
+				} else {
+					majorStoppagesCount++
+				}
 			}
 		}
 	}
@@ -312,71 +393,38 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	// ─────────────────────────────────────────────────────────────────
 	var totalDistance float64
 	var maxSpeed float64
-	var wardSpeeds []float64
 	var actualIgnitionSec float64
 	var totalIgnitionSec float64
 	var idleSec float64
 
-	// Distance, Max Speed (calculated on the full calendar day's validData to prevent truncation)
+	// Distance, Max Speed (calculated strictly within the shift window opData)
 	var lastOp *decoder.AVLData
-	for i := 0; i < len(validData); i++ {
-		p := validData[i]
+	for i := 0; i < len(opData); i++ {
+		p := opData[i]
 		if p.Speed > maxSpeed {
 			maxSpeed = p.Speed
 		}
 		if lastOp == nil {
-			lastOp = &validData[i]
+			lastOp = &opData[i]
 			continue
 		}
 		if utils.IsValidGPSTransition(*lastOp, p) {
 			totalDistance += utils.Haversine(lastOp.Lat, lastOp.Lng, p.Lat, p.Lng)
-			lastOp = &validData[i] // Correct: only update lastOp on valid transitions
+			lastOp = &opData[i]
 		}
 	}
 
-	// Average Speed inside ward
-	for _, p := range opData {
-		inWard := len(wardPolygon) == 0 || pointInPolygon(p.Lat, p.Lng, wardPolygon)
-		if inWard && p.Speed > 2 {
-			wardSpeeds = append(wardSpeeds, p.Speed)
-		}
-	}
-
-	avgSpeed := 0.0
-	if len(wardSpeeds) > 0 {
-		sum := 0.0
-		for _, s := range wardSpeeds {
-			sum += s
-		}
-		avgSpeed = sum / float64(len(wardSpeeds))
-	} else if totalDistance > 0 && len(opData) > 0 {
-		// Fallback if no ward boundary or pings in ward: calculate overall average moving speed
-		var allSpeeds []float64
-		for _, p := range opData {
-			if p.Speed > 2 {
-				allSpeeds = append(allSpeeds, p.Speed)
-			}
-		}
-		if len(allSpeeds) > 0 {
-			sum := 0.0
-			for _, s := range allSpeeds {
-				sum += s
-			}
-			avgSpeed = sum / float64(len(allSpeeds))
-		}
-	}
-
-	// Actual & Total Ignition ON Durations
-	for i := 1; i < len(validData); i++ {
-		prev := validData[i-1]
-		curr := validData[i]
+	// Actual & Total Ignition ON Durations (within opData shift window)
+	for i := 1; i < len(opData); i++ {
+		prev := opData[i-1]
+		curr := opData[i]
 		prevOn := isIgnitionOn(prev)
 		currOn := isIgnitionOn(curr)
 		if prevOn && currOn {
 			dt := curr.Time.Sub(prev.Time).Seconds()
 			if dt > 0 && dt < 3600 {
 				totalIgnitionSec += dt
-				inWard := len(wardPolygon) == 0 || pointInPolygon(curr.Lat, curr.Lng, wardPolygon)
+				inWard := len(wardPolygons) > 0 && pointInAnyPolygon(curr.Lat, curr.Lng, wardPolygons)
 				if inWard {
 					actualIgnitionSec += dt
 				}
@@ -384,12 +432,12 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		}
 	}
 
-	// Idle Duration: engine ON AND speed == 0 AND inside stoppage
+	// Idle Duration: engine ON AND speed == 0 (within opData shift window)
 	for i := 1; i < len(opData); i++ {
 		prev := opData[i-1]
 		curr := opData[i]
 		currOn := isIgnitionOn(curr)
-		if currOn && curr.Speed == 0 && inStoppage[i] {
+		if currOn && curr.Speed == 0 {
 			dt := curr.Time.Sub(prev.Time).Seconds()
 			if dt > 0 && dt < 3600 {
 				idleSec += dt
@@ -406,8 +454,20 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		}
 	}
 
-	startPointStr := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", startLng, startLat)
-	endPointStr := fmt.Sprintf("{\"lng\": %f, \"lat\": %f}", endLng, endLat)
+	// Parking Duration: 24 hours - activeSec
+	inParkingSec := 86400 - activeSec
+	if inParkingSec < 0 {
+		inParkingSec = 0
+	}
+
+	// Average Speed: totalDistance / totalActiveHours
+	avgSpeed := 0.0
+	if activeSec > 0 {
+		avgSpeed = (totalDistance / float64(activeSec)) * 3600.0
+	}
+
+	startPoint := &repository.Coordinate{X: startLng, Y: startLat}
+	endPoint := &repository.Coordinate{X: endLng, Y: endLat}
 
 	report := &repository.MovementReport{
 		VehicleID:                vehicleID,
@@ -422,14 +482,16 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		TotalActiveDuration:      formatDuration(activeSec),
 		TotalIdleDuration:        formatDuration(int(idleSec)),
 		TotalStoppageDuration:    formatDuration(int(totalStoppageSec)),
-		StoppagesCount:           totalStoppagesCount,
+		StoppagesCount:           len(stoppages),
+		InParkingDuration:        formatDuration(inParkingSec),
 		ActualIgnitionOnDuration: formatDuration(int(actualIgnitionSec)),
 		TotalIgnitionOnDuration:  formatDuration(int(totalIgnitionSec)),
 		MaxSpeed:                 maxSpeed,
-		StartPoint:               startPointStr,
-		EndPoint:                 endPointStr,
+		StartPoint:               startPoint,
+		EndPoint:                 endPoint,
 		MinorStoppages:           minorStoppagesCount,
 		MajorStoppages:           majorStoppagesCount,
+		Stoppages:                stoppages,
 	}
 
 	return s.repo.Upsert(ctx, report)
@@ -455,4 +517,21 @@ func formatDuration(seconds int) string {
 	m := (seconds % 3600) / 60
 	s := seconds % 60
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+func toRepositoryStoppagePoint(p decoder.AVLData) repository.StoppagePoint {
+	ign := 0
+	if p.Ignition {
+		ign = 1
+	}
+	return repository.StoppagePoint{
+		Timestamp:    p.Time,
+		IMEI:         p.IMEI,
+		Lat:          p.Lat,
+		Lng:          p.Lng,
+		Speed:        p.Speed,
+		Ignition:     ign,
+		Datetime:     p.Time,
+		DateTimeDate: p.Time.Format("2006-01-02 15:04:05"),
+	}
 }

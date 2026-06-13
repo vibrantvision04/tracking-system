@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "@/lib/api";
+import SearchableDropdown from "@/components/shared/SearchableDropdown";
 
 interface MovementReport {
   id: number;
@@ -34,6 +35,22 @@ interface ReportsResponse {
   total_pages: number;
 }
 
+const formatDuration = (durationStr: string) => {
+  if (!durationStr || durationStr === "00:00:00" || durationStr === "-") return "-";
+  const parts = durationStr.split(":");
+  if (parts.length === 3) {
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const s = parseInt(parts[2], 10);
+    const hStr = h > 0 ? `${h}h ` : '';
+    const mStr = m > 0 ? `${m}m ` : '';
+    const sStr = s > 0 ? `${s}s` : (h === 0 && m === 0 ? '0s' : '');
+    const output = `${hStr}${mStr}${sStr}`.trim();
+    return output || "-";
+  }
+  return durationStr;
+};
+
 export default function ReportsPage() {
   const [reports, setReports] = useState<MovementReport[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -43,7 +60,33 @@ export default function ReportsPage() {
   const [zones, setZones] = useState<any[]>([]);
   const [wards, setWards] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
+  
+  const [selectedZone, setSelectedZone] = useState<string>("");
+  const [selectedWard, setSelectedWard] = useState<string>("");
   const [selectedVehicle, setSelectedVehicle] = useState<string>("");
+
+  const [zoneSearch, setZoneSearch] = useState("");
+  const [wardSearch, setWardSearch] = useState("");
+  const [vehicleSearch, setVehicleSearch] = useState("");
+
+  const [zoneOpen, setZoneOpen] = useState(false);
+  const [wardOpen, setWardOpen] = useState(false);
+  const [vehicleOpen, setVehicleOpen] = useState(false);
+
+  const zoneRef = useRef<HTMLDivElement>(null);
+  const wardRef = useRef<HTMLDivElement>(null);
+  const vehicleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (zoneRef.current && !zoneRef.current.contains(e.target as Node)) setZoneOpen(false);
+      if (wardRef.current && !wardRef.current.contains(e.target as Node)) setWardOpen(false);
+      if (vehicleRef.current && !vehicleRef.current.contains(e.target as Node)) setVehicleOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const limit = 10;
 
   const allowHistoricalRecalculation = true; // Set to false to disable recalculation in UI
@@ -80,13 +123,24 @@ export default function ReportsPage() {
       .catch(() => {});
   }, []);
 
-  const formatCoord = (jsonStr: string) => {
-    try {
-      const obj = JSON.parse(jsonStr);
-      return `${obj.lat.toFixed(4)}, ${obj.lng.toFixed(4)}`;
-    } catch (e) {
-      return jsonStr;
+  const formatCoord = (val: any) => {
+    if (!val) return "-";
+    let obj = val;
+    if (typeof val === "string") {
+      try {
+        obj = JSON.parse(val);
+      } catch (e) {
+        return val;
+      }
     }
+    if (obj && typeof obj === "object") {
+      const lat = obj.lat !== undefined ? obj.lat : obj.y;
+      const lng = obj.lng !== undefined ? obj.lng : obj.x;
+      if (lat !== undefined && lng !== undefined) {
+        return `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
+      }
+    }
+    return String(val);
   };
 
   const formatTime = (dateStr: string | null | undefined) => {
@@ -116,37 +170,56 @@ export default function ReportsPage() {
           {/* Filters Grid */}
           <div className="bg-theme-surface rounded-xl border border-theme-border p-6 mb-6 shadow-sm">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div>
-                <label className="block text-xs font-medium text-theme-text-dim mb-2">Zone</label>
-                <select className="w-full px-3 py-2.5 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500">
-                  <option>Select Zone</option>
-                  {zones.map((z) => (
-                    <option key={z.id} value={z.id}>{z.region_name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-theme-text-dim mb-2">Ward</label>
-                <select className="w-full px-3 py-2.5 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500">
-                  <option>Select Ward</option>
-                  {wards.map((w) => (
-                    <option key={w.id} value={w.id}>{w.region_name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-theme-text-dim mb-2">Vehicle(s) RTO</label>
-                <select 
-                  value={selectedVehicle}
-                  onChange={(e) => setSelectedVehicle(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500"
-                >
-                  <option value="">All Vehicles</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>{v.registration_no}</option>
-                  ))}
-                </select>
-              </div>
+              <SearchableDropdown
+                label="Zone"
+                selectedName={zones.find(z => z.id.toString() === selectedZone)?.region_name || "Select Zone"}
+                isSelected={!!selectedZone}
+                isOpen={zoneOpen}
+                setOpen={setZoneOpen}
+                search={zoneSearch}
+                setSearch={setZoneSearch}
+                items={zones.filter(z => z.region_name.toLowerCase().includes(zoneSearch.toLowerCase()))}
+                onSelect={(id) => { setSelectedZone(id.toString()); setZoneOpen(false); }}
+                dropdownRef={zoneRef}
+                keyField="id"
+                displayField="region_name"
+              />
+              <SearchableDropdown
+                label="Ward"
+                selectedName={wards.find(w => w.id.toString() === selectedWard)?.region_name || "Select Ward"}
+                isSelected={!!selectedWard}
+                isOpen={wardOpen}
+                setOpen={setWardOpen}
+                search={wardSearch}
+                setSearch={setWardSearch}
+                items={wards.filter(w => w.region_name.toLowerCase().includes(wardSearch.toLowerCase()))}
+                onSelect={(id) => { setSelectedWard(id.toString()); setWardOpen(false); }}
+                dropdownRef={wardRef}
+                keyField="id"
+                displayField="region_name"
+              />
+              <SearchableDropdown
+                label="Vehicle(s) RTO"
+                selectedName={vehicles.find(v => v.id.toString() === selectedVehicle)?.registration_no || "All Vehicles"}
+                isSelected={!!selectedVehicle}
+                isOpen={vehicleOpen}
+                setOpen={setVehicleOpen}
+                search={vehicleSearch}
+                setSearch={setVehicleSearch}
+                items={vehicles.filter(v => v.registration_no.toLowerCase().includes(vehicleSearch.toLowerCase()))}
+                onSelect={(id) => {
+                  // Allow deselecting to see "All Vehicles"
+                  if (selectedVehicle === id.toString()) {
+                    setSelectedVehicle("");
+                  } else {
+                    setSelectedVehicle(id.toString());
+                  }
+                  setVehicleOpen(false);
+                }}
+                dropdownRef={vehicleRef}
+                keyField="id"
+                displayField="registration_no"
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
@@ -233,13 +306,13 @@ export default function ReportsPage() {
                         <td className="px-3 py-3 text-indigo-600 font-mono whitespace-nowrap">{formatCoord(r.end_point)}</td>
                         <td className="px-3 py-3 whitespace-nowrap">{formatTime(r.start_time)}</td>
                         <td className="px-3 py-3 whitespace-nowrap">{formatTime(r.end_time)}</td>
-                        <td className="px-3 py-3 font-mono">{r.total_active_duration}</td>
+                        <td className="px-3 py-3 font-mono">{formatDuration(r.total_active_duration)}</td>
                         <td className="px-3 py-3 font-mono font-bold text-slate-900 text-center">{r.total_distance.toFixed(2)}</td>
                         <td className="px-3 py-3 font-mono text-center">{r.average_speed.toFixed(1)}</td>
-                        <td className="px-3 py-3 font-mono font-bold text-center text-indigo-600">{r.actual_ignition_on_duration}</td>
-                        <td className="px-3 py-3 font-mono">{r.total_ignition_on_duration}</td>
-                        <td className="px-3 py-3 font-mono">{r.total_stoppage_duration}</td>
-                        <td className="px-3 py-3 font-mono">{r.total_idle_duration}</td>
+                        <td className="px-3 py-3 font-mono font-bold text-center text-indigo-600">{formatDuration(r.actual_ignition_on_duration)}</td>
+                        <td className="px-3 py-3 font-mono">{formatDuration(r.total_ignition_on_duration)}</td>
+                        <td className="px-3 py-3 font-mono">{formatDuration(r.total_stoppage_duration)}</td>
+                        <td className="px-3 py-3 font-mono">{formatDuration(r.total_idle_duration)}</td>
                         <td className="px-3 py-3 font-semibold text-center text-slate-600">{r.minor_stoppages}</td>
                         <td className="px-3 py-3 font-semibold text-center text-slate-600">{r.major_stoppages}</td>
                         <td className="px-3 py-3 font-bold text-center text-indigo-600">{r.stoppages_count}</td>

@@ -230,6 +230,13 @@ const navData = [
     ],
   },
   {
+    label: "Ultimate Reports",
+    icon: "📈",
+    children: [
+      { label: "Daily Ultimate Report", href: "/ultimate-reports/daily" },
+    ],
+  },
+  {
     label: "Approvals",
     icon: "✅",
     children: [

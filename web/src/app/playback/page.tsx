@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import type { Vehicle, GpsDataPoint } from "@/lib/types";
+import SearchableSelect from "@/components/ui/SearchableSelect";
 
 interface StoppagePoint {
   startIndex: number;
@@ -82,31 +83,45 @@ function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
     filtered.push(curr);
   }
 
-  // 2. Moving Average Smoothing (Window size = 5)
-  const smoothed: GpsDataPoint[] = [];
-  const windowSize = 2;
-  for (let i = 0; i < filtered.length; i++) {
-    const start = Math.max(0, i - windowSize);
-    const end = Math.min(filtered.length - 1, i + windowSize);
+  // 2. Downsampling (Remove redundant stationary and highly dense points)
+  const downsampled: GpsDataPoint[] = [filtered[0]];
+  for (let i = 1; i < filtered.length - 1; i++) {
+    const lastKept = downsampled[downsampled.length - 1];
+    const curr = filtered[i];
 
-    let sumLat = 0;
-    let sumLng = 0;
-    let count = 0;
+    const distKm = haversineDistance(lastKept.lat, lastKept.lng, curr.lat, curr.lng);
+    const timeDiffSec = (new Date(curr.time).getTime() - new Date(lastKept.time).getTime()) / 1000;
 
-    for (let j = start; j <= end; j++) {
-      sumLat += filtered[j].lat;
-      sumLng += filtered[j].lng;
-      count++;
+    // If stationary, keep at most one point per 30 seconds
+    if (curr.speed === 0 && lastKept.speed === 0 && distKm < 0.005) {
+      if (timeDiffSec < 30) {
+        continue; // Skip redundant stopped point
+      }
     }
 
-    smoothed.push({
-      ...filtered[i],
-      lat: sumLat / count,
-      lng: sumLng / count
-    });
+    // If moving, keep points that are at least 5 meters apart or 10 seconds apart
+    if (distKm < 0.005 && timeDiffSec < 10) {
+      // Keep if speed or ignition state changed significantly
+      const speedDiff = Math.abs(curr.speed - lastKept.speed);
+      const ignitionChanged = curr.ignition !== lastKept.ignition;
+      if (speedDiff < 5 && !ignitionChanged) {
+        continue; // Skip dense point
+      }
+    }
+
+    downsampled.push(curr);
   }
 
-  return smoothed;
+  // Always append the last point if it's not already added
+  if (filtered.length > 1) {
+    const lastPoint = filtered[filtered.length - 1];
+    const lastKept = downsampled[downsampled.length - 1];
+    if (lastKept.time !== lastPoint.time) {
+      downsampled.push(lastPoint);
+    }
+  }
+
+  return downsampled;
 }
 
 import * as turf from "@turf/turf";
@@ -117,47 +132,124 @@ function fetchMapMatchedRouteTurf(points: GpsDataPoint[], routeGeoJSON: any, tol
     return points.map(p => [p.lat, p.lng] as [number, number]);
   }
 
-  let routeLine: any = null;
+  let routePts: [number, number][] = [];
   try {
     const geom = typeof routeGeoJSON === "string" ? JSON.parse(routeGeoJSON) : routeGeoJSON;
-    if (geom.type === "FeatureCollection") {
-      const feature = geom.features.find((f: any) => f.geometry && (f.geometry.type === "LineString" || f.geometry.type === "MultiLineString"));
-      if (feature) {
-        routeLine = feature;
-      } else if (geom.features.length > 0) {
-        routeLine = geom.features[0];
+    
+    const extractCoords = (g: any) => {
+      if (!g) return;
+      if (g.type === "LineString") {
+        if (Array.isArray(g.coordinates)) {
+          g.coordinates.forEach((c: any) => {
+            if (Array.isArray(c) && c.length >= 2) {
+              routePts.push([c[1], c[0]]);
+            }
+          });
+        }
+      } else if (g.type === "MultiLineString") {
+        if (Array.isArray(g.coordinates)) {
+          g.coordinates.forEach((line: any) => {
+            if (Array.isArray(line)) {
+              line.forEach((c: any) => {
+                if (Array.isArray(c) && c.length >= 2) {
+                  routePts.push([c[1], c[0]]);
+                }
+              });
+            }
+          });
+        }
       }
-    } else if (geom.type === "Feature" && geom.geometry && (geom.geometry.type === "LineString" || geom.geometry.type === "MultiLineString")) {
-      routeLine = geom;
-    } else if (geom.type === "LineString" || geom.type === "MultiLineString") {
-      routeLine = turf.feature(geom);
-    } else if (geom.geometry && (geom.geometry.type === "LineString" || geom.geometry.type === "MultiLineString")) {
-      routeLine = turf.feature(geom.geometry);
+    };
+
+    if (geom.type === "FeatureCollection") {
+      if (Array.isArray(geom.features)) {
+        geom.features.forEach((f: any) => {
+          if (f.geometry) extractCoords(f.geometry);
+        });
+      }
+    } else if (geom.type === "Feature") {
+      if (geom.geometry) extractCoords(geom.geometry);
+    } else {
+      extractCoords(geom);
     }
   } catch (e) {
-    console.error("Error parsing routeGeoJSON in fetchMapMatchedRouteTurf:", e);
+    console.error("Error extracting coordinates in fetchMapMatchedRouteTurf:", e);
     return points.map(p => [p.lat, p.lng] as [number, number]);
   }
 
-  if (!routeLine) {
+  if (routePts.length === 0) {
     return points.map(p => [p.lat, p.lng] as [number, number]);
   }
+
+  // Pre-calculate scaling factor for longitude based on latitude of Jaipur (~26.9 deg)
+  const kx = 0.89; // cos(26.9 degrees)
 
   const matchedCoords: [number, number][] = [];
+  let lastRawLat = -999;
+  let lastRawLng = -999;
+  let lastMatched: [number, number] = [0, 0];
 
   points.forEach(p => {
-    const pt = turf.point([p.lng, p.lat]);
-    try {
-      const snapped = turf.nearestPointOnLine(routeLine, pt, { units: 'meters' });
-      const dist = (snapped.properties?.dist || 0);
-      if (dist <= toleranceMeters) {
-        matchedCoords.push([snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]]);
-      } else {
-        matchedCoords.push([p.lat, p.lng]);
-      }
-    } catch (err) {
-      matchedCoords.push([p.lat, p.lng]);
+    // 1. Caching: If the point is very close to the last computed point (less than 5 meters), reuse the matched result
+    if (lastRawLat !== -999 && haversineDistance(p.lat, p.lng, lastRawLat, lastRawLng) < 0.005) {
+      matchedCoords.push(lastMatched);
+      return;
     }
+
+    // 2. Euclidean snap to route segments
+    let minDistanceSq = Infinity;
+    let bestLat = p.lat;
+    let bestLng = p.lng;
+
+    for (let i = 0; i < routePts.length - 1; i++) {
+      const p1 = routePts[i];
+      const p2 = routePts[i + 1];
+
+      const y = p.lat;
+      const x = p.lng;
+      const y1 = p1[0];
+      const x1 = p1[1];
+      const y2 = p2[0];
+      const x2 = p2[1];
+
+      const dy = y2 - y1;
+      const dx = (x2 - x1) * kx;
+      
+      const py = y - y1;
+      const px = (x - x1) * kx;
+
+      const segmentLenSq = dx * dx + dy * dy;
+      let t = 0;
+      if (segmentLenSq > 0) {
+        t = (px * dx + py * dy) / segmentLenSq;
+        t = Math.max(0, Math.min(1, t));
+      }
+
+      const snapLat = y1 + t * dy;
+      const snapLng = x1 + t * (x2 - x1);
+
+      const diffLat = snapLat - y;
+      const diffLng = (snapLng - x) * kx;
+      const distSq = diffLat * diffLat + diffLng * diffLng;
+
+      if (distSq < minDistanceSq) {
+        minDistanceSq = distSq;
+        bestLat = snapLat;
+        bestLng = snapLng;
+      }
+    }
+
+    // Convert distance from degrees to meters (approx 1 degree = 111,000 meters)
+    const distMeters = Math.sqrt(minDistanceSq) * 111000;
+    if (distMeters <= toleranceMeters) {
+      lastMatched = [bestLat, bestLng];
+    } else {
+      lastMatched = [p.lat, p.lng];
+    }
+
+    lastRawLat = p.lat;
+    lastRawLng = p.lng;
+    matchedCoords.push(lastMatched);
   });
 
   return matchedCoords;
@@ -301,6 +393,117 @@ export default function PlaybackPage() {
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
   const allRoutesLayerRef = useRef<any>(null);
 
+  const resolveRouteAndSyncFilters = useCallback((vehImei: string, shiftName: string) => {
+    if (!vehImei || vehicles.length === 0 || routesList.length === 0) return;
+
+    const veh = vehicles.find(v => v.gps_device?.imei === vehImei);
+    if (!veh) return;
+
+    const selectZoneForWard = (wardId: number) => {
+      const wardRegion = regionsList.find(reg => reg.id === wardId);
+      if (wardRegion && wardRegion.parent_id) {
+        setSelectedZoneId(String(wardRegion.parent_id));
+      }
+    };
+
+    const applyRoute = (route: any) => {
+      setSelectedRouteId(String(route.id));
+      if (route.ward_id) {
+        setSelectedWardId(String(route.ward_id));
+        selectZoneForWard(route.ward_id);
+      }
+    };
+
+    const shiftWord = (shiftName || "").toLowerCase().split(" ")[0]; // "morning", "afternoon", "night", "all"
+
+    // 1. Fetch specific assignment from DB first (Priority 1)
+    api<{ success: boolean; data: any[] }>(`/api/vehicle-route-assignments?date=${date}`)
+      .then((res) => {
+        if (res.success && res.data) {
+          const assignment = res.data.find((a: any) => {
+            const matchesVeh = a.vehicle_id === veh.id;
+            if (!matchesVeh) return false;
+            if (shiftWord === "all") return true;
+            const aShift = (a.shift_name || "").toLowerCase();
+            return aShift.includes(shiftWord);
+          });
+
+          if (assignment) {
+            const route = routesList.find(r => r.id === assignment.route_id);
+            if (route) {
+              applyRoute(route);
+              return;
+            }
+          }
+        }
+
+        // 2. Fallback: Try matching by name convention (Priority 2)
+        const regNoClean = veh.registration_no.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let matchedRoute = routesList.find(r => {
+          const name = r.route_name.toLowerCase();
+          const matchesShift = shiftWord === "all" || name.includes(shiftWord);
+          return matchesShift && name.replace(/[^a-z0-9]/g, "").includes(regNoClean);
+        });
+
+        if (matchedRoute) {
+          applyRoute(matchedRoute);
+          return;
+        }
+
+        // 3. Fallback: Find any route in the vehicle's allotted ward (Priority 3)
+        if ((veh as any).ward_id) {
+          setSelectedWardId(String((veh as any).ward_id));
+          if ((veh as any).zone_id) {
+            setSelectedZoneId(String((veh as any).zone_id));
+          } else {
+            selectZoneForWard((veh as any).ward_id);
+          }
+          
+          const fallbackRoute = routesList.find(r => r.ward_id === (veh as any).ward_id);
+          if (fallbackRoute) {
+            setSelectedRouteId(String(fallbackRoute.id));
+          } else {
+            setSelectedRouteId("");
+          }
+        } else if ((veh as any).zone_id) {
+          setSelectedZoneId(String((veh as any).zone_id));
+        }
+      })
+      .catch(() => {
+        // Fallback on database fetch error (name convention match)
+        const regNoClean = veh.registration_no.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let matchedRoute = routesList.find(r => {
+          const name = r.route_name.toLowerCase();
+          const matchesShift = shiftWord === "all" || name.includes(shiftWord);
+          return matchesShift && name.replace(/[^a-z0-9]/g, "").includes(regNoClean);
+        });
+
+        if (matchedRoute) {
+          applyRoute(matchedRoute);
+          return;
+        }
+
+        // Fallback to vehicle's allotted ward/zone
+        if ((veh as any).ward_id) {
+          setSelectedWardId(String((veh as any).ward_id));
+          if ((veh as any).zone_id) {
+            setSelectedZoneId(String((veh as any).zone_id));
+          } else {
+            selectZoneForWard((veh as any).ward_id);
+          }
+          
+          const fallbackRoute = routesList.find(r => r.ward_id === (veh as any).ward_id);
+          if (fallbackRoute) {
+            setSelectedRouteId(String(fallbackRoute.id));
+          } else {
+            setSelectedRouteId("");
+          }
+        } else if ((veh as any).zone_id) {
+          setSelectedZoneId(String((veh as any).zone_id));
+        }
+      });
+  }, [vehicles, routesList, regionsList, date]);
+
   // Visibility states
   const [showPlannedRoute, setShowPlannedRoute] = useState(true);
   const [showActualMovement, setShowActualMovement] = useState(true);
@@ -309,6 +512,12 @@ export default function PlaybackPage() {
   const [showStartEndPoint, setShowStartEndPoint] = useState(true);
   const [showStoppages, setShowStoppages] = useState(true);
   const [showMapIndicationMenu, setShowMapIndicationMenu] = useState(false);
+  const [checkpointsCollapsed, setCheckpointsCollapsed] = useState(false);
+  const [stoppagesCollapsed, setStoppagesCollapsed] = useState(false);
+  const [showMajorStoppages, setShowMajorStoppages] = useState(true);
+  const [showMiniStoppages, setShowMiniStoppages] = useState(true);
+  const [showCoveredCheckpoints, setShowCoveredCheckpoints] = useState(true);
+  const [showUncoveredCheckpoints, setShowUncoveredCheckpoints] = useState(true);
 
   // Playback States
   const [points, setPoints] = useState<GpsDataPoint[]>([]);
@@ -339,11 +548,16 @@ export default function PlaybackPage() {
     const p = points[index];
     if (p) {
       const map = mapRef.current;
+      const matched = matchedCoordsRef.current[index];
+      const targetLat = matched ? matched[0] : p.lat;
+      const targetLng = matched ? matched[1] : p.lng;
+      
       if (map) {
-        map.panTo([p.lat, p.lng]);
+        map.panTo([targetLat, targetLng]);
       }
       if (mkRef.current) {
-        mkRef.current.setLatLng([p.lat, p.lng]);
+        if (mkRef.current._icon) mkRef.current._icon.style.transition = 'none';
+        mkRef.current.setLatLng([targetLat, targetLng]);
         mkRef.current.setPopupContent(getPopupContent(p));
         mkRef.current.openPopup();
       }
@@ -402,7 +616,9 @@ export default function PlaybackPage() {
 
     // 4. Stoppages
     stoppageMarkersRef.current.forEach((marker: any) => {
-      if (showStoppages) {
+      const isMajor = marker.isMajor;
+      const shouldShow = showStoppages && (isMajor ? showMajorStoppages : showMiniStoppages);
+      if (shouldShow) {
         if (!map.hasLayer(marker)) map.addLayer(marker);
       } else {
         if (map.hasLayer(marker)) map.removeLayer(marker);
@@ -420,13 +636,26 @@ export default function PlaybackPage() {
 
     // 6. Checkpoints
     checkpointMarkersRef.current.forEach((marker: any) => {
-      if (showPlannedRoute) {
+      const isVisited = marker.isVisited;
+      const shouldShow = showPlannedRoute && (isVisited ? showCoveredCheckpoints : showUncoveredCheckpoints);
+      if (shouldShow) {
         if (!map.hasLayer(marker)) map.addLayer(marker);
       } else {
         if (map.hasLayer(marker)) map.removeLayer(marker);
       }
     });
-  }, [showRawPlayback, showActualMovement, showStartEndPoint, showStoppages, showPlannedRoute, points]);
+  }, [
+    showRawPlayback, 
+    showActualMovement, 
+    showStartEndPoint, 
+    showStoppages, 
+    showPlannedRoute, 
+    showMajorStoppages,
+    showMiniStoppages,
+    showCoveredCheckpoints,
+    showUncoveredCheckpoints,
+    points
+  ]);
 
   // ─── Draw Filtered Routes and Lanes on Playback Map ───
   useEffect(() => {
@@ -731,85 +960,12 @@ export default function PlaybackPage() {
     }
   }, []);
 
-  // Set selected zone and ward when selectedImei is loaded or preset
+  // Synchronize route and filters when vehicle, shift, or list changes
   useEffect(() => {
-    if (selectedImei && vehicles.length > 0) {
-      const veh = vehicles.find(v => v.gps_device?.imei === selectedImei);
-      if (veh) {
-        if ((veh as any).zone_id) setSelectedZoneId(String((veh as any).zone_id));
-        if ((veh as any).ward_id) setSelectedWardId(String((veh as any).ward_id));
-      }
+    if (selectedImei && vehicles.length > 0 && routesList.length > 0) {
+      resolveRouteAndSyncFilters(selectedImei, selectedShift);
     }
-  }, [selectedImei, vehicles]);
-
-  // Automatically select the vehicle's assigned route when a vehicle is selected in playback
-  useEffect(() => {
-    if (!selectedImei || vehicles.length === 0 || routesList.length === 0) return;
-    if (routeIdParam) return; // Honor explicit URL parameter instead
-
-    const veh = vehicles.find(v => v.gps_device?.imei === selectedImei);
-    if (!veh) return;
-
-    // Fetch assignment for this vehicle from database first
-    api<{ success: boolean; data: any[] }>(`/api/vehicle-route-assignments?date=${date}`)
-      .then((res) => {
-        if (res.success && res.data) {
-          const assignment = res.data.find((a: any) => a.vehicle_id === veh.id);
-          if (assignment) {
-            setSelectedRouteId(String(assignment.route_id));
-            if (assignment.shift_name) {
-              const matchedShift = shiftsList.find(s => 
-                s.shift_name === assignment.shift_name || 
-                s.shift_name.toLowerCase().includes(assignment.shift_name.toLowerCase().split(" ")[0])
-              );
-              if (matchedShift) {
-                setSelectedShift(matchedShift.shift_name);
-              }
-            }
-            return; // Found direct assignment!
-          }
-        }
-        
-        // Fallback: Find route assigned to this vehicle's ward
-        if ((veh as any).ward_id) {
-          const match = routesList.find(r => r.ward_id === (veh as any).ward_id);
-          if (match) {
-            setSelectedRouteId(String(match.id));
-            
-            // Also select the shift of the route
-            if (match.shift_name) {
-              const matchedShift = shiftsList.find(s => 
-                s.shift_name === match.shift_name || 
-                s.shift_name.toLowerCase().includes(match.shift_name.toLowerCase().split(" ")[0])
-              );
-              if (matchedShift) {
-                setSelectedShift(matchedShift.shift_name);
-              }
-            }
-          }
-        }
-      })
-      .catch(() => {
-        // Fallback: Find route assigned to this vehicle's ward
-        if ((veh as any).ward_id) {
-          const match = routesList.find(r => r.ward_id === (veh as any).ward_id);
-          if (match) {
-            setSelectedRouteId(String(match.id));
-            
-            // Also select the shift of the route
-            if (match.shift_name) {
-              const matchedShift = shiftsList.find(s => 
-                s.shift_name === match.shift_name || 
-                s.shift_name.toLowerCase().includes(match.shift_name.toLowerCase().split(" ")[0])
-              );
-              if (matchedShift) {
-                setSelectedShift(matchedShift.shift_name);
-              }
-            }
-          }
-        }
-      });
-  }, [selectedImei, vehicles, routesList, shiftsList, date, routeIdParam]);
+  }, [selectedImei, selectedShift, vehicles, routesList, resolveRouteAndSyncFilters]);
 
   // Set selected route, ward, and zone when routeIdParam URL argument is present
   useEffect(() => {
@@ -859,7 +1015,7 @@ export default function PlaybackPage() {
       "Google Maps (Default)": googleMapLayer,
       "Google Satellite": googleHybridLayer,
       "Dark Map": darkLayer
-    }, {}, { position: 'topright' }).addTo(mapRef.current);
+    }, {}, { position: 'bottomleft' }).addTo(mapRef.current);
 
     return () => {
       if (mapRef.current) {
@@ -929,11 +1085,61 @@ export default function PlaybackPage() {
     }
   }, [selectedZoneId, selectedWardId, regionsList]);
 
+  // Reusable helper to clear all playback state and layers from Leaflet map
+  const clearPlaybackLayers = useCallback(() => {
+    setPoints([]);
+    setIdx(0);
+    setPlaying(false);
+    setStoppages([]);
+    setCheckpoints([]);
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (lineRef.current) {
+      map.removeLayer(lineRef.current);
+      lineRef.current = null;
+    }
+    if (mkRef.current) {
+      map.removeLayer(mkRef.current);
+      mkRef.current = null;
+    }
+    if (activeLineRef.current) {
+      map.removeLayer(activeLineRef.current);
+      activeLineRef.current = null;
+    }
+    if (startMarkerRef.current) {
+      map.removeLayer(startMarkerRef.current);
+      startMarkerRef.current = null;
+    }
+    if (endMarkerRef.current) {
+      map.removeLayer(endMarkerRef.current);
+      endMarkerRef.current = null;
+    }
+    matchedCoordsRef.current = [];
+
+    if (stoppageMarkersRef.current) {
+      stoppageMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
+      stoppageMarkersRef.current = [];
+    }
+    if (checkpointMarkersRef.current) {
+      checkpointMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
+      checkpointMarkersRef.current = [];
+    }
+    checkpointMarkersMapRef.current = {};
+    if (assignedRouteLayerRef.current) {
+      map.removeLayer(assignedRouteLayerRef.current);
+      assignedRouteLayerRef.current = null;
+    }
+  }, []);
+
   // Load Route Playback Trace
-  const loadRoute = useCallback(async () => {
+  const loadRoute = useCallback(async (autoplay = false) => {
     if (!selectedImei || !date) return;
     const from = `${date}T00:00:00.000Z`;
     const to = `${date}T23:59:59.999Z`;
+
+    clearPlaybackLayers();
 
     try {
       const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${selectedImei}?from=${from}&to=${to}`);
@@ -942,7 +1148,7 @@ export default function PlaybackPage() {
       const validPoints = smoothGpsTrace(validPointsRaw);
       setPoints(validPoints);
       setIdx(0);
-      setPlaying(false);
+      setPlaying(autoplay);
 
       const L = require("leaflet");
       const map = mapRef.current;
@@ -1039,8 +1245,11 @@ export default function PlaybackPage() {
         lineCap: "round",
         lineJoin: "round",
         pane: "backgroundPathPane"
-      }).addTo(map);
-      lineRef.current.bringToBack();
+      });
+      if (showRawPlayback) {
+        lineRef.current.addTo(map);
+        lineRef.current.bringToBack();
+      }
 
       map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
 
@@ -1051,8 +1260,11 @@ export default function PlaybackPage() {
         opacity: 0.95,
         lineCap: "round",
         lineJoin: "round"
-      }).addTo(map);
-      activeLineRef.current.bringToFront();
+      });
+      if (showActualMovement) {
+        activeLineRef.current.addTo(map);
+        activeLineRef.current.bringToFront();
+      }
 
       // 3. Draw Start Marker Badge
       const startIcon = L.divIcon({
@@ -1081,7 +1293,10 @@ export default function PlaybackPage() {
         iconSize: [32, 32],
         iconAnchor: [16, 16],
       });
-      startMarkerRef.current = L.marker(baseCoords[0], { icon: startIcon }).addTo(map);
+      startMarkerRef.current = L.marker(baseCoords[0], { icon: startIcon });
+      if (showStartEndPoint) {
+        startMarkerRef.current.addTo(map);
+      }
 
       // 4. Draw End Marker Badge
       const endIcon = L.divIcon({
@@ -1110,7 +1325,10 @@ export default function PlaybackPage() {
         iconSize: [32, 32],
         iconAnchor: [16, 16],
       });
-      endMarkerRef.current = L.marker(baseCoords[baseCoords.length - 1], { icon: endIcon }).addTo(map);
+      endMarkerRef.current = L.marker(baseCoords[baseCoords.length - 1], { icon: endIcon });
+      if (showStartEndPoint) {
+        endMarkerRef.current.addTo(map);
+      }
 
       // 5. Draw Vehicle Marker with premium green-border black circle style
       const vehicleIcon = L.divIcon({
@@ -1134,7 +1352,8 @@ export default function PlaybackPage() {
         iconSize: [34, 34],
         iconAnchor: [17, 17],
       });
-      mkRef.current = L.marker(baseCoords[0], { icon: vehicleIcon })
+      const startPos = matchedCoords.length > 0 ? matchedCoords[0] : baseCoords[0];
+      mkRef.current = L.marker(startPos, { icon: vehicleIcon })
         .bindPopup(getPopupContent(validPoints[0]))
         .addTo(map);
 
@@ -1182,7 +1401,8 @@ export default function PlaybackPage() {
           iconAnchor: [18, 18],
         });
 
-        const marker = L.marker([s.lat, s.lng], { icon: stopIcon }).addTo(map);
+        const marker = L.marker([s.lat, s.lng], { icon: stopIcon });
+        (marker as any).isMajor = isRed;
 
         const stopPopupContent = `
           <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; min-width: 160px; padding: 2px;">
@@ -1217,6 +1437,11 @@ export default function PlaybackPage() {
         `;
         marker.bindPopup(stopPopupContent);
         stoppageMarkersRef.current.push(marker);
+
+        const shouldShow = showStoppages && (isRed ? showMajorStoppages : showMiniStoppages);
+        if (shouldShow) {
+          marker.addTo(map);
+        }
       });
 
       // 7. Draw the planned assigned route geometry if it exists
@@ -1240,7 +1465,10 @@ export default function PlaybackPage() {
               lineJoin: "round"
             },
             pane: "assignedRoutePane"
-          }).addTo(map);
+          });
+          if (showPlannedRoute) {
+            assignedRouteLayerRef.current.addTo(map);
+          }
           
           assignedRouteLayerRef.current.bindPopup(`
             <div style="font-family: sans-serif; font-size: 13px; color: #0f172a; padding: 2px;">
@@ -1322,7 +1550,8 @@ export default function PlaybackPage() {
           });
         }
 
-        const marker = L.marker([cp.latitude, cp.longitude], { icon: cpIcon }).addTo(map);
+        const marker = L.marker([cp.latitude, cp.longitude], { icon: cpIcon });
+        (marker as any).isVisited = visited;
         markersMap[cp.id] = marker;
         const reason = visitedDetail ? visitedDetail.reason : "";
 
@@ -1355,7 +1584,14 @@ export default function PlaybackPage() {
           weight: 1,
           fillColor: visited ? '#10b981' : '#ef4444',
           fillOpacity: 0.05
-        }).addTo(map);
+        });
+        (circle as any).isVisited = visited;
+
+        const shouldShowCP = showPlannedRoute && (visited ? showCoveredCheckpoints : showUncoveredCheckpoints);
+        if (shouldShowCP) {
+          marker.addTo(map);
+          circle.addTo(map);
+        }
 
         checkpointMarkers.push(marker);
         checkpointMarkers.push(circle);
@@ -1376,12 +1612,30 @@ export default function PlaybackPage() {
     }
   }, [selectedImei, date, routeIdParam, selectedRouteId, vehicles]);
 
-  // Automatically load the route playback trace when imei, date, or route changes
+  // Clear old route when vehicle or date changes (playback loads only on Play button click)
   useEffect(() => {
-    if (selectedImei && date) {
-      loadRoute();
+    clearPlaybackLayers();
+  }, [selectedImei, date, clearPlaybackLayers]);
+
+  const handleStop = () => {
+    setPlaying(false);
+    // Draw the full actual movement trail
+    if (matchedCoordsRef.current.length > 0 && activeLineRef.current) {
+      activeLineRef.current.setLatLngs(matchedCoordsRef.current);
+      activeLineRef.current.bringToFront();
     }
-  }, [selectedImei, date, selectedRouteId, loadRoute]);
+  };
+
+  const handleReset = () => {
+    setSelectedZoneId("");
+    setSelectedWardId("");
+    setSelectedShift("Morning Shift");
+    setSelectedImei("");
+    setDate(new Date().toISOString().split("T")[0]);
+    setSelectedRouteId("");
+    setRouteIdParam(null);
+    clearPlaybackLayers();
+  };
 
   // Dynamic active trail updating helper
   const updateActiveCoveredLine = useCallback((currentIndex: number) => {
@@ -1418,33 +1672,56 @@ export default function PlaybackPage() {
 
     const intervalDuration = Math.max(10, 150 / speedMultiplier);
 
+    if (mkRef.current && mkRef.current._icon) {
+      mkRef.current._icon.style.transition = `transform ${intervalDuration}ms linear`;
+    }
+
     intervalRef.current = setInterval(() => {
       setIdx((prev) => {
         const next = prev + 1;
         if (next >= points.length) {
           setPlaying(false);
+          if (mkRef.current && mkRef.current._icon) {
+            mkRef.current._icon.style.transition = 'none';
+          }
           return prev;
         }
         const p = points[next];
-        mkRef.current.setLatLng([p.lat, p.lng]);
+        const matched = matchedCoordsRef.current[next];
+        const targetLat = matched ? matched[0] : p.lat;
+        const targetLng = matched ? matched[1] : p.lng;
+        
+        mkRef.current.setLatLng([targetLat, targetLng]);
         mkRef.current.setPopupContent(getPopupContent(p));
         updateActiveCoveredLine(next);
         return next;
       });
     }, intervalDuration);
 
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      clearInterval(intervalRef.current);
+      if (mkRef.current && mkRef.current._icon) {
+        mkRef.current._icon.style.transition = 'none';
+      }
+    };
   }, [playing, points, speedMultiplier, idx, updateActiveCoveredLine]);
 
   // Scrub Scrubbed Point Sync
   useEffect(() => {
     if (points[idx] && mkRef.current) {
+      if (!playing && mkRef.current._icon) {
+        mkRef.current._icon.style.transition = 'none';
+      }
       const p = points[idx];
-      mkRef.current.setLatLng([p.lat, p.lng]);
+      const matched = matchedCoordsRef.current[idx];
+      const targetLat = matched ? matched[0] : p.lat;
+      const targetLng = matched ? matched[1] : p.lng;
+
+      mkRef.current.setLatLng([targetLat, targetLng]);
       mkRef.current.setPopupContent(getPopupContent(p));
       updateActiveCoveredLine(idx);
     }
-  }, [idx, points, updateActiveCoveredLine]);
+  }, [idx, points, updateActiveCoveredLine, playing]);
 
   // Filter Dropdowns Lists
   const filteredWards = selectedZoneId
@@ -1452,10 +1729,60 @@ export default function PlaybackPage() {
     : regionsList.filter(r => r.region_type_id === 3);
 
   const filteredVehicles = vehicles.filter(v => {
-    if (selectedZoneId && (v as any).zone_id !== parseInt(selectedZoneId)) return false;
-    if (selectedWardId && (v as any).ward_id !== parseInt(selectedWardId)) return false;
+    if (v.gps_device?.imei === selectedImei) return true;
+
+    if (selectedZoneId) {
+      const zoneIdNum = parseInt(selectedZoneId);
+      const hasZoneMatch = (v.zone_id === zoneIdNum) || (v.assigned_zone_id === zoneIdNum);
+      if (!hasZoneMatch) return false;
+    }
+
+    if (selectedWardId) {
+      const wardIdNum = parseInt(selectedWardId);
+      const hasWardMatch = (v.ward_id === wardIdNum) || (v.assigned_ward_id === wardIdNum);
+      if (!hasWardMatch) return false;
+    }
+
     return true;
   });
+
+  const zoneOptions = [
+    { value: "", label: "Select Zone" },
+    ...zones.map(z => ({ value: String(z.id), label: z.region_name }))
+  ];
+
+  const wardOptions = [
+    { value: "", label: "Select Ward" },
+    ...filteredWards.map(w => ({ value: String(w.id), label: w.region_name }))
+  ];
+
+  const shiftOptions = [
+    { value: "all", label: "All Shifts" },
+    ...shiftsList.map(s => ({ value: s.shift_name, label: s.shift_name }))
+  ];
+
+  const routeOptions = [
+    { value: "", label: "All Routes" },
+    ...routesList.map(r => ({ value: String(r.id), label: r.route_name }))
+  ];
+
+  const vehicleOptions = [
+    { value: "", label: "Select Vehicle" },
+    ...filteredVehicles.filter(v => v.gps_device).map(v => ({
+      value: v.gps_device!.imei,
+      label: `${v.registration_no} (${v.vehicle_type?.name || "Tipper"})`
+    }))
+  ];
+
+
+
+  const handleVehicleSelect = (imei: string) => {
+    setSelectedImei(imei);
+    setRouteIdParam(null);
+    if (imei) {
+      resolveRouteAndSyncFilters(imei, selectedShift);
+    }
+  };
 
   const p = points[idx];
 
@@ -1508,102 +1835,63 @@ export default function PlaybackPage() {
 
           {/* Select Zone */}
           <div className="min-w-[150px]">
-            <select
+            <SearchableSelect
               value={selectedZoneId}
-              onChange={(e) => {
-                setSelectedZoneId(e.target.value);
+              onChange={(val) => {
+                setSelectedZoneId(val);
                 setSelectedWardId("");
                 setSelectedImei("");
                 setRouteIdParam(null);
                 setSelectedRouteId("");
               }}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
-            >
-              <option value="">Select Zone</option>
-              {zones.map((z, idx) => (
-                <option key={`zone-${z.id}-${idx}`} value={z.id}>{z.region_name}</option>
-              ))}
-            </select>
+              options={zoneOptions}
+              placeholder="Select Zone"
+              className="w-full"
+            />
           </div>
 
           {/* Select Ward */}
           <div className="min-w-[150px]">
-            <select
+            <SearchableSelect
               value={selectedWardId}
-              onChange={(e) => {
-                setSelectedWardId(e.target.value);
+              onChange={(val) => {
+                setSelectedWardId(val);
                 setSelectedImei("");
                 setRouteIdParam(null);
                 setSelectedRouteId("");
               }}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
-            >
-              <option value="">Select Ward</option>
-              {filteredWards.map((w, idx) => (
-                <option key={`ward-${w.id}-${idx}`} value={w.id}>{w.region_name}</option>
-              ))}
-            </select>
+              options={wardOptions}
+              placeholder="Select Ward"
+              className="w-full"
+            />
           </div>
 
           {/* Select Shift */}
           <div className="min-w-[150px]">
-            <select
+            <SearchableSelect
               value={selectedShift}
-              onChange={(e) => {
-                setSelectedShift(e.target.value);
+              onChange={(val) => {
+                setSelectedShift(val);
                 setRouteIdParam(null);
-                setSelectedRouteId("");
+                if (selectedImei) {
+                  resolveRouteAndSyncFilters(selectedImei, val);
+                }
               }}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
-            >
-              <option value="all">All Shifts</option>
-              {shiftsList.length > 0 ? (
-                shiftsList.map(s => (
-                  <option key={s.id} value={s.shift_name}>{s.shift_name}</option>
-                ))
-              ) : (
-                <>
-                  <option value="Morning Shift">Morning Shift</option>
-                  <option value="Afternoon Shift">Afternoon Shift</option>
-                  <option value="Night Shift">Night Shift</option>
-                </>
-              )}
-            </select>
-          </div>
-
-          {/* Select Route */}
-          <div className="min-w-[170px]">
-            <select
-              value={selectedRouteId}
-              onChange={(e) => {
-                setSelectedRouteId(e.target.value);
-              }}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
-            >
-              <option value="">All Routes</option>
-              {filteredRoutesDropdownList.map((r, idx) => (
-                <option key={`route-${r.id}-${idx}`} value={String(r.id)}>{r.route_name}</option>
-              ))}
-            </select>
+              options={shiftOptions}
+              placeholder="Select Shift"
+              className="w-full"
+            />
           </div>
 
           {/* Select Vehicle */}
           <div className="min-w-[170px]">
-            <select
+            <SearchableSelect
               value={selectedImei}
-              onChange={(e) => {
-                setSelectedImei(e.target.value);
-                setRouteIdParam(null);
-              }}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
-            >
-              <option value="">Select Vehicle</option>
-              {filteredVehicles.filter(v => v.gps_device).map((v, idx) => (
-                <option key={`veh-${v.id}-${idx}`} value={v.gps_device!.imei}>
-                  {v.registration_no} ({v.vehicle_type?.name || "Tipper"})
-                </option>
-              ))}
-            </select>
+              onChange={handleVehicleSelect}
+              options={vehicleOptions}
+              placeholder="Select Vehicle"
+              className="w-full"
+            />
           </div>
 
           {/* Speed Selector */}
@@ -1617,26 +1905,65 @@ export default function PlaybackPage() {
               <option value={2}>2X</option>
               <option value={4}>4X</option>
               <option value={8}>8X</option>
+              <option value={16}>16X</option>
+              <option value={32}>32X</option>
+              <option value={64}>64X</option>
             </select>
           </div>
 
-          {/* Play/Pause Green Circle Button */}
+          {/* Playback Controls Row */}
           <button
+            type="button"
+            disabled={!selectedImei}
             onClick={() => {
               if (points.length === 0) {
-                loadRoute();
+                loadRoute(true);
               } else {
                 setPlaying(!playing);
               }
             }}
-            className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-500/20 transition-all shrink-0 cursor-pointer"
-            title={playing ? "Pause Playback" : "Start Playback"}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${
+              !selectedImei 
+                ? "bg-slate-300 cursor-not-allowed shadow-none" 
+                : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
+            }`}
+            title={!selectedImei ? "Please select a vehicle first" : playing ? "Pause Playback" : "Start Playback"}
           >
             {playing ? (
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             ) : (
               <svg className="w-3.5 h-3.5 fill-current translate-x-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             )}
+          </button>
+
+          {/* Stop Button */}
+          <button
+            type="button"
+            disabled={points.length === 0}
+            onClick={handleStop}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${
+              points.length === 0 
+                ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none" 
+                : "bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-rose-500/20 cursor-pointer hover:shadow-lg"
+            }`}
+            title="Show Full Route / Stop Playback"
+          >
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+            </svg>
+          </button>
+
+          {/* Reset Button */}
+          <button
+            type="button"
+            onClick={handleReset}
+            className="w-8 h-8 rounded-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white flex items-center justify-center shadow-md shadow-slate-500/20 transition-all shrink-0 cursor-pointer hover:shadow-lg"
+            title="Reset Filters and Playback"
+          >
+            <svg className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="2.5" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
           </button>
         </div>
 
@@ -1672,7 +1999,9 @@ export default function PlaybackPage() {
         <div ref={box} className="flex-1 w-full h-full z-0 bg-theme-base" />
 
         {/* Custom Orange Map Indication Button matching screenshot */}
-        <div className="absolute top-3 right-16 z-[1000] flex flex-col items-end">
+        <div className={`absolute top-3 z-[1000] flex flex-col items-end transition-all duration-300 ${
+          stoppages.length > 0 ? 'right-[280px]' : 'right-4'
+        }`}>
           <div 
             onClick={() => setShowMapIndicationMenu(!showMapIndicationMenu)}
             className="bg-[#f59e0b] hover:bg-amber-600 text-white px-3 py-1.5 text-xs font-bold uppercase rounded shadow-md tracking-wider flex items-center gap-1 cursor-pointer transition select-none"
@@ -1681,20 +2010,45 @@ export default function PlaybackPage() {
           </div>
 
           {showMapIndicationMenu && (
-            <div className="mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl p-3 w-56 flex flex-col gap-2 z-[1000]">
+            <div className="mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl p-3 w-64 flex flex-col gap-2 z-[1000]">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1.5">Map Layers</span>
               
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
-                <input 
-                  type="checkbox" 
-                  checked={showPlannedRoute} 
-                  onChange={(e) => setShowPlannedRoute(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
-                />
-                <span>Planned Route</span>
-              </label>
+              <div className="flex flex-col gap-1">
+                <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                  <input 
+                    type="checkbox" 
+                    checked={showPlannedRoute} 
+                    onChange={(e) => setShowPlannedRoute(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                  />
+                  <span>Planned Route & Checkpoints</span>
+                </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+                {showPlannedRoute && (
+                  <div className="pl-5 flex flex-col gap-1.5 border-l border-slate-150 ml-1.5 mb-1 mt-0.5">
+                    <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
+                      <input 
+                        type="checkbox" 
+                        checked={showCoveredCheckpoints} 
+                        onChange={(e) => setShowCoveredCheckpoints(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                      />
+                      <span>Covered Lane Points (Hit)</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
+                      <input 
+                        type="checkbox" 
+                        checked={showUncoveredCheckpoints} 
+                        onChange={(e) => setShowUncoveredCheckpoints(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                      />
+                      <span>Uncovered Lane Points (Missed)</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
                 <input 
                   type="checkbox" 
                   checked={showActualMovement} 
@@ -1704,7 +2058,7 @@ export default function PlaybackPage() {
                 <span>Actual Movement</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
                 <input 
                   type="checkbox" 
                   checked={showRawPlayback} 
@@ -1714,7 +2068,7 @@ export default function PlaybackPage() {
                 <span>Raw Playback (Unsnapped)</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
                 <input 
                   type="checkbox" 
                   checked={showRegionBoundary} 
@@ -1724,7 +2078,7 @@ export default function PlaybackPage() {
                 <span>Region Boundary</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
                 <input 
                   type="checkbox" 
                   checked={showStartEndPoint} 
@@ -1734,103 +2088,171 @@ export default function PlaybackPage() {
                 <span>Start/End Points</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900">
-                <input 
-                  type="checkbox" 
-                  checked={showStoppages} 
-                  onChange={(e) => setShowStoppages(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
-                />
-                <span>Stoppages</span>
-              </label>
+              <div className="flex flex-col gap-1">
+                <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                  <input 
+                    type="checkbox" 
+                    checked={showStoppages} 
+                    onChange={(e) => setShowStoppages(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                  />
+                  <span>Stoppages</span>
+                </label>
+
+                {showStoppages && (
+                  <div className="pl-5 flex flex-col gap-1.5 border-l border-slate-150 ml-1.5 mt-0.5">
+                    <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
+                      <input 
+                        type="checkbox" 
+                        checked={showMajorStoppages} 
+                        onChange={(e) => setShowMajorStoppages(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                      />
+                      <span>Major Stops (≥ 10 mins)</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
+                      <input 
+                        type="checkbox" 
+                        checked={showMiniStoppages} 
+                        onChange={(e) => setShowMiniStoppages(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                      />
+                      <span>Mini Stops (&lt; 10 mins)</span>
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
 
         {/* Floating checkpoints sidebar if checkpoints exist */}
         {checkpoints.length > 0 && (
-          <div className="absolute top-4 left-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl max-h-[calc(100%-32px)] overflow-y-auto custom-scrollbar flex flex-col">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center gap-1.5 shrink-0 border-b border-slate-100 pb-2">
-              📍 Checkpoints ({checkpoints.filter(cp => cp.visited).length}/{checkpoints.length} Hit)
+          <div className={`absolute top-4 left-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl ${checkpointsCollapsed ? 'max-h-12 overflow-hidden pb-0' : 'max-h-[calc(100%-32px)]'} flex flex-col transition-all duration-300`}>
+            <h3 
+              onClick={() => setCheckpointsCollapsed(!checkpointsCollapsed)}
+              className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center justify-between shrink-0 border-b border-slate-100 pb-2 cursor-pointer select-none"
+            >
+              <span className="flex items-center gap-1.5">
+                📍 Checkpoints ({checkpoints.filter(cp => cp.visited).length}/{checkpoints.length} Hit)
+              </span>
+              <span className="text-slate-400 text-sm font-semibold transition-transform">
+                {checkpointsCollapsed ? "▲" : "▼"}
+              </span>
             </h3>
-            <div className="space-y-2 flex-1 overflow-y-auto pr-0.5">
-              {checkpoints.sort((a, b) => a.sequence_order - b.sequence_order).map((cp, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    const map = mapRef.current;
-                    if (!map) return;
-                    map.panTo([cp.latitude, cp.longitude]);
-                    const marker = checkpointMarkersMapRef.current[cp.id];
-                    if (marker) {
-                      marker.openPopup();
-                      const el = marker.getElement();
-                      if (el) {
-                        const child = el.firstElementChild;
-                        if (child) {
-                          child.classList.add("highlight-pulse");
-                          setTimeout(() => child.classList.remove("highlight-pulse"), 1500);
+            {!checkpointsCollapsed && (
+              <div className="space-y-2 flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
+                {checkpoints
+                  .filter(cp => {
+                    if (cp.visited && !showCoveredCheckpoints) return false;
+                    if (!cp.visited && !showUncoveredCheckpoints) return false;
+                    return true;
+                  })
+                  .sort((a, b) => a.sequence_order - b.sequence_order)
+                  .map((cp, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      const map = mapRef.current;
+                      if (!map) return;
+                      map.panTo([cp.latitude, cp.longitude]);
+                      const marker = checkpointMarkersMapRef.current[cp.id];
+                      if (marker) {
+                        marker.openPopup();
+                        const el = marker.getElement();
+                        if (el) {
+                          const child = el.firstElementChild;
+                          if (child) {
+                            child.classList.add("highlight-pulse");
+                            setTimeout(() => child.classList.remove("highlight-pulse"), 1500);
+                          }
                         }
                       }
-                    }
-                  }}
-                  className={`w-full text-left p-2.5 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${
-                    cp.visited 
-                      ? 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100 hover:border-emerald-200' 
-                      : 'bg-rose-50/30 hover:bg-rose-50/70 border-rose-100 hover:border-rose-200'
-                  }`}
-                >
-                  <div className="space-y-0.5 max-w-[70%]">
-                    <span className={`font-extrabold block truncate ${cp.visited ? 'text-emerald-600' : 'text-rose-500'}`}>
-                      #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
-                    </span>
-                    <span className="text-[9px] text-slate-400 block font-normal">
-                      Radius: {cp.radius_meters || 100}m
-                    </span>
-                    {!cp.visited && cp.reason && (
-                      <span className="text-[9.5px] text-rose-600 font-semibold block mt-1.5 leading-tight italic bg-rose-50/70 border border-rose-100 px-1.5 py-0.5 rounded">
-                        ⚠️ {cp.reason}
+                    }}
+                    className={`w-full text-left p-2.5 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${
+                      cp.visited 
+                        ? 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100 hover:border-emerald-200' 
+                        : 'bg-rose-50/30 hover:bg-rose-50/70 border-rose-100 hover:border-rose-200'
+                    }`}
+                  >
+                    <div className="space-y-0.5 max-w-[70%]">
+                      <span className={`font-extrabold block truncate ${cp.visited ? 'text-emerald-600' : 'text-rose-500'}`}>
+                        #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
                       </span>
-                    )}
-                  </div>
-                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 ${
-                    cp.visited 
-                      ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-200' 
-                      : 'bg-rose-100 text-rose-600 group-hover:bg-rose-200'
-                  }`}>
-                    {cp.visited ? 'HIT' : 'MISSED'}
-                  </span>
-                </button>
-              ))}
-            </div>
+                      <span className="text-[9px] text-slate-400 block font-normal">
+                        Radius: {cp.radius_meters || 100}m
+                      </span>
+                      {!cp.visited && cp.reason && (
+                        <span className="text-[9.5px] text-rose-600 font-semibold block mt-1.5 leading-tight italic bg-rose-50/70 border border-rose-100 px-1.5 py-0.5 rounded">
+                          ⚠️ {cp.reason}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 ${
+                      cp.visited 
+                        ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-200' 
+                        : 'bg-rose-100 text-rose-600 group-hover:bg-rose-200'
+                    }`}>
+                      {cp.visited ? 'HIT' : 'MISSED'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Floating stoppages sidebar if stoppages exist */}
         {stoppages.length > 0 && (
-          <div className="absolute top-4 right-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl max-h-[calc(100%-32px)] overflow-y-auto custom-scrollbar flex flex-col">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center gap-1.5 shrink-0 border-b border-slate-100 pb-2">
-              🛑 Stoppages ({stoppages.length})
+          <div className={`absolute top-4 right-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl ${stoppagesCollapsed ? 'max-h-12 overflow-hidden pb-0' : 'max-h-[calc(100%-32px)]'} flex flex-col transition-all duration-300`}>
+            <h3 
+              onClick={() => setStoppagesCollapsed(!stoppagesCollapsed)}
+              className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center justify-between shrink-0 border-b border-slate-100 pb-2 cursor-pointer select-none"
+            >
+              <span className="flex items-center gap-1.5">
+                🛑 Stoppages ({
+                  stoppages.filter(s => {
+                    const mins = Math.max(1, Math.round(s.durationSeconds / 60));
+                    const isMajor = mins >= 10;
+                    if (isMajor && !showMajorStoppages) return false;
+                    if (!isMajor && !showMiniStoppages) return false;
+                    return true;
+                  }).length
+                })
+              </span>
+              <span className="text-slate-400 text-sm font-semibold transition-transform">
+                {stoppagesCollapsed ? "▲" : "▼"}
+              </span>
             </h3>
-            <div className="space-y-2 flex-1 overflow-y-auto pr-0.5">
-              {stoppages.map((s, i) => (
-                <button
-                  key={i}
-                  onClick={() => jumpToKeyframe(s.startIndex)}
-                  className="w-full text-left p-2.5 bg-slate-50 hover:bg-red-50 border border-slate-100 hover:border-red-200 rounded-xl text-xs transition flex items-center justify-between group active:scale-98"
-                >
-                  <div className="space-y-0.5">
-                    <span className="font-extrabold text-red-500 block">Stoppage #{i + 1}</span>
-                    <span className="text-[10px] text-slate-400">
-                      {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {!stoppagesCollapsed && (
+              <div className="space-y-2 flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
+                {stoppages
+                  .filter(s => {
+                    const mins = Math.max(1, Math.round(s.durationSeconds / 60));
+                    const isMajor = mins >= 10;
+                    if (isMajor && !showMajorStoppages) return false;
+                    if (!isMajor && !showMiniStoppages) return false;
+                    return true;
+                  })
+                  .map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => jumpToKeyframe(s.startIndex)}
+                    className="w-full text-left p-2.5 bg-slate-50 hover:bg-red-50 border border-slate-100 hover:border-red-200 rounded-xl text-xs transition flex items-center justify-between group active:scale-98"
+                  >
+                    <div className="space-y-0.5">
+                      <span className="font-extrabold text-red-500 block">Stoppage #{i + 1}</span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-black bg-red-100 text-red-600 group-hover:bg-red-200 px-2 py-0.5 rounded-lg transition duration-200">
+                       {formatStoppageDuration(s.durationSeconds)}
                     </span>
-                  </div>
-                  <span className="text-[10px] font-black bg-red-100 text-red-600 group-hover:bg-red-200 px-2 py-0.5 rounded-lg transition duration-200">
-                     {formatStoppageDuration(s.durationSeconds)}
-                  </span>
-                </button>
-              ))}
-            </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

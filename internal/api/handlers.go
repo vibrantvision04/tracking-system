@@ -7,6 +7,7 @@ import (
 	"gps-tracking-system/internal/decoder"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
+	"gps-tracking-system/internal/ultimatereport"
 	"gps-tracking-system/internal/utils"
 	"hash/crc32"
 	"math"
@@ -41,6 +42,10 @@ type Handler struct {
 	resolvedAlerts               map[int]ResolvedDetails
 	jwtSecret                    string
 	allowHistoricalRecalculation bool
+	// Ultimate Reports engine (independent module — does not affect existing Reports)
+	ultimateReportService *ultimatereport.UltimateReportService
+	excelEngine           *ultimatereport.ExcelEngine
+	reportTemplatePath    string
 }
 
 func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine, openDepotRepo *repository.OpenDepotRepository, jwtSecret string, allowHistoricalRecalc bool) *Handler {
@@ -68,6 +73,14 @@ func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepo
 		}
 	}()
 	return h
+}
+
+// SetUltimateReportEngine wires the Ultimate Reports module into the handler.
+// Called from main.go after constructing the Handler — keeps existing NewHandler signature unchanged.
+func (h *Handler) SetUltimateReportEngine(svc *ultimatereport.UltimateReportService, engine *ultimatereport.ExcelEngine, templatePath string) {
+	h.ultimateReportService = svc
+	h.excelEngine = engine
+	h.reportTemplatePath = templatePath
 }
 
 func (h *Handler) RebuildCache() {
@@ -98,6 +111,10 @@ func (h *Handler) RebuildCache() {
 			"assigned_route_name": v.AssignedRouteName,
 			"assigned_zone_id":    v.AssignedZoneID,
 			"assigned_zone_name":  v.AssignedZoneName,
+			"assigned_ward_id":    v.AssignedWardID,
+			"assigned_route_id":   v.AssignedRouteID,
+			"zone_id":             v.ZoneID,
+			"ward_id":             v.WardID,
 		}
 		
 		
@@ -173,8 +190,6 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * limit
 
 	todayStr := utils.CurrentTimeInIndia().Format("2006-01-02")
-	var hasToday bool
-	var todayTime time.Time
 
 	from, err := time.ParseInLocation("2006-01-02", fromStr, utils.IndianLocation)
 	if err != nil {
@@ -189,53 +204,70 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 	from = time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, utils.IndianLocation)
 	to = time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, utils.IndianLocation)
 
-	// Check if today falls within [from, to]
-	currCheck := from
-	for !currCheck.After(to) {
-		if currCheck.Format("2006-01-02") == todayStr {
-			hasToday = true
-			todayTime = currCheck
-			break
-		}
-		currCheck = currCheck.AddDate(0, 0, 1)
-	}
-
 	forceRegen := r.URL.Query().Get("force") == "true"
 
-	// Determine which dates we need to calculate.
-	// If forceRegen is true AND allowHistoricalRecalculation is true, we regenerate all dates in the [from, to] range.
-	// Otherwise, we only regenerate today if it's in the requested range.
-	var datesToRegen []time.Time
-	if forceRegen && h.allowHistoricalRecalculation {
-		curr := from
-		for !curr.After(to) {
-			datesToRegen = append(datesToRegen, curr)
-			curr = curr.AddDate(0, 0, 1)
+	// 1. Get existing reports from DB to identify missing historical reports
+	existingReports, _, err := h.rService.GetReports(r.Context(), vehicleID, from, to, 999999, 0)
+	existingMap := make(map[string]bool) // key: "vehicleID:YYYY-MM-DD"
+	if err == nil {
+		for _, rep := range existingReports {
+			dateKey := rep.ReportDate.In(utils.IndianLocation).Format("2006-01-02")
+			existingMap[strconv.Itoa(rep.VehicleID)+":"+dateKey] = true
 		}
-	} else if hasToday {
-		datesToRegen = append(datesToRegen, todayTime)
 	}
 
-	if len(datesToRegen) > 0 {
-		var targetVehicles []*repository.Vehicle
-		if vehicleID > 0 {
-			vehicle, err := h.vRepo.GetByID(r.Context(), vehicleID)
-			if err == nil {
-				targetVehicles = append(targetVehicles, vehicle)
-			}
-		} else {
-			vehicles, err := h.vRepo.GetAll(r.Context())
-			if err == nil {
-				for i := range vehicles {
-					targetVehicles = append(targetVehicles, &vehicles[i])
-				}
+	// 2. Fetch list of target vehicles
+	var targetVehicles []*repository.Vehicle
+	if vehicleID > 0 {
+		vehicle, err := h.vRepo.GetByID(r.Context(), vehicleID)
+		if err == nil {
+			targetVehicles = append(targetVehicles, vehicle)
+		}
+	} else {
+		vehicles, err := h.vRepo.GetAll(r.Context())
+		if err == nil {
+			for i := range vehicles {
+				targetVehicles = append(targetVehicles, &vehicles[i])
 			}
 		}
+	}
 
+	// 3. For each date and vehicle, decide if we need to generate it
+	type regenTask struct {
+		vehicle *repository.Vehicle
+		date    time.Time
+	}
+	var tasksToRun []regenTask
+
+	curr := from
+	for !curr.After(to) {
+		dateStr := curr.Format("2006-01-02")
+		isToday := dateStr == todayStr
+
+		for _, vehicle := range targetVehicles {
+			if vehicle.GpsDevice == nil {
+				continue
+			}
+
+			// Always regenerate today, or if forceRegen is requested (and allowed), or if the report is missing in the database
+			hasRecord := existingMap[strconv.Itoa(vehicle.ID)+":"+dateStr]
+			shouldRegen := isToday || (forceRegen && h.allowHistoricalRecalculation) || !hasRecord
+
+			if shouldRegen {
+				tasksToRun = append(tasksToRun, regenTask{
+					vehicle: vehicle,
+					date:    curr,
+				})
+			}
+		}
+		curr = curr.AddDate(0, 0, 1)
+	}
+
+	if len(tasksToRun) > 0 {
 		var wg sync.WaitGroup
 		timeout := 10 * time.Second
-		if len(datesToRegen) > 1 {
-			timeout = time.Duration(10*len(datesToRegen)) * time.Second
+		if len(tasksToRun) > 1 {
+			timeout = time.Duration(10*len(tasksToRun)) * time.Second
 			if timeout > 60*time.Second {
 				timeout = 60 * time.Second
 			}
@@ -244,38 +276,24 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		sem := make(chan struct{}, 10) // Concurrency limit of 10
 
-		for _, dt := range datesToRegen {
-			for _, vehicle := range targetVehicles {
-				if vehicle.GpsDevice == nil {
-					continue
+		for _, t := range tasksToRun {
+			wg.Add(1)
+			go func(v *repository.Vehicle, targetDt time.Time) {
+				defer wg.Done()
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				case <-ctx.Done():
+					return
 				}
-				zone := ""
-				ward := ""
-				// NOTE: zone and ward are intentionally left empty here.
-				// report_service.GenerateDailyReport resolves them from:
-				//   zone → vehicle_regions table (Vehicle-Zone Mapping page)
-				//   ward → vehicle_route_assignments → route_wards (Route to Vehicle & Shift page)
-				_ = zone
-				_ = ward
-
-				wg.Add(1)
-				go func(v *repository.Vehicle, z, w string, targetDt time.Time) {
-					defer wg.Done()
-					select {
-					case sem <- struct{}{}:
-						defer func() { <-sem }()
-					case <-ctx.Done():
-						return
-					}
-					
-					// Always unfinalize if forceRegen is true (so it re-runs calculations)
-					if forceRegen {
-						_ = h.rService.UnfinalizeForDate(ctx, targetDt, v.ID)
-					}
-					
-					_ = h.rService.GenerateDailyReport(ctx, v.ID, targetDt, z, w)
-				}(vehicle, zone, ward, dt)
-			}
+				
+				// Always unfinalize if forceRegen is true (so it re-runs calculations)
+				if forceRegen {
+					_ = h.rService.UnfinalizeForDate(ctx, targetDt, v.ID)
+				}
+				
+				_ = h.rService.GenerateDailyReport(ctx, v.ID, targetDt, "", "")
+			}(t.vehicle, t.date)
 		}
 		wg.Wait()
 	}

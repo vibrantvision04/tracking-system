@@ -2,50 +2,99 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type Coordinate struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+func (c *Coordinate) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		X   *float64 `json:"x"`
+		Y   *float64 `json:"y"`
+		Lng *float64 `json:"lng"`
+		Lat *float64 `json:"lat"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.X != nil {
+		c.X = *aux.X
+	} else if aux.Lng != nil {
+		c.X = *aux.Lng
+	}
+	if aux.Y != nil {
+		c.Y = *aux.Y
+	} else if aux.Lat != nil {
+		c.Y = *aux.Lat
+	}
+	return nil
+}
+
+type StoppagePoint struct {
+	Timestamp    time.Time `json:"@timestamp"`
+	IMEI         string    `json:"imei"`
+	Lat          float64   `json:"lat"`
+	Lng          float64   `json:"lng"`
+	Speed        float64   `json:"speed"`
+	Ignition     int       `json:"ignition"`
+	Datetime     time.Time `json:"datetime"`
+	DateTimeDate string    `json:"date_time_date"`
+}
+
+type Stoppage struct {
+	StartPointIndex int           `json:"startPointIndex"`
+	EndPointIndex   int           `json:"endPointIndex"`
+	StartPoint      StoppagePoint `json:"startPoint"`
+	EndPoint        StoppagePoint `json:"endPoint"`
+	Duration        int           `json:"duration"`
+}
+
 type MovementReport struct {
-	ID                        int64     `json:"id"`
-	IMEI                      string    `json:"imei"`
-	VehicleID                 int       `json:"vehicle_id"`
-	RegistrationNo            string    `json:"registration_no"`
-	VehicleType               string    `json:"vehicle_type"`
-	Zone                      string    `json:"zone"`
-	Ward                      string    `json:"ward"`
-	ReportDate                time.Time `json:"report_date"`
-	AverageSpeed              float64   `json:"average_speed"`
-	TotalDistance             float64   `json:"total_distance"`
-	StartPoint                string    `json:"start_point"` // JSON string
-	EndPoint                  string    `json:"end_point"`   // JSON string
-	StartTime                 *time.Time `json:"start_time"`
-	EndTime                   *time.Time `json:"end_time"`
-	Alert                     int       `json:"alert"`
-	TotalActiveDuration       string    `json:"total_active_duration"`    // "HH:MM:SS"
-	TotalIdleDuration         string    `json:"total_idle_duration"`
-	TotalStoppageDuration     string    `json:"total_stoppage_duration"`
-	StoppagesCount            int       `json:"stoppages_count"`
-	InParkingDuration         string    `json:"in_parking_duration"`
-	ActualIgnitionOnDuration  string    `json:"actual_ignition_on_duration"`
-	TotalIgnitionOnDuration   string    `json:"total_ignition_on_duration"`
-	TotalRunningDuration      string    `json:"total_running_duration"`
-	TotalRunningTime          string    `json:"total_running_time"`
-	DayRunningTime            string    `json:"day_running_time"`
-	NightRunningTime          string    `json:"night_running_time"`
-	FuelInLtr                 float64   `json:"fuel_in_ltr"`
-	FuelConsumption           float64   `json:"fuel_consumption"`
-	SpeedLimit                float64   `json:"speed_limit"`
-	MaxSpeed                  float64   `json:"max_speed"`
-	MinSpeed                  float64   `json:"min_speed"`
-	OverspeedDistance         float64   `json:"overspeed_distance"`
-	OverspeedCount            string    `json:"overspeed_count"`
-	OverspeedTime             string    `json:"overspeed_time"`
-	IsFinalized               bool      `json:"is_finalized"`
-	MinorStoppages            int       `json:"minor_stoppages"`
-	MajorStoppages            int       `json:"major_stoppages"`
+	ID                        int64       `json:"id"`
+	IMEI                      string      `json:"imei"`
+	VehicleID                 int         `json:"vehicle_id"`
+	RegistrationNo            string      `json:"registration_no"`
+	VehicleType               string      `json:"vehicle_type"`
+	Zone                      string      `json:"zone"`
+	Ward                      string      `json:"ward"`
+	ReportDate                time.Time   `json:"report_date"`
+	AverageSpeed              float64     `json:"average_speed"`
+	TotalDistance             float64     `json:"total_distance"`
+	StartPoint                *Coordinate `json:"start_point"`
+	EndPoint                  *Coordinate `json:"end_point"`
+	StartTime                 *time.Time  `json:"start_time"`
+	EndTime                   *time.Time  `json:"end_time"`
+	Alert                     int         `json:"alert"`
+	TotalActiveDuration       string      `json:"total_active_duration"`    // "HH:MM:SS"
+	TotalIdleDuration         string      `json:"total_idle_duration"`
+	TotalStoppageDuration     string      `json:"total_stoppage_duration"`
+	StoppagesCount            int         `json:"stoppages_count"`
+	InParkingDuration         string      `json:"in_parking_duration"`
+	ActualIgnitionOnDuration  string      `json:"actual_ignition_on_duration"`
+	TotalIgnitionOnDuration   string      `json:"total_ignition_on_duration"`
+	TotalRunningDuration      string      `json:"total_running_duration"`
+	TotalRunningTime          string      `json:"total_running_time"`
+	DayRunningTime            string      `json:"day_running_time"`
+	NightRunningTime          string      `json:"night_running_time"`
+	FuelInLtr                 float64     `json:"fuel_in_ltr"`
+	FuelConsumption           float64     `json:"fuel_consumption"`
+	SpeedLimit                float64     `json:"speed_limit"`
+	MaxSpeed                  float64     `json:"max_speed"`
+	MinSpeed                  float64     `json:"min_speed"`
+	OverspeedDistance         float64     `json:"overspeed_distance"`
+	OverspeedCount            string      `json:"overspeed_count"`
+	OverspeedTime             string      `json:"overspeed_time"`
+	IsFinalized               bool        `json:"is_finalized"`
+	MinorStoppages            int         `json:"minor_stoppages"`
+	MajorStoppages            int         `json:"major_stoppages"`
+	Stoppages                 []Stoppage  `json:"stoppages"`
 }
 
 type ReportRepository struct {
@@ -64,8 +113,8 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 			   total_ignition_on_duration, total_running_duration, total_running_time, 
 			   day_running_time, night_running_time, fuel_in_ltr, fuel_consumption, 
 			   speed_limit, max_speed, min_speed, overspeed_distance, overspeed_count, overspeed_time,
-			   zone, ward, stoppages_count, minor_stoppages, major_stoppages)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+			   zone, ward, stoppages_count, minor_stoppages, major_stoppages, stoppages)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
 			  ON CONFLICT (imei, report_date) DO UPDATE SET
 			  average_speed = EXCLUDED.average_speed,
 			  total_distance = EXCLUDED.total_distance,
@@ -96,7 +145,8 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 			  ward = EXCLUDED.ward,
 			  stoppages_count = EXCLUDED.stoppages_count,
 			  minor_stoppages = EXCLUDED.minor_stoppages,
-			  major_stoppages = EXCLUDED.major_stoppages
+			  major_stoppages = EXCLUDED.major_stoppages,
+			  stoppages = EXCLUDED.stoppages
 			  WHERE NOT movement_reports.is_finalized`
 	
 	_, err := r.pool.Exec(ctx, query,
@@ -106,7 +156,7 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 		rep.TotalIgnitionOnDuration, rep.TotalRunningDuration, rep.TotalRunningTime,
 		rep.DayRunningTime, rep.NightRunningTime, rep.FuelInLtr, rep.FuelConsumption,
 		rep.SpeedLimit, rep.MaxSpeed, rep.MinSpeed, rep.OverspeedDistance, rep.OverspeedCount, rep.OverspeedTime,
-		rep.Zone, rep.Ward, rep.StoppagesCount, rep.MinorStoppages, rep.MajorStoppages,
+		rep.Zone, rep.Ward, rep.StoppagesCount, rep.MinorStoppages, rep.MajorStoppages, rep.Stoppages,
 	)
 	return err
 }
@@ -142,13 +192,14 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 	var err error
 	var totalCount int
 
-	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, COALESCE(v.registration_no, ''), COALESCE(vt.vehicle_type_name, ''), r.report_date, COALESCE(r.average_speed, 0.0), COALESCE(r.total_distance, 0.0), COALESCE(r.start_point::text, '{}'), COALESCE(r.end_point::text, '{}'), 
+	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, COALESCE(v.registration_no, ''), COALESCE(vt.vehicle_type_name, ''), r.report_date, COALESCE(r.average_speed, 0.0), COALESCE(r.total_distance, 0.0), r.start_point, r.end_point, 
 			  r.start_time, r.end_time, COALESCE(r.alert, 0), COALESCE(r.total_active_duration, ''), COALESCE(r.total_idle_duration, ''), 
 			  COALESCE(r.total_stoppage_duration, ''), COALESCE(r.in_parking_duration, ''), COALESCE(r.actual_ignition_on_duration, ''), 
 			  COALESCE(r.total_ignition_on_duration, ''), COALESCE(r.total_running_duration, ''), COALESCE(r.total_running_time, ''), 
 			  COALESCE(r.day_running_time, ''), COALESCE(r.night_running_time, ''), COALESCE(r.fuel_in_ltr, 0.0), COALESCE(r.fuel_consumption, 0.0), 
 			  COALESCE(r.speed_limit, 0.0), COALESCE(r.max_speed, 0.0), COALESCE(r.min_speed, 0.0), COALESCE(r.overspeed_distance, 0.0), COALESCE(r.overspeed_count, '0'), COALESCE(r.overspeed_time, '0'),
-			  COALESCE(r.zone, ''), COALESCE(r.ward, ''), COALESCE(r.stoppages_count, 0), COALESCE(r.minor_stoppages, 0), COALESCE(r.major_stoppages, 0)
+			  COALESCE(r.zone, ''), COALESCE(r.ward, ''), COALESCE(r.stoppages_count, 0), COALESCE(r.minor_stoppages, 0), COALESCE(r.major_stoppages, 0),
+			  r.stoppages
 			  FROM movement_reports r
 			  JOIN vehicles v ON r.vehicle_id = v.id
 			  LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id `
@@ -189,6 +240,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 			&rep.DayRunningTime, &rep.NightRunningTime, &rep.FuelInLtr, &rep.FuelConsumption,
 			&rep.SpeedLimit, &rep.MaxSpeed, &rep.MinSpeed, &rep.OverspeedDistance, &rep.OverspeedCount, &rep.OverspeedTime,
 			&rep.Zone, &rep.Ward, &rep.StoppagesCount, &rep.MinorStoppages, &rep.MajorStoppages,
+			&rep.Stoppages,
 		)
 		if err != nil {
 			return nil, 0, err

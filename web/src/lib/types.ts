@@ -31,6 +31,12 @@ export interface Vehicle {
   last_lat: number;
   last_lng: number;
   last_time: string | null;
+  assigned_route_name?: string;
+  assigned_zone_id?: number;
+  assigned_ward_id?: number;
+  assigned_route_id?: number;
+  zone_id?: number | null;
+  ward_id?: number | null;
 }
 
 export interface LivePosition {
