@@ -89,15 +89,28 @@ func (r *GPSRepository) GetLatest(ctx context.Context, imei string) (*decoder.AV
 }
 
 func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, end time.Time) ([]decoder.AVLData, error) {
+	var imei string
+	err := r.pool.QueryRow(ctx, `
+		SELECT d.imei
+		FROM gps_devices d
+		JOIN vehicle_gps_map m ON d.id = m.device_id AND m.unassigned_at IS NULL
+		WHERE m.vehicle_id = $1
+		LIMIT 1
+	`, vehicleID).Scan(&imei)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
 	query := `
 		SELECT g.imei, g.captured_at, g.lat, g.lng, g.speed, g.direction, g.altitude, g.satellites, g.ignition
 		FROM gps_data g
-		JOIN gps_devices d ON g.imei = d.imei
-		JOIN vehicle_gps_map m ON d.id = m.device_id AND m.unassigned_at IS NULL
-		WHERE m.vehicle_id = $1 AND g.captured_at >= $2 AND g.captured_at < $3
+		WHERE g.imei = $1 AND g.captured_at >= $2 AND g.captured_at < $3
 		ORDER BY g.captured_at ASC
 	`
-	rows, err := r.pool.Query(ctx, query, vehicleID, start, end)
+	rows, err := r.pool.Query(ctx, query, imei, start, end)
 	if err != nil {
 		return nil, err
 	}
