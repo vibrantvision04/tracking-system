@@ -26,20 +26,6 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
-function findClosestCoordinateIndex(lat: number, lng: number, coords: [number, number][]): number {
-  if (coords.length === 0) return 0;
-  let minDistance = Infinity;
-  let closestIndex = 0;
-  for (let i = 0; i < coords.length; i++) {
-    const dist = haversineDistance(lat, lng, coords[i][0], coords[i][1]);
-    if (dist < minDistance) {
-      minDistance = dist;
-      closestIndex = i;
-    }
-  }
-  return closestIndex;
-}
-
 function distanceToSegment(pLat: number, pLng: number, aLat: number, aLng: number, bLat: number, bLng: number): number {
   if (aLat === bLat && aLng === bLng) {
     return haversineDistance(pLat, pLng, aLat, aLng) * 1000;
@@ -1643,13 +1629,8 @@ export default function PlaybackPage() {
     const map = mapRef.current;
     if (!map || matchedCoordsRef.current.length === 0 || !points[currentIndex]) return;
 
-    const currentPoint = points[currentIndex];
-    
-    // Locate the closest OSRM map-matched point index
-    const closestIdx = findClosestCoordinateIndex(currentPoint.lat, currentPoint.lng, matchedCoordsRef.current);
-    
-    // Slice matched road coords up to the closest index
-    const coveredCoords = matchedCoordsRef.current.slice(0, Math.max(2, closestIdx + 1));
+    // Slice matched road coords up to the current index directly (1-to-1 mapping)
+    const coveredCoords = matchedCoordsRef.current.slice(0, currentIndex + 1);
 
     if (activeLineRef.current) {
       activeLineRef.current.setLatLngs(coveredCoords);
