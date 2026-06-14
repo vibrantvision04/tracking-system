@@ -34,6 +34,47 @@ func exceptionLabel(e ExceptionRow) string {
 	}
 }
 
+// normalizeZone maps database zone names to sheet short codes.
+func normalizeZone(zone string) string {
+	zone = strings.ToUpper(strings.TrimSpace(zone))
+	switch {
+	case strings.Contains(zone, "HAWAMAHAL") || strings.Contains(zone, "AMER") || zone == "HMZ":
+		return "HMZ"
+	case strings.Contains(zone, "CIVIL") || zone == "CLZ":
+		return "CLZ"
+	case strings.Contains(zone, "KISHANPOLE") || zone == "KPZ":
+		return "KPZ"
+	case strings.Contains(zone, "ADARSH") || zone == "ANZ":
+		return "ANZ"
+	case strings.Contains(zone, "SW") || zone == "STREET WAIST" || zone == "STREET WASTE":
+		return "SW"
+	default:
+		return zone
+	}
+}
+
+func getSWZoneCode(ward string, fmZone string) string {
+	if fmZone != "" {
+		code := normalizeZone(fmZone)
+		if code == "HMZ" || code == "CLZ" || code == "KPZ" || code == "ANZ" {
+			return code
+		}
+	}
+	zoneName := guessZoneFromWard(ward)
+	switch zoneName {
+	case "HAWAMAHAL - AMER ZONE":
+		return "HMZ"
+	case "CIVIL LINES ZONE":
+		return "CLZ"
+	case "KISHANPOLE ZONE":
+		return "KPZ"
+	case "ADARSH NAGAR ZONE":
+		return "ANZ"
+	default:
+		return "HMZ"
+	}
+}
+
 // UltimateReportService assembles ReportData from existing system tables.
 // All business logic lives here — Excel engine only injects values.
 type UltimateReportService struct {
@@ -119,7 +160,6 @@ func (s *UltimateReportService) BuildReportData(ctx context.Context, date time.T
 
 		pct := res.coverage[m.RegistrationNo]
 		
-		// Write both MORNING and EVENING keys to support VLOOKUP in both shifts
 		rawCoverages = append(rawCoverages, RawCoverageInfo{
 			Key:             "MORNING_" + m.RegistrationNo,
 			RegistrationNo:  m.RegistrationNo,
@@ -127,6 +167,11 @@ func (s *UltimateReportService) BuildReportData(ctx context.Context, date time.T
 		})
 		rawCoverages = append(rawCoverages, RawCoverageInfo{
 			Key:             "EVENING_" + m.RegistrationNo,
+			RegistrationNo:  m.RegistrationNo,
+			CoveragePercent: pct,
+		})
+		rawCoverages = append(rawCoverages, RawCoverageInfo{
+			Key:             "SWEEPING_" + m.RegistrationNo,
 			RegistrationNo:  m.RegistrationNo,
 			CoveragePercent: pct,
 		})
@@ -149,6 +194,11 @@ func (s *UltimateReportService) BuildReportData(ctx context.Context, date time.T
 			})
 			rawCoverages = append(rawCoverages, RawCoverageInfo{
 				Key:             "EVENING_" + f.VehicleRegNo,
+				RegistrationNo:  f.VehicleRegNo,
+				CoveragePercent: 0,
+			})
+			rawCoverages = append(rawCoverages, RawCoverageInfo{
+				Key:             "SWEEPING_" + f.VehicleRegNo,
 				RegistrationNo:  f.VehicleRegNo,
 				CoveragePercent: 0,
 			})
@@ -179,6 +229,7 @@ func (s *UltimateReportService) BuildReportData(ctx context.Context, date time.T
 				ward = fm.AssignedWard
 			}
 		}
+		zone = normalizeZone(zone)
 
 		isNotWorked := m.TotalDistance == 0 || (hasExc && exc.ExceptionType == "NOT_WORKED")
 
@@ -228,6 +279,7 @@ func (s *UltimateReportService) BuildReportData(ctx context.Context, date time.T
 				Distance:       m.TotalDistance,
 				AverageSpeed:   m.AverageSpeed,
 				Remarks:        remarks,
+				ZoneCode:       getSWZoneCode(ward, zone),
 			})
 
 		default:
@@ -262,13 +314,46 @@ func (s *UltimateReportService) BuildReportData(ctx context.Context, date time.T
 			} else {
 				remarks = "NOT WORKED"
 			}
-			_ = remarks
-			// Only add to DEPARTED if they have no telemetry at all
-			rd.Departed = append(rd.Departed, DepartedRow{
-				Zone:           f.AssignedZone,
-				Ward:           f.AssignedWard,
-				RegistrationNo: f.VehicleRegNo,
-			})
+			
+			zone := normalizeZone(f.AssignedZone)
+			ward := f.AssignedWard
+
+			switch zone {
+			case "HMZ", "CLZ", "KPZ", "ANZ":
+				row := ZoneRow{
+					Ward:            ward,
+					RegistrationNo:  f.VehicleRegNo,
+					CoveragePercent: 0,
+					Distance:        0.0,
+					AverageSpeed:    0.0,
+					Remarks:         remarks,
+				}
+				switch zone {
+				case "HMZ":
+					rd.HMZ = append(rd.HMZ, row)
+				case "CLZ":
+					rd.CLZ = append(rd.CLZ, row)
+				case "KPZ":
+					rd.KPZ = append(rd.KPZ, row)
+				case "ANZ":
+					rd.ANZ = append(rd.ANZ, row)
+				}
+			case "SW":
+				rd.SW = append(rd.SW, SWRow{
+					Ward:           ward,
+					RegistrationNo: f.VehicleRegNo,
+					Distance:       0.0,
+					AverageSpeed:   0.0,
+					Remarks:        remarks,
+					ZoneCode:       getSWZoneCode(ward, zone),
+				})
+			default:
+				rd.Departed = append(rd.Departed, DepartedRow{
+					Zone:           zone,
+					Ward:           ward,
+					RegistrationNo: f.VehicleRegNo,
+				})
+			}
 		}
 	}
 

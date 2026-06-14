@@ -170,6 +170,53 @@ func (r *UltimateReportRepository) GetFleetMaster(ctx context.Context) ([]FleetM
 	`
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
+		return r.getFleetMasterFallback(ctx)
+	}
+	defer rows.Close()
+
+	var results []FleetMasterRow
+	for rows.Next() {
+		var f FleetMasterRow
+		if err := rows.Scan(&f.VehicleRegNo, &f.VehicleType, &f.AssignedZone, &f.AssignedWard, &f.IsActive); err != nil {
+			return nil, err
+		}
+		results = append(results, f)
+	}
+
+	if len(results) == 0 {
+		return r.getFleetMasterFallback(ctx)
+	}
+
+	return results, nil
+}
+
+func (r *UltimateReportRepository) getFleetMasterFallback(ctx context.Context) ([]FleetMasterRow, error) {
+	query := `
+		SELECT 
+			v.registration_no,
+			COALESCE(vt.vehicle_type_name, '') as vehicle_type,
+			COALESCE(z.region_name, '') as assigned_zone,
+			COALESCE(w.region_name, '') as assigned_ward,
+			v.is_active
+		FROM vehicles v
+		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_regions vr ON v.id = vr.vehicle_id
+		LEFT JOIN regions z ON COALESCE(vr.region_id, v.zone_id) = z.id AND z.region_type_id = 2
+		LEFT JOIN LATERAL (
+			SELECT route_id FROM vehicle_route_assignments
+			WHERE vehicle_id = v.id AND is_active = true
+			ORDER BY assigned_date DESC, id DESC
+			LIMIT 1
+		) vra ON true
+		LEFT JOIN LATERAL (
+			SELECT ward_id FROM route_wards WHERE route_id = vra.route_id LIMIT 1
+		) rw ON true
+		LEFT JOIN regions w ON COALESCE(rw.ward_id, v.ward_id) = w.id AND w.region_type_id = 3
+		WHERE v.is_active = true
+		ORDER BY assigned_zone, v.registration_no
+	`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()

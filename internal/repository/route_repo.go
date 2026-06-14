@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -112,13 +114,28 @@ func (r *RouteRepository) AssignRoute(ctx context.Context, vehicleID, routeID, s
 	}
 	defer tx.Rollback(ctx)
 
+	// 1. Check if the route is already assigned to a different vehicle in this shift
+	var assignedVehicleRegNo string
+	err = tx.QueryRow(ctx, `
+		SELECT COALESCE(v.registration_no, '') 
+		FROM vehicle_route_assignments va
+		JOIN vehicles v ON va.vehicle_id = v.id
+		WHERE va.route_id = $1 AND va.shift_id = $2 AND va.is_active = true AND va.vehicle_id != $3 LIMIT 1
+	`, routeID, shiftID, vehicleID).Scan(&assignedVehicleRegNo)
+	if err == nil {
+		return fmt.Errorf("route is already assigned to vehicle %s in this shift", assignedVehicleRegNo)
+	} else if err != pgx.ErrNoRows {
+		return err
+	}
+
+	// 2. Insert or update the assignment using a fixed dummy date '1970-01-01' to enforce persistence
 	query := `
 		INSERT INTO vehicle_route_assignments (vehicle_id, route_id, shift_id, assigned_date, is_active)
-		VALUES ($1, $2, $3, $4, true)
+		VALUES ($1, $2, $3, '1970-01-01', true)
 		ON CONFLICT (vehicle_id, shift_id, assigned_date)
 		DO UPDATE SET route_id = EXCLUDED.route_id, is_active = true, updated_at = NOW()
 	`
-	_, err = tx.Exec(ctx, query, vehicleID, routeID, shiftID, date.Format("2006-01-02"))
+	_, err = tx.Exec(ctx, query, vehicleID, routeID, shiftID)
 	if err != nil {
 		return err
 	}
@@ -147,6 +164,57 @@ func (r *RouteRepository) AssignRoute(ctx context.Context, vehicleID, routeID, s
 }
 
 func (r *RouteRepository) GetAssignedRoute(ctx context.Context, vehicleID int, date time.Time, shiftID *int, timeOfDay *string) (*VehicleRouteAssignment, error) {
+	dateStr := date.Format("2006-01-02")
+	
+	// 1. Try to reconstruct from history first
+	var routeID int
+	var sID int
+	var foundHistory bool
+	
+	historyQuery := `
+		SELECT r.id, COALESCE(r.shift_id, 0)
+		FROM (
+			SELECT route_id FROM route_coverage_logs WHERE vehicle_id = $1 AND report_date = $2
+			UNION
+			SELECT route_id FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND report_date = $2
+		) h
+		JOIN routes r ON h.route_id = r.id
+		LEFT JOIN shifts s ON r.shift_id = s.id
+		WHERE 1=1
+	`
+	var histArgs []interface{}
+	histArgs = append(histArgs, vehicleID, dateStr)
+	
+	if shiftID != nil {
+		historyQuery += " AND r.shift_id = $3"
+		histArgs = append(histArgs, *shiftID)
+	} else if timeOfDay != nil {
+		historyQuery += ` AND (
+			(s.start_time <= s.end_time AND ($3::TIME >= s.start_time AND $3::TIME <= s.end_time))
+			OR
+			(s.start_time > s.end_time AND ($3::TIME >= s.start_time OR $3::TIME <= s.end_time))
+		)`
+		histArgs = append(histArgs, *timeOfDay)
+	}
+	historyQuery += " LIMIT 1"
+	
+	err := r.db.QueryRow(ctx, historyQuery, histArgs...).Scan(&routeID, &sID)
+	if err == nil {
+		foundHistory = true
+	}
+	
+	if foundHistory {
+		return &VehicleRouteAssignment{
+			ID:           0,
+			VehicleID:    vehicleID,
+			RouteID:      routeID,
+			ShiftID:      sID,
+			AssignedDate: date,
+			IsActive:     true,
+		}, nil
+	}
+
+	// 2. Otherwise fallback to active assignment
 	query := `SELECT va.id, va.vehicle_id, va.route_id, va.shift_id, va.assigned_date, va.is_active
               FROM vehicle_route_assignments va
               JOIN shifts s ON va.shift_id = s.id
@@ -169,7 +237,7 @@ func (r *RouteRepository) GetAssignedRoute(ctx context.Context, vehicleID int, d
 	query += " ORDER BY va.assigned_date DESC LIMIT 1"
 
 	var a VehicleRouteAssignment
-	err := r.db.QueryRow(ctx, query, args...).
+	err = r.db.QueryRow(ctx, query, args...).
 		Scan(&a.ID, &a.VehicleID, &a.RouteID, &a.ShiftID, &a.AssignedDate, &a.IsActive)
 	if err != nil {
 		return nil, err
@@ -196,22 +264,70 @@ func (r *RouteRepository) GetShifts(ctx context.Context) ([]Shift, error) {
 }
 
 func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, date time.Time) ([]VehicleRouteAssignmentDetail, error) {
+	dateStr := date.Format("2006-01-02")
 	query := `
-		SELECT DISTINCT ON (va.vehicle_id)
-			va.id,
-			va.vehicle_id, COALESCE(v.registration_no, '') as vehicle_reg_no,
-			va.route_id, COALESCE(r.route_name, '') as route_name,
-			va.shift_id, COALESCE(s.shift_name, '') as shift_name,
-			TO_CHAR(va.assigned_date, 'YYYY-MM-DD') as assigned_date,
-			va.is_active
-		FROM vehicle_route_assignments va
-		JOIN vehicles v ON va.vehicle_id = v.id
-		JOIN routes r ON va.route_id = r.id
-		JOIN shifts s ON va.shift_id = s.id
-		WHERE va.is_active = true
-		ORDER BY va.vehicle_id, va.assigned_date DESC, va.id DESC
+		WITH date_has_history AS (
+			SELECT EXISTS (
+				SELECT 1 FROM route_coverage_logs WHERE report_date = $1
+				UNION ALL
+				SELECT 1 FROM route_coverage_miss_reasons WHERE report_date = $1
+			) as has_history
+		),
+		assignments_from_history AS (
+			SELECT DISTINCT 
+				$1 as assigned_date,
+				v.id as vehicle_id,
+				COALESCE(v.registration_no, '') as vehicle_reg_no,
+				r.id as route_id,
+				COALESCE(r.route_name, '') as route_name,
+				COALESCE(s.id, 0) as shift_id,
+				COALESCE(s.shift_name, '') as shift_name,
+				true as is_active
+			FROM (
+				SELECT report_date, vehicle_id, route_id FROM route_coverage_logs WHERE report_date = $1
+				UNION
+				SELECT report_date, vehicle_id, route_id FROM route_coverage_miss_reasons WHERE report_date = $1
+			) h
+			JOIN vehicles v ON h.vehicle_id = v.id
+			JOIN routes r ON h.route_id = r.id
+			LEFT JOIN shifts s ON r.shift_id = s.id
+			WHERE (SELECT has_history FROM date_has_history) = true
+		),
+		assignments_from_active AS (
+			SELECT 
+				$1 as assigned_date,
+				v.id as vehicle_id,
+				COALESCE(v.registration_no, '') as vehicle_reg_no,
+				r.id as route_id,
+				COALESCE(r.route_name, '') as route_name,
+				COALESCE(s.id, 0) as shift_id,
+				COALESCE(s.shift_name, '') as shift_name,
+				va.is_active
+			FROM vehicle_route_assignments va
+			JOIN vehicles v ON va.vehicle_id = v.id
+			JOIN routes r ON va.route_id = r.id
+			JOIN shifts s ON va.shift_id = s.id
+			WHERE va.is_active = true AND (SELECT has_history FROM date_has_history) = false
+		),
+		combined AS (
+			SELECT * FROM assignments_from_history
+			UNION ALL
+			SELECT * FROM assignments_from_active
+		)
+		SELECT 
+			(ROW_NUMBER() OVER ())::int as id,
+			vehicle_id,
+			vehicle_reg_no,
+			route_id,
+			route_name,
+			shift_id,
+			shift_name,
+			TO_CHAR(assigned_date::date, 'YYYY-MM-DD') as assigned_date,
+			is_active
+		FROM combined
+		ORDER BY vehicle_reg_no ASC, shift_name ASC
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, dateStr)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +346,7 @@ func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, 
 
 func (r *RouteRepository) GetAllVehicleRouteAssignments(ctx context.Context) ([]VehicleRouteAssignmentDetail, error) {
 	query := `
-		SELECT DISTINCT ON (va.vehicle_id)
+		SELECT 
 			va.id,
 			va.vehicle_id, COALESCE(v.registration_no, '') as vehicle_reg_no,
 			va.route_id, COALESCE(r.route_name, '') as route_name,
@@ -242,7 +358,7 @@ func (r *RouteRepository) GetAllVehicleRouteAssignments(ctx context.Context) ([]
 		JOIN routes r ON va.route_id = r.id
 		JOIN shifts s ON va.shift_id = s.id
 		WHERE va.is_active = true
-		ORDER BY va.vehicle_id, va.assigned_date DESC, va.id DESC
+		ORDER BY v.registration_no ASC, s.id ASC
 	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
@@ -318,24 +434,53 @@ type CoverageReportRow struct {
 
 func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDate time.Time) ([]CoverageReportRow, error) {
 	query := `
+		WITH date_range AS (
+			SELECT d::date as report_date
+			FROM generate_series($1::date, $2::date, '1 day'::interval) d
+		),
+		dates_with_history AS (
+			SELECT DISTINCT report_date FROM route_coverage_logs WHERE report_date >= $1 AND report_date <= $2
+			UNION
+			SELECT DISTINCT report_date FROM route_coverage_miss_reasons WHERE report_date >= $1 AND report_date <= $2
+		),
+		historical_assignments AS (
+			SELECT DISTINCT report_date, vehicle_id, route_id
+			FROM (
+				SELECT report_date, vehicle_id, route_id FROM route_coverage_logs WHERE report_date >= $1 AND report_date <= $2
+				UNION
+				SELECT report_date, vehicle_id, route_id FROM route_coverage_miss_reasons WHERE report_date >= $1 AND report_date <= $2
+			) h
+		),
+		fallback_assignments AS (
+			SELECT dr.report_date, va.vehicle_id, va.route_id
+			FROM date_range dr
+			CROSS JOIN vehicle_route_assignments va
+			WHERE va.is_active = true
+			  AND dr.report_date NOT IN (SELECT report_date FROM dates_with_history)
+		),
+		combined_assignments AS (
+			SELECT report_date, vehicle_id, route_id FROM historical_assignments
+			UNION ALL
+			SELECT report_date, vehicle_id, route_id FROM fallback_assignments
+		)
 		SELECT 
-			TO_CHAR(va.assigned_date, 'YYYY-MM-DD') as date,
+			TO_CHAR(c.report_date, 'YYYY-MM-DD') as date,
 			r.id as route_id, COALESCE(r.route_name, ''),
 			COALESCE(z.id, 0) as zone_id, COALESCE(z.region_name, ''),
 			COALESCE(w.id, 0) as ward_id, COALESCE(w.region_name, ''),
 			v.id as vehicle_id, COALESCE(v.registration_no, ''),
 			COALESCE(r.shift_id, 0), COALESCE(r.route_type_id, 0),
 			COALESCE(d.imei, '') as imei
-		FROM vehicle_route_assignments va
-		JOIN routes r ON va.route_id = r.id
-		JOIN vehicles v ON va.vehicle_id = v.id
+		FROM combined_assignments c
+		JOIN routes r ON c.route_id = r.id
+		JOIN vehicles v ON c.vehicle_id = v.id
 		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
 		LEFT JOIN regions w ON rw.ward_id = w.id
 		LEFT JOIN vehicle_regions vr ON v.id = vr.vehicle_id
 		LEFT JOIN regions z ON COALESCE(vr.region_id, v.zone_id) = z.id
 		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		LEFT JOIN gps_devices d ON m.device_id = d.id
-		WHERE va.assigned_date >= $1 AND va.assigned_date <= $2 AND va.is_active = true
+		ORDER BY c.report_date DESC, r.route_name ASC
 	`
 	rows, err := r.db.Query(ctx, query, fromDate.Format("2006-01-02"), toDate.Format("2006-01-02"))
 	if err != nil {
@@ -486,5 +631,18 @@ func (r *RouteRepository) GetDashboardCoverageData(ctx context.Context, date str
 	}
 
 	return data, nil
+}
+
+func (r *RouteRepository) HasCoverageRecords(ctx context.Context, vehicleID, routeID int, date string) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3
+			UNION ALL
+			SELECT 1 FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3
+		)
+	`
+	var exists bool
+	err := r.db.QueryRow(ctx, query, vehicleID, routeID, date).Scan(&exists)
+	return exists, err
 }
 

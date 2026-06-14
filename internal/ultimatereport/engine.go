@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"gps-tracking-system/internal/utils"
 
@@ -131,80 +130,134 @@ func injectCovSheet(f *excelize.File, rows []RawCoverageInfo) error {
 	return nil
 }
 
-// injectZoneSheet populates date label and overrides Remarks (Column I) if a daily exception exists.
-// Keeps the template's pre-populated rows and formulas intact.
+// injectZoneSheet populates date label and dynamically writes vehicle keys, serials, wards, and VLOOKUP formulas.
+// Keeps the template's AVERAGE row intact at its fixed index.
 func injectZoneSheet(f *excelize.File, sheet, dateLabel string, rows []ZoneRow) error {
 	if err := setCell(f, sheet, "C3", dateLabel); err != nil {
 		return err
 	}
 
-	remarksMap := make(map[string]string)
-	for _, r := range rows {
+	var avgRow int
+	switch sheet {
+	case "HMZ":
+		avgRow = 86
+	case "CLZ":
+		avgRow = 76
+	case "KPZ":
+		avgRow = 47
+	case "ANZ":
+		avgRow = 70
+	default:
+		return fmt.Errorf("unknown sheet: %s", sheet)
+	}
+
+	// Write vehicles
+	for i, r := range rows {
+		excelRow := 5 + i
+		if excelRow >= avgRow {
+			break // do not overwrite average row
+		}
+		
+		key := "MORNING_" + r.RegistrationNo
+		_ = f.SetCellValue(sheet, fmt.Sprintf("A%d", excelRow), key)
+		_ = f.SetCellValue(sheet, fmt.Sprintf("B%d", excelRow), "")
+		_ = f.SetCellValue(sheet, fmt.Sprintf("C%d", excelRow), i+1)
+		_ = f.SetCellValue(sheet, fmt.Sprintf("D%d", excelRow), r.Ward)
+
+		// Set VLOOKUP formulas
+		_ = f.SetCellFormula(sheet, fmt.Sprintf("E%d", excelRow), fmt.Sprintf("VLOOKUP(A%d,COV!$1:$1048576,2,0)", excelRow))
+		_ = f.SetCellFormula(sheet, fmt.Sprintf("F%d", excelRow), fmt.Sprintf("VLOOKUP(A%d,COV!$1:$1048576,3,0)", excelRow))
+		_ = f.SetCellFormula(sheet, fmt.Sprintf("G%d", excelRow), fmt.Sprintf("VLOOKUP(E%d,DISTANCE!$1:$1048576,5,0)", excelRow))
+		_ = f.SetCellFormula(sheet, fmt.Sprintf("H%d", excelRow), fmt.Sprintf("VLOOKUP(E%d,DISTANCE!$1:$1048576,6,0)", excelRow))
+
 		if r.Remarks != "" {
-			remarksMap[r.RegistrationNo] = r.Remarks
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("I%d", excelRow), "")
+			_ = f.SetCellValue(sheet, fmt.Sprintf("I%d", excelRow), r.Remarks)
+		} else {
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("I%d", excelRow), fmt.Sprintf("IF(F%d<70,\"DRIVER FAULT\",\"\")", excelRow))
 		}
 	}
 
-	sheetRows, err := f.GetRows(sheet)
-	if err != nil {
-		return err
-	}
-
-	// Iterate through rows starting from row 5
-	for i := 4; i < len(sheetRows); i++ {
-		excelRow := i + 1
-		if len(sheetRows[i]) > 0 {
-			key := sheetRows[i][0] // Column A key (e.g. MORNING_RJ47GA7242)
-			if key != "" && strings.Contains(key, "_") {
-				parts := strings.Split(key, "_")
-				regNo := parts[len(parts)-1]
-				
-				if remark, found := remarksMap[regNo]; found {
-					cellI := fmt.Sprintf("I%d", excelRow)
-					_ = f.SetCellValue(sheet, cellI, remark)
-				}
-			}
+	// Clear unused rows
+	for row := 5 + len(rows); row < avgRow; row++ {
+		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"} {
+			cell := fmt.Sprintf("%s%d", col, row)
+			_ = f.SetCellFormula(sheet, cell, "")
+			_ = f.SetCellValue(sheet, cell, "")
 		}
 	}
 
 	return nil
 }
 
-// injectSWSheet populates date label and overrides Remarks (Column K) if an exception exists.
+// injectSWSheet populates date label and dynamically populates SW sheet sections.
 func injectSWSheet(f *excelize.File, dateLabel string, rows []SWRow) error {
 	sheet := "SW"
 	if err := setCell(f, sheet, "C4", dateLabel); err != nil {
 		return err
 	}
 
-	remarksMap := make(map[string]string)
+	swByZone := make(map[string][]SWRow)
 	for _, r := range rows {
-		if r.Remarks != "" {
-			remarksMap[r.RegistrationNo] = r.Remarks
+		code := r.ZoneCode
+		if code == "" {
+			code = "HMZ" // fallback
 		}
+		swByZone[code] = append(swByZone[code], r)
 	}
 
-	sheetRows, err := f.GetRows(sheet)
-	if err != nil {
-		return err
+	sections := []struct {
+		ZoneCode string
+		StartRow int
+		EndRow   int
+	}{
+		{"HMZ", 6, 50},
+		{"CLZ", 57, 90},
+		{"KPZ", 97, 147},
+		{"ANZ", 154, 198},
 	}
 
-	// SW data starts at row 6
-	for i := 5; i < len(sheetRows); i++ {
-		excelRow := i + 1
-		if len(sheetRows[i]) > 0 {
-			key := sheetRows[i][0] // Column A key
-			if key != "" && strings.Contains(key, "_") {
-				parts := strings.Split(key, "_")
-				regNo := parts[len(parts)-1]
-				
-				if remark, found := remarksMap[regNo]; found {
-					cellK := fmt.Sprintf("K%d", excelRow)
-					_ = f.SetCellValue(sheet, cellK, remark)
-				}
+	for _, sec := range sections {
+		zoneRows := swByZone[sec.ZoneCode]
+		for i, r := range zoneRows {
+			excelRow := sec.StartRow + i
+			if excelRow > sec.EndRow {
+				break // do not overwrite next headers or average
+			}
+
+			key := "SWEEPING_" + r.RegistrationNo
+			_ = f.SetCellValue(sheet, fmt.Sprintf("A%d", excelRow), key)
+			_ = f.SetCellValue(sheet, fmt.Sprintf("B%d", excelRow), "")
+			_ = f.SetCellValue(sheet, fmt.Sprintf("C%d", excelRow), i+1)
+			_ = f.SetCellValue(sheet, fmt.Sprintf("D%d", excelRow), r.Ward)
+
+			// Set formulas
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("E%d", excelRow), fmt.Sprintf("VLOOKUP(A%d,COV!$1:$1048576,2,0)", excelRow))
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("F%d", excelRow), fmt.Sprintf("VLOOKUP(E%d,DISTANCE!$1:$1048576,2,0)", excelRow))
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("G%d", excelRow), fmt.Sprintf("VLOOKUP(E%d,DISTANCE!$1:$1048576,3,0)", excelRow))
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("H%d", excelRow), fmt.Sprintf("VLOOKUP(E%d,DISTANCE!$1:$1048576,4,0)", excelRow))
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("I%d", excelRow), fmt.Sprintf("VLOOKUP(E%d,DISTANCE!$1:$1048576,5,0)", excelRow))
+			_ = f.SetCellFormula(sheet, fmt.Sprintf("J%d", excelRow), fmt.Sprintf("VLOOKUP(E%d,DISTANCE!$1:$1048576,6,0)", excelRow))
+
+			if r.Remarks != "" {
+				_ = f.SetCellFormula(sheet, fmt.Sprintf("K%d", excelRow), "")
+				_ = f.SetCellValue(sheet, fmt.Sprintf("K%d", excelRow), r.Remarks)
+			} else {
+				_ = f.SetCellFormula(sheet, fmt.Sprintf("K%d", excelRow), "")
+				_ = f.SetCellValue(sheet, fmt.Sprintf("K%d", excelRow), "")
+			}
+		}
+
+		// Clear unused rows in this section
+		for row := sec.StartRow + len(zoneRows); row <= sec.EndRow; row++ {
+			for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"} {
+				cell := fmt.Sprintf("%s%d", col, row)
+				_ = f.SetCellFormula(sheet, cell, "")
+				_ = f.SetCellValue(sheet, cell, "")
 			}
 		}
 	}
+
 	return nil
 }
 

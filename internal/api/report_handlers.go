@@ -20,6 +20,7 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 
 	fromDateStr := r.URL.Query().Get("from_date")
 	toDateStr := r.URL.Query().Get("to_date")
+	forceRecalc := r.URL.Query().Get("force_recalc") == "true"
 
 	fromDate, err := time.ParseInLocation("2006-01-02", fromDateStr, utils.IndianLocation)
 	if err != nil {
@@ -86,16 +87,20 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 				return
 			}
 
-			forceRecalc := r.URL.Query().Get("force_recalc") == "true"
-			if forceRecalc {
-				// Clear existing logs to force a full recalculation
-				h.gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", a.VehicleID, a.RouteID, a.Date)
+			// Check if we already have coverage records for this vehicle, route, and date
+			hasHistory := false
+			if !forceRecalc {
+				var err error
+				hasHistory, err = h.routeRepo.HasCoverageRecords(ctx, a.VehicleID, a.RouteID, a.Date)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to check coverage history")
+				}
 			}
 
-			// --- Calculate live coverage updates on every load/recalculate ---
-			recalculateCoverage(ctx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
-			h.routeEngine.RefreshCache()
-			// -------------------------------------------------------------------
+			if forceRecalc || !hasHistory {
+				recalculateCoverage(ctx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+				h.routeEngine.RefreshCache()
+			}
 
 			logs, err := h.routeRepo.GetCoverageHitLogs(ctx, a.VehicleID, a.RouteID, a.Date)
 			if err != nil {
@@ -250,24 +255,40 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 
 	// Fetch historical GPS data
 	gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, dayStart, dayEnd)
-	if err != nil || len(gpsData) == 0 {
-		// Clear any buggy logs and miss reasons in the DB to heal it
-		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Error().Err(err).Msg("Failed to query GPS data for coverage calculation")
+		}
+		return
+	}
+	if len(gpsData) == 0 {
+		if ctx.Err() == nil {
+			// Clear any buggy logs and miss reasons in the DB to heal it
+			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+		}
 		return
 	}
 
 	// Smooth and filter out outlier jumps to align with the playback page!
 	gpsData = smoothGpsData(gpsData)
 	if len(gpsData) == 0 {
-		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+		if ctx.Err() == nil {
+			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+		}
 		return
 	}
 
 	// Fetch checkpoints
 	checkpoints, err := routeRepo.GetCheckpointsByRoute(ctx, routeID)
-	if err != nil || len(checkpoints) == 0 {
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Error().Err(err).Msg("Failed to fetch checkpoints for route")
+		}
+		return
+	}
+	if len(checkpoints) == 0 {
 		return
 	}
 
@@ -369,11 +390,15 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 
 	// Fetch existing logs in the DB to compare and reconcile
 	existingLogs, err := routeRepo.GetCoverageHitLogs(ctx, vehicleID, routeID, dateStr)
-	dbHits := make(map[int]time.Time)
-	if err == nil {
-		for _, l := range existingLogs {
-			dbHits[l.CheckpointID] = l.HitTime
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Error().Err(err).Msg("Failed to fetch existing coverage logs during reconciliation")
 		}
+		return
+	}
+	dbHits := make(map[int]time.Time)
+	for _, l := range existingLogs {
+		dbHits[l.CheckpointID] = l.HitTime
 	}
 
 	// Reconcile:
