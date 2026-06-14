@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/utils"
@@ -179,7 +180,7 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 	hasHistory, _ := h.routeRepo.HasCoverageRecords(r.Context(), vehicleID, routeID, targetDate.Format("2006-01-02"))
 	forceRecalc := r.URL.Query().Get("force_recalc") == "true"
 	if forceRecalc || !hasHistory {
-		recalculateCoverage(r.Context(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDate.Format("2006-01-02"), h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+		recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDate.Format("2006-01-02"), h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
 	}
 
 	visitedIDs, err := h.routeRepo.GetVisitedCheckpoints(r.Context(), vehicleID, routeID, targetDate)

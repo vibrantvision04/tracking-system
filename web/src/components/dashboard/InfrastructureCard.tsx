@@ -7,14 +7,30 @@ interface InfraItem {
   count: string | number;
 }
 
-export default function InfrastructureCard({ routesCount }: { routesCount: number | string }) {
+interface InfrastructureCardProps {
+  routesCount: number | string;
+  transferStationsCount: number | string;
+  parkingLotsCount: number | string;
+  fuelStationsCount: number | string;
+  workshopsCount: number | string;
+  employeesCount: number | string;
+}
+
+export default function InfrastructureCard({
+  routesCount,
+  transferStationsCount,
+  parkingLotsCount,
+  fuelStationsCount,
+  workshopsCount,
+  employeesCount
+}: InfrastructureCardProps) {
   const items: InfraItem[] = [
     { icon: <Route size={18} />, label: 'Total Routes', count: routesCount },
-    { icon: <Building2 size={18} />, label: 'Transfer Stations', count: 'N/A' },
-    { icon: <SquareParking size={18} />, label: 'Parking Lots', count: 'N/A' },
-    { icon: <Fuel size={18} />, label: 'Fuel Stations', count: 'N/A' },
-    { icon: <Wrench size={18} />, label: 'Workshops', count: 'N/A' },
-    { icon: <Users size={18} />, label: 'Employees', count: 'N/A' },
+    { icon: <Building2 size={18} />, label: 'Transfer Stations', count: transferStationsCount },
+    { icon: <SquareParking size={18} />, label: 'Parking Lots', count: parkingLotsCount },
+    { icon: <Fuel size={18} />, label: 'Fuel Stations', count: fuelStationsCount },
+    { icon: <Wrench size={18} />, label: 'Workshops', count: workshopsCount },
+    { icon: <Users size={18} />, label: 'Employees', count: employeesCount },
   ];
 
   return (

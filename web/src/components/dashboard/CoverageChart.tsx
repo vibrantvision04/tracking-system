@@ -6,16 +6,20 @@ interface CoverageChartProps {
   percentage: number;
   color?: string;
   subtitle?: string;
+  onClick?: () => void;
 }
 
-export default function CoverageChart({ title, percentage, color = '#3b82f6', subtitle }: CoverageChartProps) {
+export default function CoverageChart({ title, percentage, color = '#3b82f6', subtitle, onClick }: CoverageChartProps) {
   const data = [
     { name: 'Covered', value: percentage },
     { name: 'Remaining', value: Math.max(0, 100 - percentage) },
   ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
+    <div 
+      onClick={onClick}
+      className={`bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full ${onClick ? 'cursor-pointer hover:border-slate-300 hover:bg-slate-50/50 active:scale-[0.99]' : ''}`}
+    >
       <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">{title}</h3>
       <div className="flex-1 relative min-h-[140px]">
         <ResponsiveContainer width="100%" height="100%">

@@ -360,6 +360,50 @@ function formatCheckpointName(name: string, seq: number): string {
   return name;
 }
 
+function formatDateTo12H(dateStr: string) {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hoursStr = String(hours).padStart(2, '0');
+  
+  return `${day}-${month}-${year} ${hoursStr}:${minutes}:${seconds} ${ampm}`;
+}
+
+function getTracePopupContent(regNo: string, p: GpsDataPoint) {
+  if (!p) return "";
+  const timeStr = formatDateTo12H(p.time);
+  const speedStr = `${Math.round(p.speed)} KM/H`;
+  const ignitionStr = p.ignition ? 'Yes' : 'No';
+  return `
+    <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; min-width: 180px; padding: 2px;">
+      <div style="font-weight: 700; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px; margin-bottom: 8px; color: #0f172a; font-size: 14px;">
+        ${regNo}
+      </div>
+      <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
+        <span style="color: #64748b;">Time</span>
+        <span style="font-weight: 600; color: #1e293b;">${timeStr}</span>
+      </div>
+      <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
+        <span style="color: #64748b;">Speed</span>
+        <span style="font-weight: 600; color: #1e293b;">${speedStr}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; gap: 12px;">
+        <span style="color: #64748b;">IGNITION</span>
+        <span style="font-weight: 600; color: #1e293b;">${ignitionStr}</span>
+      </div>
+    </div>
+  `;
+}
+
 export default function PlaybackPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [zones, setZones] = useState<any[]>([]);
@@ -528,6 +572,22 @@ export default function PlaybackPage() {
   const startMarkerRef = useRef<any>(null);
   const endMarkerRef = useRef<any>(null);
 
+  const pointsRef = useRef<GpsDataPoint[]>([]);
+  const vehiclesRef = useRef<Vehicle[]>([]);
+  const selectedImeiRef = useRef<string>("");
+
+  useEffect(() => {
+    pointsRef.current = points;
+  }, [points]);
+
+  useEffect(() => {
+    vehiclesRef.current = vehicles;
+  }, [vehicles]);
+
+  useEffect(() => {
+    selectedImeiRef.current = selectedImei;
+  }, [selectedImei]);
+
   const jumpToKeyframe = useCallback((index: number) => {
     setPlaying(false);
     setIdx(index);
@@ -560,6 +620,36 @@ export default function PlaybackPage() {
       }
     };
   }, [jumpToKeyframe]);
+
+  const handleLineClick = useCallback((e: any) => {
+    if (matchedCoordsRef.current.length === 0 || pointsRef.current.length === 0) return;
+    const clickLatLng = e.latlng;
+    const L = require("leaflet");
+    let minDistance = Infinity;
+    let closestIndex = 0;
+    
+    for (let i = 0; i < matchedCoordsRef.current.length; i++) {
+      const coord = matchedCoordsRef.current[i];
+      const latlng = L.latLng(coord[0], coord[1]);
+      const dist = clickLatLng.distanceTo(latlng);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = i;
+      }
+    }
+    
+    const closestPoint = pointsRef.current[closestIndex];
+    if (closestPoint) {
+      const selectedVeh = vehiclesRef.current.find(v => v.gps_device?.imei === selectedImeiRef.current);
+      const regNo = selectedVeh ? selectedVeh.registration_no : "Vehicle";
+      const popupContent = getTracePopupContent(regNo, closestPoint);
+      
+      L.popup()
+        .setLatLng(clickLatLng)
+        .setContent(popupContent)
+        .openOn(mapRef.current);
+    }
+  }, []);
 
   // Toggling visibility of playback layers in response to checkbox states
   useEffect(() => {
@@ -1034,7 +1124,8 @@ export default function PlaybackPage() {
               weight: 3.5,
               fillColor: wardColor,
               fillOpacity: 0.15,
-            }
+            },
+            interactive: false
           }).addTo(layer);
 
           const bounds = wardGeoJSON.getBounds();
@@ -1057,7 +1148,8 @@ export default function PlaybackPage() {
               weight: 4,
               fillColor: zoneColor,
               fillOpacity: 0.1,
-            }
+            },
+            interactive: false
           }).addTo(layer);
 
           const bounds = zoneGeoJSON.getBounds();
@@ -1232,6 +1324,7 @@ export default function PlaybackPage() {
         lineJoin: "round",
         pane: "backgroundPathPane"
       });
+      lineRef.current.on('click', handleLineClick);
       if (showRawPlayback) {
         lineRef.current.addTo(map);
         lineRef.current.bringToBack();
@@ -1247,6 +1340,7 @@ export default function PlaybackPage() {
         lineCap: "round",
         lineJoin: "round"
       });
+      activeLineRef.current.on('click', handleLineClick);
       if (showActualMovement) {
         activeLineRef.current.addTo(map);
         activeLineRef.current.bringToFront();
@@ -1569,7 +1663,8 @@ export default function PlaybackPage() {
           color: visited ? '#10b981' : '#ef4444',
           weight: 1,
           fillColor: visited ? '#10b981' : '#ef4444',
-          fillOpacity: 0.05
+          fillOpacity: 0.05,
+          interactive: false
         });
         (circle as any).isVisited = visited;
 
@@ -1643,6 +1738,7 @@ export default function PlaybackPage() {
         lineCap: "round",
         lineJoin: "round"
       }).addTo(map);
+      activeLineRef.current.on('click', handleLineClick);
       activeLineRef.current.bringToFront();
     }
   }, [points]);
