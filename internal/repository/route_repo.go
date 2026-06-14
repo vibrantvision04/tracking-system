@@ -266,65 +266,48 @@ func (r *RouteRepository) GetShifts(ctx context.Context) ([]Shift, error) {
 func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, date time.Time) ([]VehicleRouteAssignmentDetail, error) {
 	dateStr := date.Format("2006-01-02")
 	query := `
-		WITH date_has_history AS (
-			SELECT EXISTS (
-				SELECT 1 FROM route_coverage_logs WHERE report_date = $1
-				UNION ALL
-				SELECT 1 FROM route_coverage_miss_reasons WHERE report_date = $1
-			) as has_history
+		WITH active_assign AS (
+			SELECT vehicle_id, route_id, is_active
+			FROM vehicle_route_assignments
+			WHERE is_active = true
 		),
-		assignments_from_history AS (
-			SELECT DISTINCT 
-				$1 as assigned_date,
-				v.id as vehicle_id,
-				COALESCE(v.registration_no, '') as vehicle_reg_no,
-				r.id as route_id,
-				COALESCE(r.route_name, '') as route_name,
-				COALESCE(s.id, 0) as shift_id,
-				COALESCE(s.shift_name, '') as shift_name,
-				true as is_active
+		historical_assign AS (
+			SELECT DISTINCT vehicle_id, route_id
 			FROM (
-				SELECT report_date, vehicle_id, route_id FROM route_coverage_logs WHERE report_date = $1
+				SELECT vehicle_id, route_id FROM route_coverage_logs WHERE report_date = $1
 				UNION
-				SELECT report_date, vehicle_id, route_id FROM route_coverage_miss_reasons WHERE report_date = $1
+				SELECT vehicle_id, route_id FROM route_coverage_miss_reasons WHERE report_date = $1
 			) h
-			JOIN vehicles v ON h.vehicle_id = v.id
-			JOIN routes r ON h.route_id = r.id
-			LEFT JOIN shifts s ON r.shift_id = s.id
-			WHERE (SELECT has_history FROM date_has_history) = true
 		),
-		assignments_from_active AS (
-			SELECT 
-				$1 as assigned_date,
-				v.id as vehicle_id,
-				COALESCE(v.registration_no, '') as vehicle_reg_no,
-				r.id as route_id,
-				COALESCE(r.route_name, '') as route_name,
-				COALESCE(s.id, 0) as shift_id,
-				COALESCE(s.shift_name, '') as shift_name,
-				va.is_active
-			FROM vehicle_route_assignments va
-			JOIN vehicles v ON va.vehicle_id = v.id
-			JOIN routes r ON va.route_id = r.id
-			JOIN shifts s ON va.shift_id = s.id
-			WHERE va.is_active = true AND (SELECT has_history FROM date_has_history) = false
-		),
-		combined AS (
-			SELECT * FROM assignments_from_history
+		date_vehicle_assignments AS (
+			-- 1. Historical assignments for vehicles that have logs on this date
+			SELECT $1::date as report_date, vehicle_id, route_id
+			FROM historical_assign
+			
 			UNION ALL
-			SELECT * FROM assignments_from_active
+			
+			-- 2. Current active assignments for vehicles that do NOT have logs on this date
+			SELECT $1::date as report_date, aa.vehicle_id, aa.route_id
+			FROM active_assign aa
+			WHERE NOT EXISTS (
+				SELECT 1 FROM historical_assign ha 
+				WHERE ha.vehicle_id = aa.vehicle_id
+			)
 		)
 		SELECT 
 			(ROW_NUMBER() OVER ())::int as id,
-			vehicle_id,
-			vehicle_reg_no,
-			route_id,
-			route_name,
-			shift_id,
-			shift_name,
-			TO_CHAR(assigned_date::date, 'YYYY-MM-DD') as assigned_date,
-			is_active
-		FROM combined
+			c.vehicle_id,
+			COALESCE(v.registration_no, '') as vehicle_reg_no,
+			c.route_id,
+			COALESCE(r.route_name, '') as route_name,
+			COALESCE(s.id, 0) as shift_id,
+			COALESCE(s.shift_name, '') as shift_name,
+			TO_CHAR(c.report_date, 'YYYY-MM-DD') as assigned_date,
+			true as is_active
+		FROM date_vehicle_assignments c
+		JOIN vehicles v ON c.vehicle_id = v.id
+		JOIN routes r ON c.route_id = r.id
+		LEFT JOIN shifts s ON r.shift_id = s.id
 		ORDER BY vehicle_reg_no ASC, shift_name ASC
 	`
 	rows, err := r.db.Query(ctx, query, dateStr)
@@ -438,12 +421,12 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 			SELECT d::date as report_date
 			FROM generate_series($1::date, $2::date, '1 day'::interval) d
 		),
-		dates_with_history AS (
-			SELECT DISTINCT report_date FROM route_coverage_logs WHERE report_date >= $1 AND report_date <= $2
-			UNION
-			SELECT DISTINCT report_date FROM route_coverage_miss_reasons WHERE report_date >= $1 AND report_date <= $2
+		active_assign AS (
+			SELECT vehicle_id, route_id, is_active
+			FROM vehicle_route_assignments
+			WHERE is_active = true
 		),
-		historical_assignments AS (
+		historical_assign AS (
 			SELECT DISTINCT report_date, vehicle_id, route_id
 			FROM (
 				SELECT report_date, vehicle_id, route_id FROM route_coverage_logs WHERE report_date >= $1 AND report_date <= $2
@@ -451,17 +434,21 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 				SELECT report_date, vehicle_id, route_id FROM route_coverage_miss_reasons WHERE report_date >= $1 AND report_date <= $2
 			) h
 		),
-		fallback_assignments AS (
-			SELECT dr.report_date, va.vehicle_id, va.route_id
-			FROM date_range dr
-			CROSS JOIN vehicle_route_assignments va
-			WHERE va.is_active = true
-			  AND dr.report_date NOT IN (SELECT report_date FROM dates_with_history)
-		),
-		combined_assignments AS (
-			SELECT report_date, vehicle_id, route_id FROM historical_assignments
+		date_vehicle_assignments AS (
+			-- 1. Historical assignments for vehicles that have logs on each date
+			SELECT report_date, vehicle_id, route_id
+			FROM historical_assign
+			
 			UNION ALL
-			SELECT report_date, vehicle_id, route_id FROM fallback_assignments
+			
+			-- 2. Current active assignments for vehicles that do NOT have logs on each date
+			SELECT dr.report_date, aa.vehicle_id, aa.route_id
+			FROM date_range dr
+			CROSS JOIN active_assign aa
+			WHERE NOT EXISTS (
+				SELECT 1 FROM historical_assign ha 
+				WHERE ha.report_date = dr.report_date AND ha.vehicle_id = aa.vehicle_id
+			)
 		)
 		SELECT 
 			TO_CHAR(c.report_date, 'YYYY-MM-DD') as date,
@@ -471,7 +458,7 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 			v.id as vehicle_id, COALESCE(v.registration_no, ''),
 			COALESCE(r.shift_id, 0), COALESCE(r.route_type_id, 0),
 			COALESCE(d.imei, '') as imei
-		FROM combined_assignments c
+		FROM date_vehicle_assignments c
 		JOIN routes r ON c.route_id = r.id
 		JOIN vehicles v ON c.vehicle_id = v.id
 		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
