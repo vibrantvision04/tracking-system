@@ -101,6 +101,63 @@ func (s *UltimateReportService) BuildReportData(ctx context.Context, date time.T
 		DateLabel:  date.Format("Monday, January 02, 2006"),
 	}
 
+	// ── Populate RawMovements & RawCoverages ─────────────────────────────────
+	var rawMovements []RawMovementInfo
+	var rawCoverages []RawCoverageInfo
+	movedMap := make(map[string]bool)
+
+	for _, m := range res.movements {
+		movedMap[m.RegistrationNo] = true
+		rawMovements = append(rawMovements, RawMovementInfo{
+			RegistrationNo: m.RegistrationNo,
+			StartTime:      m.StartTime,
+			EndTime:        m.EndTime,
+			ActiveHours:    m.ActiveHours,
+			Distance:       m.TotalDistance,
+			AverageSpeed:   m.AverageSpeed,
+		})
+
+		pct := res.coverage[m.RegistrationNo]
+		
+		// Write both MORNING and EVENING keys to support VLOOKUP in both shifts
+		rawCoverages = append(rawCoverages, RawCoverageInfo{
+			Key:             "MORNING_" + m.RegistrationNo,
+			RegistrationNo:  m.RegistrationNo,
+			CoveragePercent: pct,
+		})
+		rawCoverages = append(rawCoverages, RawCoverageInfo{
+			Key:             "EVENING_" + m.RegistrationNo,
+			RegistrationNo:  m.RegistrationNo,
+			CoveragePercent: pct,
+		})
+	}
+
+	// Add inactive active-fleet vehicles with 0% coverage and 0 distance to avoid #N/A errors on VLOOKUP
+	for _, f := range res.fleet {
+		if f.IsActive && !movedMap[f.VehicleRegNo] {
+			rawMovements = append(rawMovements, RawMovementInfo{
+				RegistrationNo: f.VehicleRegNo,
+				ActiveHours:    "00:00:00",
+				Distance:       0.0,
+				AverageSpeed:   0.0,
+			})
+
+			rawCoverages = append(rawCoverages, RawCoverageInfo{
+				Key:             "MORNING_" + f.VehicleRegNo,
+				RegistrationNo:  f.VehicleRegNo,
+				CoveragePercent: 0,
+			})
+			rawCoverages = append(rawCoverages, RawCoverageInfo{
+				Key:             "EVENING_" + f.VehicleRegNo,
+				RegistrationNo:  f.VehicleRegNo,
+				CoveragePercent: 0,
+			})
+		}
+	}
+
+	rd.RawMovements = rawMovements
+	rd.RawCoverages = rawCoverages
+
 	// ── Route each vehicle to the correct sheet ──────────────────────────────
 	for _, m := range res.movements {
 		coverage := res.coverage[m.RegistrationNo]

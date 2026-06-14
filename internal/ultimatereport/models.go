@@ -28,6 +28,7 @@ type SWRow struct {
 	Distance       float64
 	AverageSpeed   float64
 	Remarks        string
+	ZoneCode       string
 }
 
 // DepartedRow is one row in the DEPARTED sheet.
@@ -81,6 +82,10 @@ type ReportData struct {
 	ReportDate  time.Time
 	DateLabel   string // "Friday, June 05, 2026"
 
+	// Raw data sheets
+	RawMovements []RawMovementInfo
+	RawCoverages []RawCoverageInfo
+
 	// Zone sheets (D2D Hoppers)
 	HMZ []ZoneRow
 	CLZ []ZoneRow
@@ -104,4 +109,19 @@ type ReportData struct {
 	OverallAvgCov   float64
 	OverallAvgDist  float64
 	TotalTrips      int
+}
+
+type RawMovementInfo struct {
+	RegistrationNo string
+	StartTime      *time.Time
+	EndTime        *time.Time
+	ActiveHours    string
+	Distance       float64
+	AverageSpeed   float64
+}
+
+type RawCoverageInfo struct {
+	Key             string
+	RegistrationNo  string
+	CoveragePercent float64
 }

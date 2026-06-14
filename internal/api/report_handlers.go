@@ -92,40 +92,7 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 				h.gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", a.VehicleID, a.RouteID, a.Date)
 			}
 
-			// Check existing logs first if not forced
-			if !forceRecalc {
-				logs, err := h.routeRepo.GetCoverageHitLogs(ctx, a.VehicleID, a.RouteID, a.Date)
-				if err == nil {
-					uniqueHits := make(map[int]bool)
-					for _, log := range logs {
-						uniqueHits[log.CheckpointID] = true
-					}
-					
-					// If we already have 100% coverage, completely skip the heavy recalculation step!
-					if len(uniqueHits) == a.TotalCheckpoints {
-						a.CoveredPercentage = 100
-						inOrderHits := 0
-						lastSeq := -1
-						for _, log := range logs {
-							if log.SequenceOrder > lastSeq {
-								inOrderHits++
-								lastSeq = log.SequenceOrder
-							}
-						}
-						if inOrderHits > a.TotalCheckpoints {
-							inOrderHits = a.TotalCheckpoints
-						}
-						a.InOrderPercentage = math.Round((float64(inOrderHits) / float64(a.TotalCheckpoints)) * 100)
-						
-						mu.Lock()
-						filtered = append(filtered, a)
-						mu.Unlock()
-						return
-					}
-				}
-			}
-
-			// --- Retroactively calculate missing coverage if not 100% (or if forced) ---
+			// --- Calculate live coverage updates on every load/recalculate ---
 			recalculateCoverage(ctx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
 			h.routeEngine.RefreshCache()
 			// -------------------------------------------------------------------
