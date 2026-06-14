@@ -177,10 +177,14 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 	}
 
 	// Trigger sequential and speed-limit validation calculation retroactively for this date if no history exists or force_recalc is true
-	hasHistory, _ := h.routeRepo.HasCoverageRecords(r.Context(), vehicleID, routeID, targetDate.Format("2006-01-02"))
+	targetDateStr := targetDate.Format("2006-01-02")
+	isToday := (targetDateStr == utils.CurrentTimeInIndia().Format("2006-01-02"))
+	hasHistory, _ := h.routeRepo.HasCoverageRecords(r.Context(), vehicleID, routeID, targetDateStr)
 	forceRecalc := r.URL.Query().Get("force_recalc") == "true"
-	if forceRecalc || !hasHistory {
-		recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDate.Format("2006-01-02"), h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+	localForceRecalc := forceRecalc || isToday
+
+	if localForceRecalc || !hasHistory {
+		recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDateStr, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
 	}
 
 	visitedIDs, err := h.routeRepo.GetVisitedCheckpoints(r.Context(), vehicleID, routeID, targetDate)

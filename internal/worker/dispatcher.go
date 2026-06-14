@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gps-tracking-system/internal/decoder"
+	"gps-tracking-system/internal/geofence"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
 	"strconv"
@@ -15,14 +16,15 @@ import (
 )
 
 type Dispatcher struct {
-	rdb         *redis.Client
-	tripService *service.TripService
-	routeEngine *service.RouteEngine
-	gpsRepo     *repository.GPSRepository
+	rdb             *redis.Client
+	tripService     *service.TripService
+	routeEngine     *service.RouteEngine
+	gpsRepo         *repository.GPSRepository
+	geofenceChecker *geofence.Checker
 }
 
-func NewDispatcher(rdb *redis.Client, ts *service.TripService, re *service.RouteEngine, gpsRepo *repository.GPSRepository) *Dispatcher {
-	return &Dispatcher{rdb: rdb, tripService: ts, routeEngine: re, gpsRepo: gpsRepo}
+func NewDispatcher(rdb *redis.Client, ts *service.TripService, re *service.RouteEngine, gpsRepo *repository.GPSRepository, gc *geofence.Checker) *Dispatcher {
+	return &Dispatcher{rdb: rdb, tripService: ts, routeEngine: re, gpsRepo: gpsRepo, geofenceChecker: gc}
 }
 
 func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
@@ -46,6 +48,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, data decoder.AVLData) {
 
 	// 2. Geofence check / Route Engine Checkpoints
 	d.routeEngine.Process(data)
+	if d.geofenceChecker != nil {
+		d.geofenceChecker.Check(ctx, data)
+	}
 	
 	// 3. Trip detection
 	d.tripService.Process(ctx, data)

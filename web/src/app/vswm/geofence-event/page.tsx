@@ -25,6 +25,10 @@ interface GeofenceEventRow {
   entity_name: string;
   event_type: string;
   event_time: string;
+  ward_inside?: string;
+  ward_outside?: string;
+  zone_inside?: string;
+  zone_outside?: string;
 }
 
 export default function GeofenceEventReportPage() {
@@ -110,7 +114,21 @@ export default function GeofenceEventReportPage() {
       toast.warning("No data to export");
       return;
     }
-    const headers = ["S. NO.", "VEHICLE(S) RTO", "VEHICLE TYPE", "ZONE", "WARD", "ENTITY", "ENTITY NAME", "EVENT TYPE", "EVENT TIME"];
+    const headers = [
+      "S. NO.",
+      "VEHICLE(S) RTO",
+      "VEHICLE TYPE",
+      "ZONE",
+      "WARD",
+      "ENTITY",
+      "ENTITY NAME",
+      "EVENT TYPE",
+      "EVENT TIME",
+      "WARD INSIDE",
+      "WARD OUTSIDE",
+      "ZONE INSIDE",
+      "ZONE OUTSIDE"
+    ];
     const rows = data.map((row, idx) => [
       idx + 1,
       `"${row.registration_no.replace(/"/g, '""')}"`,
@@ -120,7 +138,11 @@ export default function GeofenceEventReportPage() {
       `"${row.entity.replace(/"/g, '""')}"`,
       `"${row.entity_name.replace(/"/g, '""')}"`,
       `"${row.event_type.replace(/"/g, '""')}"`,
-      `"${formatTime(row.event_time)}"`
+      `"${formatTime(row.event_time)}"`,
+      `"${(row.ward_inside || "").replace(/"/g, '""')}"`,
+      `"${(row.ward_outside || "").replace(/"/g, '""')}"`,
+      `"${(row.zone_inside || "").replace(/"/g, '""')}"`,
+      `"${(row.zone_outside || "").replace(/"/g, '""')}"`
     ]);
     const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -260,7 +282,11 @@ export default function GeofenceEventReportPage() {
                 "ENTITY",
                 "ENTITY NAME",
                 "EVENT TYPE",
-                "EVENT TIME"
+                "EVENT TIME",
+                "WARD INSIDE",
+                "WARD OUTSIDE",
+                "ZONE INSIDE",
+                "ZONE OUTSIDE"
               ]}
               isLoading={loading || metaLoading}
               emptyState="No data to display. Select a zone and date, then click Load."
@@ -299,6 +325,18 @@ export default function GeofenceEventReportPage() {
                   </td>
                   <td className="py-3 px-5 text-theme-text font-medium text-[12px] print:text-black">
                     {formatTime(row.event_time)}
+                  </td>
+                  <td className="py-3 px-5 text-theme-text-dim text-[12px] print:text-black font-mono">
+                    {row.ward_inside || "—"}
+                  </td>
+                  <td className="py-3 px-5 text-theme-text-dim text-[12px] print:text-black font-mono">
+                    {row.ward_outside || "—"}
+                  </td>
+                  <td className="py-3 px-5 text-theme-text-dim text-[12px] print:text-black font-mono">
+                    {row.zone_inside || "—"}
+                  </td>
+                  <td className="py-3 px-5 text-theme-text-dim text-[12px] print:text-black font-mono">
+                    {row.zone_outside || "—"}
                   </td>
                 </tr>
               ))}

@@ -6,6 +6,7 @@ import (
 	"gps-tracking-system/internal/cache"
 	"gps-tracking-system/internal/config"
 	"gps-tracking-system/internal/cron"
+	"gps-tracking-system/internal/geofence"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
 	"gps-tracking-system/internal/tcp"
@@ -56,19 +57,22 @@ func main() {
 	tRepo := repository.NewTripRepository(db)
 	routeRepo := repository.NewRouteRepository(db)
 	openDepotRepo := repository.NewOpenDepotRepository(db)
+	geofenceRepo := repository.NewGeofenceRepository(db)
 
 	// 5. Initialize Caches
 	locCache := cache.NewLocationCache(rdb)
+	geofenceCache := geofence.NewCache(geofenceRepo)
 
 	// 6. Initialize Services
 	rService := service.NewReportService(rRepo, gpsRepo, vRepo)
 	tService := service.NewTripService(tRepo, vRepo, gpsRepo, rdb)
 	routeEngine := service.NewRouteEngine(routeRepo, vRepo, cfg.RequireSequentialCheckpoints, cfg.MaxCheckpointSpeedKmh)
 	routeEngine.RefreshCache()
+	geofenceChecker := geofence.NewChecker(geofenceCache, geofenceRepo, rdb, vRepo)
 
 	// 7. Initialize Ingestion Pipeline
 	batchWriter := worker.NewBatchWriter(gpsRepo, cfg.BatchSize, time.Duration(cfg.BatchTimeoutMS)*time.Millisecond, cfg.BatchBufferCeiling)
-	dispatcher := worker.NewDispatcher(rdb, tService, routeEngine, gpsRepo)
+	dispatcher := worker.NewDispatcher(rdb, tService, routeEngine, gpsRepo, geofenceChecker)
 	pipeline := worker.NewPipeline(cfg, rdb, locCache, dispatcher)
 	pipeline.Start()
 

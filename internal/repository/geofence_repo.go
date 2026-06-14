@@ -13,7 +13,7 @@ type Geofence struct {
 	Type      string    `json:"type"`
 	Polygon   []byte    `json:"polygon"` // JSONB encoded GeoJSON
 	Color     string    `json:"color"`
-	OwnerID   int       `json:"owner_id"`
+	OwnerID   *int      `json:"owner_id"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

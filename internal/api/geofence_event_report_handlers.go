@@ -18,6 +18,23 @@ type GeofenceEventReportRow struct {
 	EntityName      string    `json:"entity_name"`
 	EventType       string    `json:"event_type"`
 	EventTime       time.Time `json:"event_time"`
+	WardInside      string    `json:"ward_inside,omitempty"`
+	WardOutside     string    `json:"ward_outside,omitempty"`
+	ZoneInside      string    `json:"zone_inside,omitempty"`
+	ZoneOutside     string    `json:"zone_outside,omitempty"`
+}
+
+func formatGeofenceDuration(d time.Duration) string {
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request) {
@@ -37,10 +54,37 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 	} else {
 		reportDate = utils.CurrentTimeInIndia()
 	}
+	// Normalize to start of day
+	reportDate = time.Date(reportDate.Year(), reportDate.Month(), reportDate.Day(), 0, 0, 0, 0, reportDate.Location())
 	dateFilter := reportDate.Format("2006-01-02")
 
 	// Parse optional zone filter
 	zoneID, _ := strconv.Atoi(r.URL.Query().Get("zone_id"))
+
+	// Fetch vehicle geofence mappings
+	type VehicleGeofenceInfo struct {
+		WardGeofenceID int
+		ZoneGeofenceID int
+	}
+	vehGeofences := make(map[int]VehicleGeofenceInfo)
+	rowsVG, err := db.Query(ctx, `
+		SELECT v.id, COALESCE(w.geofence_id, 0), COALESCE(z.geofence_id, 0)
+		FROM vehicles v
+		LEFT JOIN regions w ON v.ward_id = w.id
+		LEFT JOIN regions z ON v.zone_id = z.id
+	`)
+	if err == nil {
+		defer rowsVG.Close()
+		for rowsVG.Next() {
+			var vID, wGid, zGid int
+			if err := rowsVG.Scan(&vID, &wGid, &zGid); err == nil {
+				vehGeofences[vID] = VehicleGeofenceInfo{
+					WardGeofenceID: wGid,
+					ZoneGeofenceID: zGid,
+				}
+			}
+		}
+	}
 
 	// Build the query joining geofence_events with vehicle, vehicle_type, regions,
 	// and reverse-mapping geofence_id to owning entities (transfer_stations, parking_lots, workshops, fuel_stations)
@@ -68,7 +112,9 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 				ELSE g.name
 			END AS entity_name,
 			ge.event_type,
-			ge.captured_at
+			ge.captured_at,
+			ge.vehicle_id,
+			ge.geofence_id
 		FROM geofence_events ge
 		JOIN vehicles v ON ge.vehicle_id = v.id
 		JOIN geofences g ON ge.geofence_id = g.id
@@ -101,18 +147,107 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 	}
 	defer rows.Close()
 
-	var data []GeofenceEventReportRow = []GeofenceEventReportRow{}
+	type EventTemp struct {
+		ID              int
+		RegistrationNo  string
+		VehicleTypeName string
+		ZoneName        string
+		WardName        string
+		Entity          string
+		EntityName      string
+		EventType       string
+		EventTime       time.Time
+		VehicleID       int
+		GeofenceID      int
+	}
+
+	var tempEvents []EventTemp
 	for rows.Next() {
-		var row GeofenceEventReportRow
+		var ev EventTemp
 		err := rows.Scan(
-			&row.ID, &row.RegistrationNo, &row.VehicleTypeName,
-			&row.ZoneName, &row.WardName,
-			&row.Entity, &row.EntityName,
-			&row.EventType, &row.EventTime,
+			&ev.ID, &ev.RegistrationNo, &ev.VehicleTypeName,
+			&ev.ZoneName, &ev.WardName,
+			&ev.Entity, &ev.EntityName,
+			&ev.EventType, &ev.EventTime,
+			&ev.VehicleID, &ev.GeofenceID,
 		)
 		if err == nil {
-			data = append(data, row)
+			tempEvents = append(tempEvents, ev)
 		}
+	}
+
+	// Calculate stay durations
+	type VehicleState struct {
+		LastWardEnter time.Time
+		LastWardExit  time.Time
+		LastZoneEnter time.Time
+		LastZoneExit  time.Time
+	}
+	vehStates := make(map[int]*VehicleState)
+	dayStart := reportDate
+
+	var data []GeofenceEventReportRow = []GeofenceEventReportRow{}
+	for _, ev := range tempEvents {
+		state, exists := vehStates[ev.VehicleID]
+		if !exists {
+			state = &VehicleState{
+				LastWardEnter: dayStart,
+				LastWardExit:  dayStart,
+				LastZoneEnter: dayStart,
+				LastZoneExit:  dayStart,
+			}
+			vehStates[ev.VehicleID] = state
+		}
+
+		info := vehGeofences[ev.VehicleID]
+
+		var wardInside, wardOutside, zoneInside, zoneOutside string
+
+		if ev.GeofenceID == info.WardGeofenceID {
+			if ev.EventType == "exit" {
+				duration := ev.EventTime.Sub(state.LastWardEnter)
+				if duration > 0 {
+					wardInside = formatGeofenceDuration(duration)
+				}
+				state.LastWardExit = ev.EventTime
+			} else if ev.EventType == "enter" {
+				duration := ev.EventTime.Sub(state.LastWardExit)
+				if duration > 0 {
+					wardOutside = formatGeofenceDuration(duration)
+				}
+				state.LastWardEnter = ev.EventTime
+			}
+		} else if ev.GeofenceID == info.ZoneGeofenceID {
+			if ev.EventType == "exit" {
+				duration := ev.EventTime.Sub(state.LastZoneEnter)
+				if duration > 0 {
+					zoneInside = formatGeofenceDuration(duration)
+				}
+				state.LastZoneExit = ev.EventTime
+			} else if ev.EventType == "enter" {
+				duration := ev.EventTime.Sub(state.LastZoneExit)
+				if duration > 0 {
+					zoneOutside = formatGeofenceDuration(duration)
+				}
+				state.LastZoneEnter = ev.EventTime
+			}
+		}
+
+		data = append(data, GeofenceEventReportRow{
+			ID:              ev.ID,
+			RegistrationNo:  ev.RegistrationNo,
+			VehicleTypeName: ev.VehicleTypeName,
+			ZoneName:        ev.ZoneName,
+			WardName:        ev.WardName,
+			Entity:          ev.Entity,
+			EntityName:      ev.EntityName,
+			EventType:       ev.EventType,
+			EventTime:       ev.EventTime,
+			WardInside:      wardInside,
+			WardOutside:     wardOutside,
+			ZoneInside:      zoneInside,
+			ZoneOutside:     zoneOutside,
+		})
 	}
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -71,8 +72,13 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 		go func(a repository.CoverageReportRow) {
 			defer wg.Done()
 
+			// Create a separate context with a 30-second timeout for the goroutine
+			// to prevent HTTP request cancellation from truncating DB operations
+			runCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
 			// Calculate Coverage
-			cps, err := h.routeRepo.GetCheckpointsByRoute(ctx, a.RouteID)
+			cps, err := h.routeRepo.GetCheckpointsByRoute(runCtx, a.RouteID)
 			if err != nil {
 				return
 			}
@@ -89,20 +95,23 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 
 			// Check if we already have coverage records for this vehicle, route, and date
 			hasHistory := false
-			if !forceRecalc {
+			isToday := (a.Date == utils.CurrentTimeInIndia().Format("2006-01-02"))
+			localForceRecalc := forceRecalc || isToday
+
+			if !localForceRecalc {
 				var err error
-				hasHistory, err = h.routeRepo.HasCoverageRecords(ctx, a.VehicleID, a.RouteID, a.Date)
+				hasHistory, err = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
 				if err != nil {
 					log.Error().Err(err).Msg("Failed to check coverage history")
 				}
 			}
 
-			if forceRecalc || !hasHistory {
-				recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+			if localForceRecalc || !hasHistory {
+				recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
 				h.routeEngine.RefreshCache()
 			}
 
-			logs, err := h.routeRepo.GetCoverageHitLogs(ctx, a.VehicleID, a.RouteID, a.Date)
+			logs, err := h.routeRepo.GetCoverageHitLogs(runCtx, a.VehicleID, a.RouteID, a.Date)
 			if err != nil {
 				return
 			}
@@ -388,59 +397,41 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 	}
 
-	// Fetch existing logs in the DB to compare and reconcile
-	existingLogs, err := routeRepo.GetCoverageHitLogs(ctx, vehicleID, routeID, dateStr)
-	if err != nil {
-		if ctx.Err() == nil {
-			log.Error().Err(err).Msg("Failed to fetch existing coverage logs during reconciliation")
+	// 1. Delete all existing logs and miss reasons for this vehicle, route, and date
+	_, _ = gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+	_, _ = gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+
+	// 2. Batch insert physicalHits
+	if len(physicalHits) > 0 {
+		query := "INSERT INTO route_coverage_logs (vehicle_id, route_id, checkpoint_id, report_date, hit_time) VALUES "
+		vals := []interface{}{}
+		for cpID, hitTime := range physicalHits {
+			idx := len(vals)
+			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d),", idx+1, idx+2, idx+3, idx+4, idx+5)
+			vals = append(vals, vehicleID, routeID, cpID, dateStr, hitTime)
 		}
-		return
-	}
-	dbHits := make(map[int]time.Time)
-	for _, l := range existingLogs {
-		dbHits[l.CheckpointID] = l.HitTime
-	}
-
-	// Reconcile:
-	// 1. Delete false hits (checkpoints in DB that were NOT physically hit)
-	for cpID := range dbHits {
-		if _, exists := physicalHits[cpID]; !exists {
-			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND checkpoint_id = $3 AND report_date = $4", vehicleID, routeID, cpID, dateStr)
-		}
-	}
-
-	// 2. Insert missing hits or update incorrect hit times
-	for cpID, hitTime := range physicalHits {
-		dbTime, exists := dbHits[cpID]
-		if !exists {
-			// Insert new hit
-			err := routeRepo.LogCheckpointHit(ctx, vehicleID, routeID, cpID, hitTime)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to backfill checkpoint hit during reconciliation")
-			}
-		} else if !dbTime.Equal(hitTime) {
-			// Update incorrect hit time by deleting and re-inserting
-			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND checkpoint_id = $3 AND report_date = $4", vehicleID, routeID, cpID, dateStr)
-			err := routeRepo.LogCheckpointHit(ctx, vehicleID, routeID, cpID, hitTime)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to update checkpoint hit time during reconciliation")
-			}
-		}
-
-		// Clean up any miss reason since the checkpoint was hit
-		gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND checkpoint_id = $3 AND report_date = $4", vehicleID, routeID, cpID, dateStr)
-	}
-
-	// 3. Upsert miss reasons
-	for cpID, reason := range missReasons {
-		_, err = gpsRepo.Pool().Exec(ctx, `
-			INSERT INTO route_coverage_miss_reasons (vehicle_id, route_id, checkpoint_id, report_date, reason)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date)
-			DO UPDATE SET reason = EXCLUDED.reason
-		`, vehicleID, routeID, cpID, dateStr, reason)
+		query = query[:len(query)-1] // trim trailing comma
+		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO NOTHING"
+		_, err = gpsRepo.Pool().Exec(ctx, query, vals...)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to upsert checkpoint miss reason during reconciliation")
+			log.Error().Err(err).Msg("Failed to batch insert coverage hits during recalculation")
+		}
+	}
+
+	// 3. Batch insert miss reasons
+	if len(missReasons) > 0 {
+		query := "INSERT INTO route_coverage_miss_reasons (vehicle_id, route_id, checkpoint_id, report_date, reason) VALUES "
+		vals := []interface{}{}
+		for cpID, reason := range missReasons {
+			idx := len(vals)
+			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d),", idx+1, idx+2, idx+3, idx+4, idx+5)
+			vals = append(vals, vehicleID, routeID, cpID, dateStr, reason)
+		}
+		query = query[:len(query)-1] // trim trailing comma
+		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO UPDATE SET reason = EXCLUDED.reason"
+		_, err = gpsRepo.Pool().Exec(ctx, query, vals...)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to batch insert miss reasons during recalculation")
 		}
 	}
 }
