@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,32 @@ import (
 )
 
 var recalcLocks sync.Map // maps string key ("vehicle-route-date") to *sync.Mutex
+
+func init() {
+	go func() {
+		ticker := time.NewTicker(12 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanupOldRecalcMutexes()
+		}
+	}()
+}
+
+func cleanupOldRecalcMutexes() {
+	today := utils.CurrentTimeInIndia().Format("2006-01-02")
+	yesterday := utils.CurrentTimeInIndia().AddDate(0, 0, -1).Format("2006-01-02")
+
+	recalcLocks.Range(func(key, value interface{}) bool {
+		k, ok := key.(string)
+		if !ok {
+			return true
+		}
+		if !strings.Contains(k, today) && !strings.Contains(k, yesterday) {
+			recalcLocks.Delete(key)
+		}
+		return true
+	})
+}
 
 func getRecalcMutex(vehicleID, routeID int, dateStr string) *sync.Mutex {
 	key := fmt.Sprintf("%d-%d-%s", vehicleID, routeID, dateStr)
@@ -102,26 +129,34 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 			}
 
 			// Check if we already have coverage records for this vehicle, route, and date
-			hasHistory := false
 			isToday := (a.Date == utils.CurrentTimeInIndia().Format("2006-01-02"))
 			localForceRecalc := forceRecalc || isToday
 
+			var hasHistory bool
+			var histErr error
+			if !localForceRecalc {
+				hasHistory, histErr = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
+				if histErr != nil {
+					log.Error().Err(histErr).Int("vehicle_id", a.VehicleID).Str("date", a.Date).Msg("Failed to check coverage history")
+					hasHistory = false
+				}
+			}
+
 			if localForceRecalc || !hasHistory {
 				// Acquire lock for this vehicle/route/date
-				mu := getRecalcMutex(a.VehicleID, a.RouteID, a.Date)
-				mu.Lock()
+				recalcMu := getRecalcMutex(a.VehicleID, a.RouteID, a.Date)
+				recalcMu.Lock()
 
 				// Re-check hasHistory under the lock to avoid redundant calculation
-				var err error
-				if !localForceRecalc {
-					hasHistory, err = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
+				if !localForceRecalc && histErr == nil {
+					hasHistory, _ = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
 				}
 
-				if localForceRecalc || err != nil || !hasHistory {
+				if localForceRecalc || !hasHistory {
 					recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
 					h.routeEngine.RefreshCache()
 				}
-				mu.Unlock()
+				recalcMu.Unlock()
 			}
 
 			logs, err := h.routeRepo.GetCoverageHitLogs(runCtx, a.VehicleID, a.RouteID, a.Date)
@@ -275,43 +310,31 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 	}
 	dayEnd := dayStart.Add(24 * time.Hour)
 
-	// Fetch historical GPS data
-	gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, dayStart, dayEnd)
-	if err != nil {
-		if ctx.Err() == nil {
-			log.Error().Err(err).Msg("Failed to query GPS data for coverage calculation")
-		}
-		return
-	}
-	if len(gpsData) == 0 {
-		if ctx.Err() == nil {
-			// Clear any buggy logs and miss reasons in the DB to heal it
-			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-		}
-		return
-	}
-
-	// Smooth and filter out outlier jumps to align with the playback page!
-	gpsData = smoothGpsData(gpsData)
-	if len(gpsData) == 0 {
-		if ctx.Err() == nil {
-			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-			gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-		}
-		return
-	}
-
-	// Fetch checkpoints
+	// Fetch checkpoints first
 	checkpoints, err := routeRepo.GetCheckpointsByRoute(ctx, routeID)
 	if err != nil {
-		if ctx.Err() == nil {
-			log.Error().Err(err).Msg("Failed to fetch checkpoints for route")
-		}
+		log.Error().Err(err).Msg("Failed to fetch checkpoints for route")
 		return
 	}
 	if len(checkpoints) == 0 {
 		return
+	}
+
+	// Fetch historical GPS data
+	gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, dayStart, dayEnd)
+	if err != nil {
+		log.Error().Err(err).
+			Int("vehicle_id", vehicleID).
+			Int("route_id", routeID).
+			Str("date", dateStr).
+			AnErr("ctx_err", ctx.Err()).
+			Msg("Failed to query GPS data for coverage calculation")
+		return
+	}
+
+	// Smooth and filter out outlier jumps to align with the playback page!
+	if len(gpsData) > 0 {
+		gpsData = smoothGpsData(gpsData)
 	}
 
 	// Initialize all checkpoints as missed with reason "Never Reached"
@@ -321,10 +344,12 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 	}
 
 	physicalHits := make(map[int]time.Time)
-	expectedIdx := 0 // index of the checkpoint we are currently looking for
 
-	// First check the very first point
+	// If we have GPS data, run segment checking and checkpoint hits detection
 	if len(gpsData) > 0 {
+		expectedIdx := 0 // index of the checkpoint we are currently looking for
+
+		// First check the very first point
 		if requireSequential {
 			if expectedIdx < len(checkpoints) {
 				cp := checkpoints[expectedIdx]
@@ -353,57 +378,57 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 				}
 			}
 		}
-	}
 
-	// Now check segments and points chronologically
-	for i := 1; i < len(gpsData); i++ {
-		prev := gpsData[i-1]
-		curr := gpsData[i]
+		// Now check segments and points chronologically
+		for i := 1; i < len(gpsData); i++ {
+			prev := gpsData[i-1]
+			curr := gpsData[i]
 
-		// For each checkpoint that is not yet hit, check if the vehicle got close
-		for cpIdx, cp := range checkpoints {
-			if _, hit := physicalHits[cp.ID]; hit {
-				continue
-			}
+			// For each checkpoint that is not yet hit, check if the vehicle got close
+			for cpIdx, cp := range checkpoints {
+				if _, hit := physicalHits[cp.ID]; hit {
+					continue
+				}
 
-			// Only do segment matching if the pings are close in time and space to avoid teleport ghost hits
-			timeDiffSec := curr.Time.Sub(prev.Time).Seconds()
-			distBetweenPings := utils.Haversine(prev.Lat, prev.Lng, curr.Lat, curr.Lng) * 1000.0
+				// Only do segment matching if the pings are close in time and space to avoid teleport ghost hits
+				timeDiffSec := curr.Time.Sub(prev.Time).Seconds()
+				distBetweenPings := utils.Haversine(prev.Lat, prev.Lng, curr.Lat, curr.Lng) * 1000.0
 
-			var distMeters float64
-			if timeDiffSec > 60.0 || distBetweenPings > 200.0 {
-				// Fallback to point check only
-				distMeters = utils.Haversine(curr.Lat, curr.Lng, cp.Latitude, cp.Longitude) * 1000.0
-			} else {
-				distMeters = distanceToSegment(cp.Latitude, cp.Longitude, prev.Lat, prev.Lng, curr.Lat, curr.Lng)
-			}
+				var distMeters float64
+				if timeDiffSec > 60.0 || distBetweenPings > 200.0 {
+					// Fallback to point check only
+					distMeters = utils.Haversine(curr.Lat, curr.Lng, cp.Latitude, cp.Longitude) * 1000.0
+				} else {
+					distMeters = distanceToSegment(cp.Latitude, cp.Longitude, prev.Lat, prev.Lng, curr.Lat, curr.Lng)
+				}
 
-			if distMeters <= 10.0 {
-				if requireSequential {
-					if cpIdx == expectedIdx {
-						// Expected checkpoint! Check speed limit
+				if distMeters <= 10.0 {
+					if requireSequential {
+						if cpIdx == expectedIdx {
+							// Expected checkpoint! Check speed limit
+							if curr.Speed <= maxSpeed {
+								physicalHits[cp.ID] = curr.Time
+								delete(missReasons, cp.ID)
+								expectedIdx++
+							} else {
+								missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
+							}
+						} else if cpIdx > expectedIdx {
+							// Out of sequence!
+							if curr.Speed <= maxSpeed {
+								missReasons[cp.ID] = "Out of Sequence (Expected Checkpoint #" + strconv.Itoa(expectedIdx+1) + ")"
+							} else {
+								missReasons[cp.ID] = "Out of Sequence & Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
+							}
+						}
+					} else {
+						// Non-sequential check: any checkpoint within range
 						if curr.Speed <= maxSpeed {
 							physicalHits[cp.ID] = curr.Time
 							delete(missReasons, cp.ID)
-							expectedIdx++
 						} else {
 							missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
 						}
-					} else if cpIdx > expectedIdx {
-						// Out of sequence!
-						if curr.Speed <= maxSpeed {
-							missReasons[cp.ID] = "Out of Sequence (Expected Checkpoint #" + strconv.Itoa(expectedIdx+1) + ")"
-						} else {
-							missReasons[cp.ID] = "Out of Sequence & Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
-						}
-					}
-				} else {
-					// Non-sequential check: any checkpoint within range
-					if curr.Speed <= maxSpeed {
-						physicalHits[cp.ID] = curr.Time
-						delete(missReasons, cp.ID)
-					} else {
-						missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
 					}
 				}
 			}
