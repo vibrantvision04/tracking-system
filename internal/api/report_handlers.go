@@ -154,7 +154,6 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 
 				if localForceRecalc || !hasHistory {
 					recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
-					h.routeEngine.RefreshCache()
 				}
 				recalcMu.Unlock()
 			}
@@ -194,6 +193,12 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 	}
 
 	wg.Wait()
+
+	// If recalculation was triggered for today's date, refresh the cache once at the end
+	isTodayRequested := (fromDateStr == utils.CurrentTimeInIndia().Format("2006-01-02") || toDateStr == utils.CurrentTimeInIndia().Format("2006-01-02"))
+	if forceRecalc && isTodayRequested {
+		h.routeEngine.RefreshCache()
+	}
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
