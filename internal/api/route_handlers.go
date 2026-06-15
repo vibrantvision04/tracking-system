@@ -194,7 +194,7 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 		}
 
 		if localForceRecalc || err != nil || !hasHistory {
-			recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDateStr, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+			recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDateStr, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh, "", nil)
 		}
 		mu.Unlock()
 	}

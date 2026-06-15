@@ -133,6 +133,9 @@ func (r *GPSRepository) GetByVehicle(ctx context.Context, vehicleID int, start, 
 		d.Heading = int(heading)
 		data = append(data, d)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return data, nil
 }
 
@@ -168,6 +171,9 @@ func (r *GPSRepository) GetAllByTimeWindow(ctx context.Context, start, end time.
 		d.Speed = speed
 		d.Heading = int(heading)
 		result[vID] = append(result[vID], d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

@@ -43,6 +43,15 @@ export default function D2DRouteCoverageReport() {
 
   const handleLoad = async (forceRecalc: boolean = false) => {
     setLoading(true);
+    
+    // Check if ?debug=true is present in browser URL
+    const isDebugEnabled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'true';
+    const requestStartTime = new Date();
+
+    if (isDebugEnabled) {
+      console.log(`[D2D-FRONTEND] Request Start: ${requestStartTime.toISOString()}`);
+    }
+
     try {
       const query = new URLSearchParams({
         from_date: fromDate,
@@ -53,13 +62,40 @@ export default function D2DRouteCoverageReport() {
         ...(routeTypeId && { route_type_id: routeTypeId }),
         ...(routeId && { route_id: routeId }),
         ...(forceRecalc && { force_recalc: "true" }),
+        ...(isDebugEnabled && { debug: "true" }),
       });
       const res: any = await api(`/api/reports/d2d-coverage?${query.toString()}`);
+      
+      const requestEndTime = new Date();
+      const durationMs = requestEndTime.getTime() - requestStartTime.getTime();
+
       if (res.success && res.data) {
         setData(res.data);
       } else {
         setData([]);
       }
+      
+      if (isDebugEnabled) {
+        console.log(`[D2D-FRONTEND] Request End: ${requestEndTime.toISOString()}`);
+        console.log(`[D2D-FRONTEND] Request Duration: ${durationMs}ms`);
+        const responseSize = JSON.stringify(res).length;
+        console.log(`[D2D-FRONTEND] Response Size: ${responseSize} bytes`);
+
+        const vehicles = res.data || [];
+        console.log("[D2D-FRONTEND] Vehicle Coverage:", vehicles.map((v: any) => `${v.vehicle_reg_no}: ${v.covered_percentage}%`));
+
+        const zeroCoverageVehicles = vehicles.filter((v: any) => v.covered_percentage === 0);
+        console.log("[D2D-FRONTEND] Vehicle Zero Coverage:", zeroCoverageVehicles.map((v: any) => v.vehicle_reg_no));
+
+        const missingVehicles = vehicles.filter((v: any) => v.total_checkpoints === 0);
+        console.log("[D2D-FRONTEND] Vehicle Missing:", missingVehicles.map((v: any) => v.vehicle_reg_no));
+
+        console.log("[D2D-FRONTEND] Backend Debug Payload:", res.debug_payload || []);
+
+        const backendErrors = (res.debug_payload || []).filter((line: string) => line.includes("[CRITICAL]"));
+        console.log("[D2D-FRONTEND] Backend Errors:", backendErrors);
+      }
+
       setCurrentPage(1);
     } catch (err) {
       console.error(err);

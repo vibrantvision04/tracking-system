@@ -103,6 +103,9 @@ func (r *RouteRepository) GetCheckpointsByRoute(ctx context.Context, routeID int
 		}
 		cps = append(cps, cp)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return cps, nil
 }
 
@@ -260,6 +263,9 @@ func (r *RouteRepository) GetShifts(ctx context.Context) ([]Shift, error) {
 		}
 		list = append(list, s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 
@@ -324,6 +330,9 @@ func (r *RouteRepository) GetVehicleRouteAssignmentsByDate(ctx context.Context, 
 		}
 		list = append(list, d)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 
@@ -356,6 +365,9 @@ func (r *RouteRepository) GetAllVehicleRouteAssignments(ctx context.Context) ([]
 			return nil, err
 		}
 		list = append(list, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }
@@ -393,6 +405,9 @@ func (r *RouteRepository) GetVisitedCheckpoints(ctx context.Context, vehicleID, 
 			return nil, err
 		}
 		hits = append(hits, cpID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return hits, nil
 }
@@ -495,6 +510,9 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 		}
 		results = append(results, row)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return results, nil
 }
 
@@ -525,6 +543,9 @@ func (r *RouteRepository) GetCoverageHitLogs(ctx context.Context, vehicleID, rou
 			return nil, err
 		}
 		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return logs, nil
 }
@@ -567,6 +588,9 @@ func (r *RouteRepository) GetDashboardCoverageData(ctx context.Context, date str
 		data[vID] = DashboardCoverageData{TotalCheckpoints: total}
 		vehicleRoutes[vID] = rID
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	// Then get all hit logs for the date
 	queryLogs := `
@@ -605,6 +629,9 @@ func (r *RouteRepository) GetDashboardCoverageData(ctx context.Context, date str
 			inOrder[vID]++
 			lastSeq[vID] = seqOrder
 		}
+	}
+	if err := logsRows.Err(); err != nil {
+		return nil, err
 	}
 
 	// Update data map with calculated percentages

@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gps-tracking-system/internal/decoder"
@@ -16,6 +19,45 @@ import (
 
 	"github.com/rs/zerolog/log"
 )
+
+type d2dDebugLogger struct {
+	mu        sync.Mutex
+	logs      []string
+	requestID string
+	debugMode bool
+}
+
+func (l *d2dDebugLogger) Log(format string, args ...interface{}) {
+	if l == nil {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	log.Info().Msg(msg)
+
+	l.mu.Lock()
+	l.logs = append(l.logs, msg)
+	l.mu.Unlock()
+}
+
+func (l *d2dDebugLogger) LogCritical(msg string) {
+	if l == nil {
+		return
+	}
+	logMsg := fmt.Sprintf("[D2D][CRITICAL] %s", msg)
+	log.Error().Msg(logMsg)
+
+	l.mu.Lock()
+	l.logs = append(l.logs, logMsg)
+	l.mu.Unlock()
+}
+
+func generateUUID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40 // Version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // Variant is 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
 
 var recalcLocks sync.Map // maps string key ("vehicle-route-date") to *sync.Mutex
 
@@ -58,6 +100,19 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 	toDateStr := r.URL.Query().Get("to_date")
 	forceRecalc := r.URL.Query().Get("force_recalc") == "true"
 
+	debugParam := r.URL.Query().Get("debug") == "true"
+	debugMode := debugParam || os.Getenv("DEBUG_MODE") == "true"
+
+	var dbg *d2dDebugLogger
+	requestID := "N/A"
+	if debugMode {
+		requestID = generateUUID()
+		dbg = &d2dDebugLogger{
+			requestID: requestID,
+			debugMode: debugMode,
+		}
+	}
+
 	fromDate, err := time.ParseInLocation("2006-01-02", fromDateStr, utils.IndianLocation)
 	if err != nil {
 		fromDate = utils.CurrentTimeInIndia()
@@ -80,10 +135,19 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 	filterShiftID, _ := strconv.Atoi(r.URL.Query().Get("shift_id"))
 	filterRouteTypeID, _ := strconv.Atoi(r.URL.Query().Get("route_type_id"))
 	filterRouteID, _ := strconv.Atoi(r.URL.Query().Get("route_id"))
+	filterVehicleID, _ := strconv.Atoi(r.URL.Query().Get("vehicle_id"))
+
+	dbg.Log("[D2D][REQUEST_START] request_id=%s route_id=%d vehicle_id=%d date=%s_to_%s force_recalc=%t timestamp=%s",
+		requestID, filterRouteID, filterVehicleID, fromDateStr, toDateStr, forceRecalc, time.Now().Format(time.RFC3339))
+
+	startTime := time.Now()
 
 	var filtered []interface{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+
+	var vehiclesProcessed int64
+	var vehiclesFailed int64
 
 	for _, a := range assignments {
 		// Apply filters
@@ -115,6 +179,24 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 			// Calculate Coverage
 			cps, err := h.routeRepo.GetCheckpointsByRoute(runCtx, a.RouteID)
 			if err != nil {
+				log.Error().Err(err).
+					Int("vehicle_id", a.VehicleID).
+					Int("route_id", a.RouteID).
+					Str("date", a.Date).
+					Msg("Failed to get checkpoints for D2D report")
+				a.CoveredPercentage = 0
+				a.InOrderPercentage = 0
+
+				atomic.AddInt64(&vehiclesFailed, 1)
+				atomic.AddInt64(&vehiclesProcessed, 1)
+
+				dbg.Log("[D2D][RESPONSE_ROW] request_id=%s vehicle_id=%d included_in_response=true coverage_percentage=0.0 hit_count=0 reason_if_skipped=%q",
+					requestID, a.VehicleID, "GetCheckpointsByRoute failed: " + err.Error())
+				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=VEHICLE_SKIPPED reason=%q", requestID, a.VehicleID, "GetCheckpointsByRoute failed: " + err.Error()))
+
+				mu.Lock()
+				filtered = append(filtered, a)
+				mu.Unlock()
 				return
 			}
 
@@ -122,6 +204,12 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 			if a.TotalCheckpoints == 0 {
 				a.CoveredPercentage = 0
 				a.InOrderPercentage = 0
+
+				atomic.AddInt64(&vehiclesProcessed, 1)
+
+				dbg.Log("[D2D][RESPONSE_ROW] request_id=%s vehicle_id=%d included_in_response=true coverage_percentage=0.0 hit_count=0 reason_if_skipped=%q",
+					requestID, a.VehicleID, "TotalCheckpoints = 0")
+
 				mu.Lock()
 				filtered = append(filtered, a)
 				mu.Unlock()
@@ -153,13 +241,31 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 				}
 
 				if localForceRecalc || !hasHistory {
-					recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+					recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh, a.Imei, dbg)
 				}
 				recalcMu.Unlock()
 			}
 
 			logs, err := h.routeRepo.GetCoverageHitLogs(runCtx, a.VehicleID, a.RouteID, a.Date)
 			if err != nil {
+				log.Error().Err(err).
+					Int("vehicle_id", a.VehicleID).
+					Int("route_id", a.RouteID).
+					Str("date", a.Date).
+					Msg("Failed to get coverage logs for D2D report")
+				a.CoveredPercentage = 0
+				a.InOrderPercentage = 0
+
+				atomic.AddInt64(&vehiclesFailed, 1)
+				atomic.AddInt64(&vehiclesProcessed, 1)
+
+				dbg.Log("[D2D][RESPONSE_ROW] request_id=%s vehicle_id=%d included_in_response=true coverage_percentage=0.0 hit_count=0 reason_if_skipped=%q",
+					requestID, a.VehicleID, "GetCoverageHitLogs failed: " + err.Error())
+				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=VEHICLE_SKIPPED reason=%q", requestID, a.VehicleID, "GetCoverageHitLogs failed: " + err.Error()))
+
+				mu.Lock()
+				filtered = append(filtered, a)
+				mu.Unlock()
 				return
 			}
 
@@ -185,7 +291,16 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 			}
 
 			a.InOrderPercentage = math.Round((float64(inOrderHits) / float64(a.TotalCheckpoints)) * 100)
-			
+
+			atomic.AddInt64(&vehiclesProcessed, 1)
+
+			dbg.Log("[D2D][RESPONSE_ROW] request_id=%s vehicle_id=%d included_in_response=true coverage_percentage=%.2f hit_count=%d reason_if_skipped=%q",
+				requestID, a.VehicleID, a.CoveredPercentage, len(uniqueHits), "nil")
+
+			if a.CoveredPercentage == 0 {
+				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=COVERAGE_BECOMES_0 coverage_percentage=0.0", requestID, a.VehicleID))
+			}
+
 			mu.Lock()
 			filtered = append(filtered, a)
 			mu.Unlock()
@@ -200,10 +315,20 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 		h.routeEngine.RefreshCache()
 	}
 
-	sendJSON(w, http.StatusOK, map[string]interface{}{
+	duration := time.Since(startTime).Milliseconds()
+	dbg.Log("[D2D][REQUEST_END] request_id=%s total_duration_ms=%d vehicles_processed=%d vehicles_failed=%d",
+		requestID, duration, atomic.LoadInt64(&vehiclesProcessed), atomic.LoadInt64(&vehiclesFailed))
+
+	responsePayload := map[string]interface{}{
 		"success": true,
 		"data":    filtered,
-	})
+	}
+	if debugMode {
+		dbg.mu.Lock()
+		responsePayload["debug_payload"] = dbg.logs
+		dbg.mu.Unlock()
+	}
+	sendJSON(w, http.StatusOK, responsePayload)
 }
 
 func smoothGpsData(points []decoder.AVLData) []decoder.AVLData {
@@ -307,10 +432,18 @@ func distanceToSegment(pLat, pLng, aLat, aLng, bLat, bLng float64) float64 {
 	return utils.Haversine(pLat, pLng, cLat, cLng) * 1000.0
 }
 
-func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository, routeRepo *repository.RouteRepository, vehicleID int, routeID int, dateStr string, requireSequential bool, maxSpeed float64) {
+func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository, routeRepo *repository.RouteRepository, vehicleID int, routeID int, dateStr string, requireSequential bool, maxSpeed float64, imei string, dbg *d2dDebugLogger) {
+	requestID := "N/A"
+	if dbg != nil {
+		requestID = dbg.requestID
+	}
+
 	// Parse date
 	dayStart, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 	if err != nil {
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=DATE_PARSE_FAILED date=%s err=%q", requestID, vehicleID, dateStr, err.Error()))
+		}
 		return
 	}
 	dayEnd := dayStart.Add(24 * time.Hour)
@@ -319,14 +452,48 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 	checkpoints, err := routeRepo.GetCheckpointsByRoute(ctx, routeID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to fetch checkpoints for route")
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d route_id=%d event=CHECKPOINTS_FETCH_FAILED err=%q", requestID, vehicleID, routeID, err.Error()))
+		}
 		return
 	}
+
+	if dbg != nil {
+		cpIDs := make([]int, len(checkpoints))
+		for idx, cp := range checkpoints {
+			cpIDs[idx] = cp.ID
+		}
+		dbg.Log("[D2D][CHECKPOINTS_FETCHED] request_id=%s vehicle_id=%d route_id=%d checkpoint_count=%d checkpoint_ids=%v",
+			requestID, vehicleID, routeID, len(checkpoints), cpIDs)
+	}
+
 	if len(checkpoints) == 0 {
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d route_id=%d event=CHECKPOINTS_EMPTY", requestID, vehicleID, routeID))
+		}
 		return
 	}
 
 	// Fetch historical GPS data
+	if dbg != nil {
+		dbg.Log("[D2D][GPS_QUERY_START] request_id=%s vehicle_id=%d imei=%s start_time=%s end_time=%s",
+			requestID, vehicleID, imei, dayStart.Format(time.RFC3339), dayEnd.Format(time.RFC3339))
+	}
+
+	startQuery := time.Now()
 	gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, dayStart, dayEnd)
+	queryDuration := time.Since(startQuery).Milliseconds()
+
+	rowsErrStr := "nil"
+	if err != nil {
+		rowsErrStr = fmt.Sprintf("%q", err.Error())
+	}
+
+	if dbg != nil {
+		dbg.Log("[D2D][GPS_QUERY_RESULT] request_id=%s vehicle_id=%d gps_row_count=%d query_duration_ms=%d rows_err=%s",
+			requestID, vehicleID, len(gpsData), queryDuration, rowsErrStr)
+	}
+
 	if err != nil {
 		log.Error().Err(err).
 			Int("vehicle_id", vehicleID).
@@ -334,12 +501,53 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 			Str("date", dateStr).
 			AnErr("ctx_err", ctx.Err()).
 			Msg("Failed to query GPS data for coverage calculation")
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=GPS_QUERY_FAILED rows_err=%s", requestID, vehicleID, rowsErrStr))
+		}
+		return
+	}
+
+	log.Info().
+		Int("vehicle_id", vehicleID).
+		Int("route_id", routeID).
+		Str("date", dateStr).
+		Int("gps_row_count", len(gpsData)).
+		Msg("D2D GPS fetch result for recalculation")
+
+	if len(gpsData) == 0 {
+		log.Warn().
+			Int("vehicle_id", vehicleID).
+			Int("route_id", routeID).
+			Str("date", dateStr).
+			Msg("GPS data empty for recalculation - skipping DELETE to preserve existing coverage (possible TimescaleDB chunk unavailable)")
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=NO_GPS_DATA_AVAILABLE gps_row_count=0", requestID, vehicleID))
+		}
 		return
 	}
 
 	// Smooth and filter out outlier jumps to align with the playback page!
-	if len(gpsData) > 0 {
-		gpsData = smoothGpsData(gpsData)
+	gpsData = smoothGpsData(gpsData)
+
+	if dbg != nil {
+		firstPts := []string{}
+		for i := 0; i < len(gpsData) && i < 5; i++ {
+			firstPts = append(firstPts, fmt.Sprintf("{lat:%.6f,lng:%.6f,t:%s}", gpsData[i].Lat, gpsData[i].Lng, gpsData[i].Time.Format(time.RFC3339)))
+		}
+		lastPts := []string{}
+		for i := len(gpsData) - 5; i < len(gpsData); i++ {
+			if i >= 0 {
+				lastPts = append(lastPts, fmt.Sprintf("{lat:%.6f,lng:%.6f,t:%s}", gpsData[i].Lat, gpsData[i].Lng, gpsData[i].Time.Format(time.RFC3339)))
+			}
+		}
+		firstTimeStr := "N/A"
+		lastTimeStr := "N/A"
+		if len(gpsData) > 0 {
+			firstTimeStr = gpsData[0].Time.Format(time.RFC3339)
+			lastTimeStr = gpsData[len(gpsData)-1].Time.Format(time.RFC3339)
+		}
+		dbg.Log("[D2D][GPS_DATA_ANALYSIS] request_id=%s vehicle_id=%d first_gps_timestamp=%s last_gps_timestamp=%s gps_points_count=%d sample_first_5_points=%v sample_last_5_points=%v",
+			requestID, vehicleID, firstTimeStr, lastTimeStr, len(gpsData), firstPts, lastPts)
 	}
 
 	// Initialize all checkpoints as missed with reason "Never Reached"
@@ -350,6 +558,22 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 
 	physicalHits := make(map[int]time.Time)
 
+	type cpDebugInfo struct {
+		closestDist   float64
+		pointsChecked int
+		hit           bool
+	}
+	cpDbgs := make(map[int]*cpDebugInfo)
+	if dbg != nil {
+		for _, cp := range checkpoints {
+			cpDbgs[cp.ID] = &cpDebugInfo{
+				closestDist:   999999.0,
+				pointsChecked: 0,
+				hit:           false,
+			}
+		}
+	}
+
 	// If we have GPS data, run segment checking and checkpoint hits detection
 	if len(gpsData) > 0 {
 		expectedIdx := 0 // index of the checkpoint we are currently looking for
@@ -359,11 +583,20 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 			if expectedIdx < len(checkpoints) {
 				cp := checkpoints[expectedIdx]
 				dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
+				if dbg != nil {
+					cpDbgs[cp.ID].pointsChecked++
+					if dist < cpDbgs[cp.ID].closestDist {
+						cpDbgs[cp.ID].closestDist = dist
+					}
+				}
 				if dist <= 10.0 {
 					if gpsData[0].Speed <= maxSpeed {
 						physicalHits[cp.ID] = gpsData[0].Time
 						delete(missReasons, cp.ID)
 						expectedIdx++
+						if dbg != nil {
+							cpDbgs[cp.ID].hit = true
+						}
 					} else {
 						missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(gpsData[0].Speed, 'f', 1, 64) + " km/h)"
 					}
@@ -373,10 +606,19 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 			// Non-sequential check for the first point
 			for _, cp := range checkpoints {
 				dist := utils.Haversine(gpsData[0].Lat, gpsData[0].Lng, cp.Latitude, cp.Longitude) * 1000.0
+				if dbg != nil {
+					cpDbgs[cp.ID].pointsChecked++
+					if dist < cpDbgs[cp.ID].closestDist {
+						cpDbgs[cp.ID].closestDist = dist
+					}
+				}
 				if dist <= 10.0 {
 					if gpsData[0].Speed <= maxSpeed {
 						physicalHits[cp.ID] = gpsData[0].Time
 						delete(missReasons, cp.ID)
+						if dbg != nil {
+							cpDbgs[cp.ID].hit = true
+						}
 					} else {
 						missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(gpsData[0].Speed, 'f', 1, 64) + " km/h)"
 					}
@@ -392,6 +634,9 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 			// For each checkpoint that is not yet hit, check if the vehicle got close
 			for cpIdx, cp := range checkpoints {
 				if _, hit := physicalHits[cp.ID]; hit {
+					if dbg != nil {
+						cpDbgs[cp.ID].hit = true
+					}
 					continue
 				}
 
@@ -407,6 +652,13 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 					distMeters = distanceToSegment(cp.Latitude, cp.Longitude, prev.Lat, prev.Lng, curr.Lat, curr.Lng)
 				}
 
+				if dbg != nil {
+					cpDbgs[cp.ID].pointsChecked++
+					if distMeters < cpDbgs[cp.ID].closestDist {
+						cpDbgs[cp.ID].closestDist = distMeters
+					}
+				}
+
 				if distMeters <= 10.0 {
 					if requireSequential {
 						if cpIdx == expectedIdx {
@@ -415,6 +667,9 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 								physicalHits[cp.ID] = curr.Time
 								delete(missReasons, cp.ID)
 								expectedIdx++
+								if dbg != nil {
+									cpDbgs[cp.ID].hit = true
+								}
 							} else {
 								missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
 							}
@@ -431,6 +686,9 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 						if curr.Speed <= maxSpeed {
 							physicalHits[cp.ID] = curr.Time
 							delete(missReasons, cp.ID)
+							if dbg != nil {
+								cpDbgs[cp.ID].hit = true
+							}
 						} else {
 							missReasons[cp.ID] = "Speed Too High (" + strconv.FormatFloat(curr.Speed, 'f', 1, 64) + " km/h)"
 						}
@@ -440,20 +698,72 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 	}
 
+	if dbg != nil {
+		for _, cp := range checkpoints {
+			info := cpDbgs[cp.ID]
+			dbg.Log("[D2D][CHECKPOINT_EVALUATION] request_id=%s vehicle_id=%d checkpoint_id=%d checkpoint_lat=%.6f checkpoint_lng=%.6f checkpoint_radius=%.1f hit=%t closest_distance_found=%.2f gps_points_checked=%d",
+				requestID, vehicleID, cp.ID, cp.Latitude, cp.Longitude, cp.RadiusMeters, info.hit, info.closestDist, info.pointsChecked)
+		}
+	}
+
+	coveragePercentage := 0.0
+	if len(checkpoints) > 0 {
+		coveragePercentage = float64(len(physicalHits)) / float64(len(checkpoints)) * 100.0
+	}
+	if dbg != nil {
+		dbg.Log("[D2D][COVERAGE_SUMMARY] request_id=%s vehicle_id=%d total_checkpoints=%d physical_hits=%d miss_reasons=%+v coverage_percentage=%.2f",
+			requestID, vehicleID, len(checkpoints), len(physicalHits), missReasons, coveragePercentage)
+	}
+
+	if coveragePercentage == 0.0 {
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=COVERAGE_BECOMES_0 coverage_percentage=0.0 total_checkpoints=%d", requestID, vehicleID, len(checkpoints)))
+		}
+	}
+
 	// 1. Start a database transaction to group deletes and inserts together.
-	// This prevents concurrent read queries from seeing a "0 coverage logs" state (zero downtime).
 	tx, err := gpsRepo.Pool().Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for recalculation")
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=TX_BEGIN_FAILED err=%q", requestID, vehicleID, err.Error()))
+		}
 		return
 	}
-	defer tx.Rollback(ctx)
+
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback(ctx)
+			if dbg != nil {
+				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=TX_ROLLBACK", requestID, vehicleID))
+			}
+		}
+	}()
+
+	if dbg != nil {
+		dbg.Log("[D2D][TX_BEGIN] request_id=%s vehicle_id=%d", requestID, vehicleID)
+	}
 
 	// Delete all existing logs and miss reasons for this vehicle, route, and date
-	_, _ = tx.Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-	_, _ = tx.Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+	resLogs, errLogs := tx.Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+	resReasons, errReasons := tx.Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+
+	rowsDeletedLogs := int64(0)
+	if errLogs == nil {
+		rowsDeletedLogs = resLogs.RowsAffected()
+	}
+	rowsDeletedReasons := int64(0)
+	if errReasons == nil {
+		rowsDeletedReasons = resReasons.RowsAffected()
+	}
+	if dbg != nil {
+		dbg.Log("[D2D][DELETE_EXISTING_LOGS] request_id=%s vehicle_id=%d rows_deleted_logs=%d rows_deleted_reasons=%d",
+			requestID, vehicleID, rowsDeletedLogs, rowsDeletedReasons)
+	}
 
 	// 2. Batch insert physicalHits
+	coverageLogsInserted := int64(0)
 	if len(physicalHits) > 0 {
 		query := "INSERT INTO route_coverage_logs (vehicle_id, route_id, checkpoint_id, report_date, hit_time) VALUES "
 		vals := []interface{}{}
@@ -464,14 +774,23 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 		query = query[:len(query)-1] // trim trailing comma
 		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO NOTHING"
-		_, err = tx.Exec(ctx, query, vals...)
+		resInsert, err := tx.Exec(ctx, query, vals...)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to batch insert coverage hits during recalculation")
+			if dbg != nil {
+				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=INSERT_COVERAGE_LOGS_FAILED err=%q", requestID, vehicleID, err.Error()))
+			}
 			return
 		}
+		coverageLogsInserted = resInsert.RowsAffected()
+	}
+	if dbg != nil {
+		dbg.Log("[D2D][INSERT_COVERAGE_LOGS] request_id=%s vehicle_id=%d coverage_logs_inserted=%d",
+			requestID, vehicleID, coverageLogsInserted)
 	}
 
 	// 3. Batch insert miss reasons
+	missReasonsInserted := int64(0)
 	if len(missReasons) > 0 {
 		query := "INSERT INTO route_coverage_miss_reasons (vehicle_id, route_id, checkpoint_id, report_date, reason) VALUES "
 		vals := []interface{}{}
@@ -482,14 +801,58 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 		query = query[:len(query)-1] // trim trailing comma
 		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO UPDATE SET reason = EXCLUDED.reason"
-		_, err = tx.Exec(ctx, query, vals...)
+		resInsert, err := tx.Exec(ctx, query, vals...)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to batch insert miss reasons during recalculation")
+			if dbg != nil {
+				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=INSERT_MISS_REASONS_FAILED err=%q", requestID, vehicleID, err.Error()))
+			}
 			return
 		}
+		missReasonsInserted = resInsert.RowsAffected()
+	}
+	if dbg != nil {
+		dbg.Log("[D2D][INSERT_MISS_REASONS] request_id=%s vehicle_id=%d miss_reasons_inserted=%d",
+			requestID, vehicleID, missReasonsInserted)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		log.Error().Err(err).Msg("Failed to commit transaction for recalculation")
+	log.Info().
+		Int("vehicle_id", vehicleID).
+		Int("route_id", routeID).
+		Str("date", dateStr).
+		Int("physical_hits_count", len(physicalHits)).
+		Int("miss_reasons_count", len(missReasons)).
+		Int("total_checkpoints", len(checkpoints)).
+		Msg("D2D recalculation about to commit")
+
+	errCommit := tx.Commit(ctx)
+	success := (errCommit == nil)
+	if dbg != nil {
+		dbg.Log("[D2D][TX_COMMIT] request_id=%s vehicle_id=%d success=%t", requestID, vehicleID, success)
+	}
+	if !success {
+		log.Error().Err(errCommit).Msg("Failed to commit transaction for recalculation")
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=TX_COMMIT_FAILED err=%q", requestID, vehicleID, errCommit.Error()))
+		}
+		return
+	}
+
+	committed = true
+
+	if dbg != nil {
+		// Re-fetch to validate post-commit
+		var logsCount int
+		var reasonsCount int
+		_ = gpsRepo.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr).Scan(&logsCount)
+		_ = gpsRepo.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr).Scan(&reasonsCount)
+
+		recomputedPct := 0.0
+		totalCps := len(checkpoints)
+		if totalCps > 0 {
+			recomputedPct = float64(logsCount) / float64(totalCps) * 100.0
+		}
+		dbg.Log("[D2D][POST_COMMIT_VALIDATION] request_id=%s vehicle_id=%d coverage_logs_found=%d miss_reasons_found=%d coverage_percentage_recomputed=%.2f",
+			requestID, vehicleID, logsCount, reasonsCount, recomputedPct)
 	}
 }
