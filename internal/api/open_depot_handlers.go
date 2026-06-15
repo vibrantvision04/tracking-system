@@ -259,3 +259,16 @@ func (h *Handler) GetOpenDepotAnalytics(w http.ResponseWriter, r *http.Request) 
 		"data":    analytics,
 	})
 }
+
+func (h *Handler) GetOpenDepotDashboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	dashboard, err := h.openDepotRepo.GetLiveShiftDashboard(ctx)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to load open depot dashboard: " + err.Error()})
+		return
+	}
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    dashboard,
+	})
+}

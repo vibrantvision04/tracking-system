@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"math"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -837,5 +839,141 @@ func (r *OpenDepotRepository) GetAnalytics(ctx context.Context) (map[string]inte
 		"zone_wise_statistics":          zoneStats,
 		"ward_wise_statistics":          wardStats,
 		"monthly_statistics":            monthlyStats,
+	}, nil
+}
+
+func (r *OpenDepotRepository) GetLiveShiftDashboard(ctx context.Context) (map[string]interface{}, error) {
+	now := utils.CurrentTimeInIndia()
+	shiftID, opDate, err := r.GetShiftAndOperationalDate(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch active shift details
+	var shiftName string
+	var startTimeStr, endTimeStr string
+	err = r.db.QueryRow(ctx, "SELECT shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE id = $1", shiftID).
+		Scan(&shiftName, &startTimeStr, &endTimeStr)
+	if err != nil {
+		shiftName = "Morning Shift" // fallback
+	}
+
+	// Fetch all depots with lateral join for the active shift and operational date
+	depots, err := r.GetAll(ctx, shiftID, opDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Aggregate statistics
+	totalOpenDepots := len(depots)
+	var approvedComplete, approvedPartial, rejected, pending, notCovered int
+
+	type ZoneStat struct {
+		ZoneID             int     `json:"zone_id"`
+		ZoneName           string  `json:"zone_name"`
+		TotalDepots        int     `json:"total_depots"`
+		ApprovedComplete   int     `json:"approved_complete"`
+		ApprovedPartial    int     `json:"approved_partial"`
+		Rejected           int     `json:"rejected"`
+		Pending            int     `json:"pending"`
+		NotCovered         int     `json:"not_covered"`
+		ResolvedDepots     int     `json:"resolved_depots"`
+		CoveragePercentage float64 `json:"coverage_percentage"`
+	}
+
+	zoneMap := make(map[int]*ZoneStat)
+
+	for _, d := range depots {
+		status := d.LastCleaningStatus
+		statusVal := "NOT_COVERED"
+		if status != nil {
+			statusVal = *status
+		}
+
+		switch statusVal {
+		case "APPROVED_COMPLETE":
+			approvedComplete++
+		case "APPROVED_PARTIAL":
+			approvedPartial++
+		case "REJECTED":
+			rejected++
+		case "PENDING":
+			pending++
+		default:
+			notCovered++
+		}
+
+		zID := d.ZoneID
+		zName := d.ZoneName
+		if zName == "" {
+			zName = fmt.Sprintf("Zone %d", zID)
+		}
+
+		zs, exists := zoneMap[zID]
+		if !exists {
+			zs = &ZoneStat{
+				ZoneID:   zID,
+				ZoneName: zName,
+			}
+			zoneMap[zID] = zs
+		}
+
+		zs.TotalDepots++
+		switch statusVal {
+		case "APPROVED_COMPLETE":
+			zs.ApprovedComplete++
+			zs.ResolvedDepots++
+		case "APPROVED_PARTIAL":
+			zs.ApprovedPartial++
+			zs.ResolvedDepots++
+		case "REJECTED":
+			zs.Rejected++
+			zs.ResolvedDepots++
+		case "PENDING":
+			zs.Pending++
+		default:
+			zs.NotCovered++
+		}
+	}
+
+	var zoneStats []*ZoneStat
+	var totalZonePercentage float64
+	var activeZoneCount int
+
+	for _, zs := range zoneMap {
+		if zs.TotalDepots > 0 {
+			zs.CoveragePercentage = math.Round((float64(zs.ResolvedDepots) / float64(zs.TotalDepots)) * 100)
+			totalZonePercentage += zs.CoveragePercentage
+			activeZoneCount++
+		}
+		zoneStats = append(zoneStats, zs)
+	}
+
+	overallCoverage := 0.0
+	if activeZoneCount > 0 {
+		overallCoverage = math.Round(totalZonePercentage / float64(activeZoneCount))
+	} else if totalOpenDepots > 0 {
+		resolvedTotal := approvedComplete + approvedPartial + rejected
+		overallCoverage = math.Round((float64(resolvedTotal) / float64(totalOpenDepots)) * 100)
+	}
+
+	return map[string]interface{}{
+		"active_shift": map[string]interface{}{
+			"id":         shiftID,
+			"shift_name": shiftName,
+			"start_time": startTimeStr,
+			"end_time":   endTimeStr,
+		},
+		"operational_date": opDate.Format("2006-01-02"),
+		"kpis": map[string]interface{}{
+			"total_open_depots":   totalOpenDepots,
+			"approved_complete":   approvedComplete,
+			"approved_partial":    approvedPartial,
+			"rejected":            rejected,
+			"pending":             pending,
+			"not_covered":         notCovered,
+			"coverage_percentage": overallCoverage,
+		},
+		"zone_coverages": zoneStats,
 	}, nil
 }

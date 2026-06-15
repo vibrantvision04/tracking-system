@@ -206,6 +206,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		// Open Depot Management endpoints
 		r.Get("/open-depots", h.GetOpenDepots)
 		r.Get("/open-depots/analytics", h.GetOpenDepotAnalytics)
+		r.Get("/open-depots/dashboard", h.GetOpenDepotDashboard)
 		r.Get("/open-depots/{id}", h.GetOpenDepotByID)
 		r.Post("/open-depots", h.CreateOpenDepot)
 		r.Put("/open-depots/{id}", h.UpdateOpenDepot)
