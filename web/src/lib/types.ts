@@ -8,6 +8,7 @@ export interface GpsDevice {
   sim_no: string;
   device_type: string;
   is_active: boolean;
+  is_blocked?: boolean;
   created_at: string;
   vehicle?: Vehicle | null;
 }

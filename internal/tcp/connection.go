@@ -38,6 +38,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 	imei := string(imeiBuf)
 	log.Info().Str("imei", imei).Msg("New device connected")
 
+	// Check if blocked/blacklisted
+	isBlocked, err := s.rdb.SIsMember(context.Background(), "gps:blocked_imeis", imei).Result()
+	if err == nil && isBlocked {
+		log.Warn().Str("imei", imei).Msg("Blacklisted/Blocked GPS device connected. Closing connection.")
+		return
+	}
+
 	// 2. Auto-register device in DB if it doesn't exist
 	// This ensures that even if you haven't manually added the IMEI in the UI, 
 	// the backend "claims" it so you can see it in the 'Devices' list.
@@ -82,6 +89,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	// 3. Receive AVL packets (Infinite Loop)
 	for {
+		// Check if blocked/blacklisted
+		isBlocked, err := s.rdb.SIsMember(context.Background(), "gps:blocked_imeis", imei).Result()
+		if err == nil && isBlocked {
+			log.Warn().Str("imei", imei).Msg("GPS device blacklisted/blocked while connected. Closing connection.")
+			break
+		}
+
 		// Read preamble (4 bytes of zeros)
 		preamble := make([]byte, 4)
 		_, err := io.ReadFull(conn, preamble)

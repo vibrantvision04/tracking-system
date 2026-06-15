@@ -655,6 +655,35 @@ func (h *Handler) UpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 
+func (h *Handler) BlockDevice(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		ID      int  `json:"id"`
+		Blocked bool `json:"blocked"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+		return
+	}
+	
+	imei, err := h.vRepo.BlockDevice(r.Context(), payload.ID, payload.Blocked)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to block/unblock device: " + err.Error()})
+		return
+	}
+	
+	// Update Redis cache set
+	if payload.Blocked {
+		h.rdb.SAdd(r.Context(), "gps:blocked_imeis", imei)
+		log.Info().Str("imei", imei).Msg("GPS IMEI blacklisted / blocked")
+	} else {
+		h.rdb.SRem(r.Context(), "gps:blocked_imeis", imei)
+		log.Info().Str("imei", imei).Msg("GPS IMEI unblocked")
+	}
+	
+	h.publishMetadataUpdate(r.Context(), "device", payload.ID)
+	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+}
+
 func (h *Handler) UnmapDevice(w http.ResponseWriter, r *http.Request) {
 	deviceIDStr := chi.URLParam(r, "id")
 	var deviceID int

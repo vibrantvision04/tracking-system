@@ -20,6 +20,7 @@ type GpsDevice struct {
 	SimNo      string   `json:"sim_no"`
 	DeviceType string   `json:"device_type"`
 	IsActive   bool     `json:"is_active"`
+	Blocked    bool     `json:"is_blocked"`
 	Vehicle    *Vehicle `json:"vehicle,omitempty"`
 }
 
@@ -61,7 +62,7 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 		SELECT 
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
-			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
+			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false), COALESCE(d.blocked, false),
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
 			COALESCE(lp.speed, 0),
 			COALESCE(r.route_name, '') as assigned_route_name,
@@ -104,7 +105,7 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 		err := rows.Scan(
 			&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 			&vt.Name, &vt.IconColor,
-			&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
+			&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive, &d.Blocked,
 			&v.LastLat, &v.LastLng, &v.LastTime,
 			&speed,
 			&v.AssignedRouteName, &v.AssignedZoneID, &v.AssignedZoneName,
@@ -143,7 +144,7 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 		SELECT 
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
-			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active,
+			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active, COALESCE(d.blocked, false),
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
 			COALESCE(lp.speed, 0),
 			v.zone_id, v.ward_id
@@ -163,7 +164,7 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 	err := r.pool.QueryRow(ctx, query, imei).Scan(
 		&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 		&vt.Name, &vt.IconColor,
-		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
+		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive, &d.Blocked,
 		&v.LastLat, &v.LastLng, &v.LastTime,
 		&speed,
 		&v.ZoneID, &v.WardID,
@@ -185,7 +186,7 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 		SELECT 
 			v.id, v.registration_no, COALESCE(v.chassis_no, ''), v.is_owned, v.vehicle_type_id, v.is_active,
 			COALESCE(vt.vehicle_type_name, 'Unknown'), COALESCE(vt.icon_color, '#666'),
-			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false),
+			COALESCE(d.id, 0), COALESCE(d.imei, ''), COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), COALESCE(d.is_active, false), COALESCE(d.blocked, false),
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
 			COALESCE(lp.speed, 0),
 			v.zone_id, v.ward_id
@@ -205,7 +206,7 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&v.ID, &v.RegistrationNo, &v.ChassisNo, &v.IsOwned, &vTypeId, &v.IsActive,
 		&vt.Name, &vt.IconColor,
-		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive,
+		&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive, &d.Blocked,
 		&v.LastLat, &v.LastLng, &v.LastTime,
 		&speed,
 		&v.ZoneID, &v.WardID,
@@ -290,7 +291,7 @@ func (r *VehicleRepository) UpdateVehicle(ctx context.Context, v *Vehicle) error
 func (r *VehicleRepository) GetDevices(ctx context.Context) ([]GpsDevice, error) {
 	query := `
 		SELECT 
-			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.model, ''), d.status = 'active',
+			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.model, ''), d.status = 'active', COALESCE(d.blocked, false),
 			COALESCE(v.id, 0), COALESCE(v.registration_no, '')
 		FROM gps_devices d
 		LEFT JOIN vehicle_gps_map m ON d.id = m.device_id AND m.unassigned_at IS NULL
@@ -307,7 +308,7 @@ func (r *VehicleRepository) GetDevices(ctx context.Context) ([]GpsDevice, error)
 		var d GpsDevice
 		var vID int
 		var vReg string
-		if err := rows.Scan(&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive, &vID, &vReg); err == nil {
+		if err := rows.Scan(&d.ID, &d.IMEI, &d.SerialNo, &d.SimNo, &d.DeviceType, &d.IsActive, &d.Blocked, &vID, &vReg); err == nil {
 			if vID > 0 {
 				d.Vehicle = &Vehicle{ID: vID, RegistrationNo: vReg}
 			}
@@ -413,6 +414,17 @@ func (r *VehicleRepository) UpdateDeviceStatus(ctx context.Context, id int, isAc
 		WHERE id = $3
 	`, isActive, status, id)
 	return err
+}
+
+func (r *VehicleRepository) BlockDevice(ctx context.Context, id int, blocked bool) (string, error) {
+	var imei string
+	err := r.pool.QueryRow(ctx, `
+		UPDATE gps_devices 
+		SET blocked = $1 
+		WHERE id = $2
+		RETURNING imei
+	`, blocked, id).Scan(&imei)
+	return imei, err
 }
 
 func (r *VehicleRepository) DeleteDevice(ctx context.Context, deviceID int) error {

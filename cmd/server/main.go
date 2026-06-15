@@ -44,11 +44,41 @@ func main() {
 	}
 	defer db.Close()
 
+	// Ensure blocked column exists in gps_devices
+	_, err = db.Exec(context.Background(), "ALTER TABLE gps_devices ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT false")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to run schema migration for blocked column")
+	}
+
 	rdb, err := cache.InitRedis(cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize Redis")
 	}
 	defer rdb.Close()
+
+	// Populate blocked IMEIs cache in Redis
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		
+		rdb.Del(ctx, "gps:blocked_imeis")
+		
+		rows, err := db.Query(ctx, "SELECT imei FROM gps_devices WHERE blocked = true")
+		if err == nil {
+			defer rows.Close()
+			var imeis []string
+			for rows.Next() {
+				var imei string
+				if err := rows.Scan(&imei); err == nil {
+					imeis = append(imeis, imei)
+				}
+			}
+			if len(imeis) > 0 {
+				rdb.SAdd(ctx, "gps:blocked_imeis", imeis)
+				log.Info().Int("count", len(imeis)).Msg("Loaded blocked GPS IMEIs into Redis cache")
+			}
+		}
+	}()
 
 	// 4. Initialize Repositories
 	gpsRepo := repository.NewGPSRepository(db)

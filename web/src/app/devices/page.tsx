@@ -66,6 +66,14 @@ export default function DevicesPage() {
     if (dev) updateDevice({ ...dev, is_active: !currentStatus });
   };
 
+  const toggleBlock = async (id: number, imei: string, currentBlocked: boolean) => {
+    const actionText = currentBlocked ? "unblock / allow" : "block / blacklist";
+    if (!confirm(`Are you sure you want to ${actionText} GPS device "${imei}"?`)) return;
+    await put("/api/devices/block", { id, blocked: !currentBlocked });
+    const dev = devices.find(d => d.id === id);
+    if (dev) updateDevice({ ...dev, is_blocked: !currentBlocked });
+  };
+
   const unmapDevice = async (id: number, devImei: string) => {
     if (!confirm(`Are you sure you want to unassign device ${devImei} from the vehicle?`)) return;
     await post(`/api/unmap-device/${id}`, {});
@@ -208,6 +216,7 @@ export default function DevicesPage() {
                 "Type",
                 "Assigned Vehicle",
                 "Status",
+                "Blacklist",
                 <div key="act" className="text-right pr-4">Actions</div>
               ]}
               emptyState={
@@ -241,9 +250,22 @@ export default function DevicesPage() {
                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
                           : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
                       }`}
-                      title="Click to toggle status"
+                      title="Click to toggle active status"
                     >
                       {d.is_active ? "Active" : "Inactive"}
+                    </button>
+                  </td>
+                  <td className="py-3.5 px-5">
+                    <button
+                      onClick={() => toggleBlock(d.id, d.imei, !!d.is_blocked)}
+                      className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition hover:scale-105 active:scale-95 ${
+                        d.is_blocked 
+                          ? "bg-rose-600 text-white shadow-md shadow-rose-500/25" 
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                      }`}
+                      title="Click to toggle blacklist / block status"
+                    >
+                      {d.is_blocked ? "Blocked" : "Allow"}
                     </button>
                   </td>
                   <td className="py-3.5 px-5 text-right">

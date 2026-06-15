@@ -49,6 +49,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Post("/devices", h.CreateDevice)
 		r.Delete("/devices/{id}", h.DeleteDevice)
 		r.Put("/devices/status", h.UpdateDeviceStatus)
+		r.Put("/devices/block", h.BlockDevice)
 		r.Post("/map-device", h.MapDevice)
 		r.Post("/unmap-device/{id}", h.UnmapDevice)
 		

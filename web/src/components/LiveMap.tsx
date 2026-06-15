@@ -65,7 +65,10 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const iconCache = useRef<Record<string, { color: string; emoji: string }>>({});
   const animFrames = useRef<Record<string, number>>({});
   const wardsLayerRef = useRef<L.LayerGroup | null>(null);
-  const facilitiesLayerRef = useRef<L.LayerGroup | null>(null);
+  const transferStationsLayerRef = useRef<L.LayerGroup | null>(null);
+  const parkingSpotsLayerRef = useRef<L.LayerGroup | null>(null);
+  const fuelStationsLayerRef = useRef<L.LayerGroup | null>(null);
+  const workshopsLayerRef = useRef<L.LayerGroup | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -203,7 +206,10 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     
     // Initialize Layer groups
     wardsLayerRef.current = L.layerGroup().addTo(m);
-    facilitiesLayerRef.current = L.layerGroup().addTo(m);
+    transferStationsLayerRef.current = L.layerGroup().addTo(m);
+    parkingSpotsLayerRef.current = L.layerGroup().addTo(m);
+    fuelStationsLayerRef.current = L.layerGroup().addTo(m);
+    workshopsLayerRef.current = L.layerGroup().addTo(m);
     
     // Add zoom control manually in the bottom right corner
     L.control.zoom({ position: 'bottomright' }).addTo(m);
@@ -212,7 +218,13 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       "Google Maps (Default)": googleMapLayer,
       "Google Satellite + Labels": googleHybridLayer,
       "Dark Map": darkLayer
-    }, {}, { position: 'topright' }).addTo(m);
+    }, {
+      "Ward Boundaries": wardsLayerRef.current,
+      "Transfer Stations": transferStationsLayerRef.current,
+      "Parking Spots": parkingSpotsLayerRef.current,
+      "Fuel Stations": fuelStationsLayerRef.current,
+      "Workshops": workshopsLayerRef.current,
+    }, { position: 'topright' }).addTo(m);
     
     mapRef.current = m;
     return () => { 
@@ -223,19 +235,22 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       Object.values(animFrames.current).forEach(id => cancelAnimationFrame(id));
       animFrames.current = {};
       wardsLayerRef.current = null;
-      facilitiesLayerRef.current = null;
+      transferStationsLayerRef.current = null;
+      parkingSpotsLayerRef.current = null;
+      fuelStationsLayerRef.current = null;
+      workshopsLayerRef.current = null;
     };
   }, []);
 
   // ─── Render Facilities (Parking Spots, Transfer Stations) ───
   useEffect(() => {
-    const layer = facilitiesLayerRef.current;
-    if (!layer) return;
+    if (parkingSpotsLayerRef.current) parkingSpotsLayerRef.current.clearLayers();
+    if (transferStationsLayerRef.current) transferStationsLayerRef.current.clearLayers();
+    if (fuelStationsLayerRef.current) fuelStationsLayerRef.current.clearLayers();
+    if (workshopsLayerRef.current) workshopsLayerRef.current.clearLayers();
 
-    layer.clearLayers();
-
-    const renderFacility = (item: any, typeName: string, iconSymbol: string, defaultColor: string) => {
-      if (!item.geojson) return;
+    const renderFacility = (item: any, typeName: string, iconSymbol: string, defaultColor: string, layer: L.LayerGroup | null) => {
+      if (!layer || !item.geojson) return;
       try {
         let feature = item.geojson;
         if (typeof feature === "string") {
@@ -286,10 +301,10 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       }
     };
 
-    parkingSpots.forEach(p => renderFacility(p, "Parking Spot", "P", "#000000"));
-    transferStations.forEach(t => renderFacility(t, "Transfer Station", "T", "#000000"));
-    fuelStations.forEach(f => renderFacility(f, "Fuel Station", "F", "#000000"));
-    workshops.forEach(w => renderFacility(w, "Workshop", "W", "#000000"));
+    parkingSpots.forEach(p => renderFacility(p, "Parking Spot", "P", "#10b981", parkingSpotsLayerRef.current));
+    transferStations.forEach(t => renderFacility(t, "Transfer Station", "T", "#3b82f6", transferStationsLayerRef.current));
+    fuelStations.forEach(f => renderFacility(f, "Fuel Station", "F", "#eab308", fuelStationsLayerRef.current));
+    workshops.forEach(w => renderFacility(w, "Workshop", "W", "#8b5cf6", workshopsLayerRef.current));
 
   }, [parkingSpots, transferStations, fuelStations, workshops]);
 

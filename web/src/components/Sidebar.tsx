@@ -4,16 +4,30 @@ import { usePathname } from "next/navigation";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { useState, useRef, useEffect } from "react";
 import { Label } from "recharts";
+import {
+  Home,
+  Truck,
+  Cpu,
+  Map,
+  MapPin,
+  Users,
+  Keyboard,
+  Tv,
+  BarChart3,
+  TrendingUp,
+  CheckCircle2,
+  Rewind
+} from "lucide-react";
 
 const navData = [
   {
     label: "Dashboard",
-    icon: "🏠",
+    icon: Home,
     href: "/",
   },
   {
     label: "Vehicles",
-    icon: "🚛",
+    icon: Truck,
     children: [
       { label: "Vehicle List", href: "/vehicles" },
       { label: "Vehicle Type", href: "/vswm/vehicle-type" },
@@ -42,7 +56,7 @@ const navData = [
   },
   {
     label: "GPS Devices",
-    icon: "📡",
+    icon: Cpu,
     children: [
       { label: "GPS Device List", href: "/devices" },
       { label: "GPS Device Type", href: "/vswm/gps-device-type" },
@@ -59,7 +73,7 @@ const navData = [
   },
   {
     label: "Regions & Routes",
-    icon: "🏛️",
+    icon: Map,
     children: [
       { label: "Zones & Wards", href: "/zones" },
       { label: "Region Type", href: "/vswm/region-type" },
@@ -83,7 +97,7 @@ const navData = [
   },
   {
     label: "POIs",
-    icon: "📍",
+    icon: MapPin,
     children: [
       { label: "Transfer Station", href: "/vswm/transfer-station" },
       { label: "Workshop", href: "/vswm/workshop" },
@@ -104,7 +118,7 @@ const navData = [
   },
   {
     label: "HR / Staff",
-    icon: "👥",
+    icon: Users,
     children: [
       { label: "Employee List", href: "/vswm/employee" },
       { label: "Department", href: "/vswm/department" },
@@ -129,7 +143,7 @@ const navData = [
   },
   {
     label: "Data Entry",
-    icon: "⌨️",
+    icon: Keyboard,
     children: [
       { label: "Trenching Ground Weighbridge Entry", href: "/vswm/trenching-ground-weighbridge-entry" },
       { label: "Weighbridge 3 Bin Entry", href: "/vswm/weighbridge-3-bin-entry" },
@@ -137,7 +151,7 @@ const navData = [
   },
   {
     label: "Monitor",
-    icon: "📺",
+    icon: Tv,
     children: [
       { label: "Vehicle Location", href: "/vswm/vehicle-location" },
       { label: "Employee Location", href: "/vswm/employee-location" },
@@ -148,7 +162,7 @@ const navData = [
   },
   {
     label: "Reports",
-    icon: "📊",
+    icon: BarChart3,
     children: [
       {
         label: "Vehicle & Movement",
@@ -231,21 +245,21 @@ const navData = [
   },
   {
     label: "Ultimate Reports",
-    icon: "📈",
+    icon: TrendingUp,
     children: [
       { label: "Daily Ultimate Report", href: "/ultimate-reports/daily" },
     ],
   },
   {
     label: "Approvals",
-    icon: "✅",
+    icon: CheckCircle2,
     children: [
       { label: "Open Depot Cleaning", href: "/vswm/open-depot-cleaning" }
     ],
   },
   {
     label: "Playback",
-    icon: "⏪",
+    icon: Rewind,
     href: "/playback",
   },
 ];
@@ -282,6 +296,16 @@ export default function Sidebar() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [renderedCategory, setRenderedCategory] = useState<string | null>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
+  const closeTimeoutRef = useRef<any>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Smooth unmount trick: keep content visible during fade out
   useEffect(() => {
@@ -357,7 +381,28 @@ export default function Sidebar() {
             const isCurrentPath = category.href && path === category.href;
 
             return (
-              <div key={category.label} className="px-1.5">
+              <div
+                key={category.label}
+                className="px-1.5"
+                onMouseEnter={() => {
+                  if (closeTimeoutRef.current) {
+                    clearTimeout(closeTimeoutRef.current);
+                    closeTimeoutRef.current = null;
+                  }
+                  if (hasChildren) {
+                    setActiveCategory(category.label);
+                  } else {
+                    setActiveCategory(null);
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (hasChildren) {
+                    closeTimeoutRef.current = setTimeout(() => {
+                      setActiveCategory(null);
+                    }, 250);
+                  }
+                }}
+              >
                 {category.href ? (
                   <Link
                     href={category.href}
@@ -373,7 +418,9 @@ export default function Sidebar() {
                         : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
                       }`}
                   >
-                    <span className="w-4 flex justify-center text-[13px] group-hover:scale-110 transition-transform shrink-0">{category.icon}</span>
+                    <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
+                      <category.icon className="w-4 h-4 text-emerald-500" />
+                    </span>
                     <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                   </Link>
                 ) : (
@@ -387,7 +434,9 @@ export default function Sidebar() {
                       }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-4 flex justify-center text-[13px] group-hover:scale-110 transition-transform shrink-0">{category.icon}</span>
+                      <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
+                        <category.icon className="w-4 h-4 text-emerald-500" />
+                      </span>
                       <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                     </div>
                     {hasChildren && !sidebarCollapsed && (
@@ -430,6 +479,17 @@ export default function Sidebar() {
       {/* Flyout Mega Menu - Glassmorphism & Slide-in Animation */}
       <div
         ref={flyoutRef}
+        onMouseEnter={() => {
+          if (closeTimeoutRef.current) {
+            clearTimeout(closeTimeoutRef.current);
+            closeTimeoutRef.current = null;
+          }
+        }}
+        onMouseLeave={() => {
+          closeTimeoutRef.current = setTimeout(() => {
+            setActiveCategory(null);
+          }, 250);
+        }}
         className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
           transition-all duration-300 ease-out
           ${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}

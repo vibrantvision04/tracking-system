@@ -549,6 +549,18 @@ export default function PlaybackPage() {
   const [showCoveredCheckpoints, setShowCoveredCheckpoints] = useState(true);
   const [showUncoveredCheckpoints, setShowUncoveredCheckpoints] = useState(true);
 
+  // POI Layer Toggles
+  const [showParking, setShowParking] = useState(true);
+  const [showTransfer, setShowTransfer] = useState(true);
+  const [showFuel, setShowFuel] = useState(true);
+  const [showWorkshop, setShowWorkshop] = useState(true);
+
+  // POI Data States
+  const [parkingSpots, setParkingSpots] = useState<any[]>([]);
+  const [transferStations, setTransferStations] = useState<any[]>([]);
+  const [fuelStations, setFuelStations] = useState<any[]>([]);
+  const [workshops, setWorkshops] = useState<any[]>([]);
+
   // Playback States
   const [points, setPoints] = useState<GpsDataPoint[]>([]);
   const [idx, setIdx] = useState(0);
@@ -566,6 +578,11 @@ export default function PlaybackPage() {
   const assignedRouteLayerRef = useRef<any>(null);
   const boundaryLayerRef = useRef<any>(null); // For selected zone/ward boundaries
   const intervalRef = useRef<any>(null);
+
+  const parkingSpotsLayerRef = useRef<any>(null);
+  const transferStationsLayerRef = useRef<any>(null);
+  const fuelStationsLayerRef = useRef<any>(null);
+  const workshopsLayerRef = useRef<any>(null);
 
   const matchedCoordsRef = useRef<[number, number][]>([]);
   const activeLineRef = useRef<any>(null);
@@ -1013,14 +1030,28 @@ export default function PlaybackPage() {
       if (res.success) setShiftsList(res.data || []);
     }).catch(() => {});
 
+    api<{ data: any[] }>("/api/parking-spots").then((res) => setParkingSpots(res.data || [])).catch(() => {});
+    api<{ data: any[] }>("/api/transfer-stations").then((res) => setTransferStations(res.data || [])).catch(() => {});
+    api<{ data: any[] }>("/api/fuel-stations").then((res) => setFuelStations(res.data || [])).catch(() => {});
+    api<{ data: any[] }>("/api/workshops").then((res) => setWorkshops(res.data || [])).catch(() => {});
+
     if (typeof window !== "undefined") {
       try {
         const cachedRoutes = localStorage.getItem("d2d_routes");
         const cachedShifts = localStorage.getItem("d2d_shifts");
         if (cachedRoutes) setRoutesList(JSON.parse(cachedRoutes));
         if (cachedShifts) setShiftsList(JSON.parse(cachedShifts));
+
+        const cachedParking = localStorage.getItem("d2d_parking_spots");
+        const cachedTransfer = localStorage.getItem("d2d_transfer_stations");
+        const cachedFuel = localStorage.getItem("d2d_fuel_stations");
+        const cachedWorkshops = localStorage.getItem("d2d_workshops");
+        if (cachedParking) setParkingSpots(JSON.parse(cachedParking));
+        if (cachedTransfer) setTransferStations(JSON.parse(cachedTransfer));
+        if (cachedFuel) setFuelStations(JSON.parse(cachedFuel));
+        if (cachedWorkshops) setWorkshops(JSON.parse(cachedWorkshops));
       } catch (e) {
-        console.warn("Failed to load cached routes/shifts:", e);
+        console.warn("Failed to load cached routes/shifts/POIs:", e);
       }
     }
 
@@ -1086,6 +1117,11 @@ export default function PlaybackPage() {
     googleMapLayer.addTo(mapRef.current);
     boundaryLayerRef.current = L.layerGroup().addTo(mapRef.current);
     allRoutesLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    
+    parkingSpotsLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    transferStationsLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    fuelStationsLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    workshopsLayerRef.current = L.layerGroup().addTo(mapRef.current);
 
     L.control.layers({
       "Google Maps (Default)": googleMapLayer,
@@ -1098,6 +1134,11 @@ export default function PlaybackPage() {
         mapRef.current.remove();
         mapRef.current = null;
         allRoutesLayerRef.current = null;
+        boundaryLayerRef.current = null;
+        parkingSpotsLayerRef.current = null;
+        transferStationsLayerRef.current = null;
+        fuelStationsLayerRef.current = null;
+        workshopsLayerRef.current = null;
       }
     };
   }, []);
@@ -1162,6 +1203,78 @@ export default function PlaybackPage() {
       }
     }
   }, [selectedZoneId, selectedWardId, regionsList]);
+
+  // ─── Render POIs (Parking, Transfer Stations, Fuel, Workshops) ───
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (parkingSpotsLayerRef.current) parkingSpotsLayerRef.current.clearLayers();
+    if (transferStationsLayerRef.current) transferStationsLayerRef.current.clearLayers();
+    if (fuelStationsLayerRef.current) fuelStationsLayerRef.current.clearLayers();
+    if (workshopsLayerRef.current) workshopsLayerRef.current.clearLayers();
+
+    const L = require("leaflet");
+    const renderFacility = (item: any, typeName: string, iconSymbol: string, defaultColor: string, layer: any) => {
+      if (!item.geojson) return;
+      try {
+        let feature = item.geojson;
+        if (typeof feature === "string") {
+          feature = JSON.parse(feature);
+        }
+        const center = turf.centroid(feature);
+        if (!center || !center.geometry || !center.geometry.coordinates) return;
+        const coords = center.geometry.coordinates;
+        const latLng = [coords[1], coords[0]] as [number, number];
+        
+        const color = item.color || defaultColor;
+
+        // Draw Polygon Fencing Border
+        L.geoJSON(feature, {
+          style: {
+            color: color,
+            weight: 2,
+            fillColor: color,
+            fillOpacity: 0.15,
+            dashArray: "3, 3"
+          }
+        }).addTo(layer);
+
+        const iconHtml = `<div style="background-color: ${color}; width: 28px; height: 28px; border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${iconSymbol}</div>`;
+
+        const icon = L.divIcon({
+          html: iconHtml,
+          className: "facility-marker",
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+
+        const m = L.marker(latLng, { icon }).addTo(layer);
+        m.bindPopup(`
+          <div style="font-family:Inter,sans-serif;font-size:12px;padding:4px;color:#1e293b;text-align:center;">
+            <b style="font-size:14px;color:${color};">${item.name}</b><br/>
+            <span style="color:#64748b;font-weight:bold;">${typeName}</span><br/>
+            ${item.address ? `<span style="color:#64748b;">${item.address}</span>` : ''}
+          </div>
+        `);
+      } catch (err) {
+        console.error("Failed to render facility on Playback Page:", err);
+      }
+    };
+
+    if (showParking && parkingSpotsLayerRef.current) {
+      parkingSpots.forEach(p => renderFacility(p, "Parking Spot", "P", "#10b981", parkingSpotsLayerRef.current));
+    }
+    if (showTransfer && transferStationsLayerRef.current) {
+      transferStations.forEach(t => renderFacility(t, "Transfer Station", "T", "#3b82f6", transferStationsLayerRef.current));
+    }
+    if (showFuel && fuelStationsLayerRef.current) {
+      fuelStations.forEach(f => renderFacility(f, "Fuel Station", "F", "#eab308", fuelStationsLayerRef.current));
+    }
+    if (showWorkshop && workshopsLayerRef.current) {
+      workshops.forEach(w => renderFacility(w, "Workshop", "W", "#8b5cf6", workshopsLayerRef.current));
+    }
+  }, [parkingSpots, transferStations, fuelStations, workshops, showParking, showTransfer, showFuel, showWorkshop]);
 
   // Reusable helper to clear all playback state and layers from Leaflet map
   const clearPlaybackLayers = useCallback(() => {
@@ -2153,6 +2266,46 @@ export default function PlaybackPage() {
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
                 <span>Region Boundary</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                <input 
+                  type="checkbox" 
+                  checked={showParking} 
+                  onChange={(e) => setShowParking(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Parking Spots</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                <input 
+                  type="checkbox" 
+                  checked={showTransfer} 
+                  onChange={(e) => setShowTransfer(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Transfer Stations</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                <input 
+                  type="checkbox" 
+                  checked={showFuel} 
+                  onChange={(e) => setShowFuel(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Fuel Stations</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                <input 
+                  type="checkbox" 
+                  checked={showWorkshop} 
+                  onChange={(e) => setShowWorkshop(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Workshops</span>
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
