@@ -98,7 +98,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		// Read preamble (4 bytes of zeros)
 		preamble := make([]byte, 4)
-		_, err := io.ReadFull(conn, preamble)
+		_, err = io.ReadFull(conn, preamble)
 		if err != nil {
 			if err != io.EOF {
 				log.Error().Err(err).Str("imei", imei).Msg("Failed to read packet preamble")
