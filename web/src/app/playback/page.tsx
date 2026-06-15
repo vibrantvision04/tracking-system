@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import type { Vehicle, GpsDataPoint } from "@/lib/types";
 import SearchableSelect from "@/components/ui/SearchableSelect";
+import { populateOpenDepotLayer } from "@/components/OpenDepotMapLayer";
 
 interface StoppagePoint {
   startIndex: number;
@@ -554,6 +555,7 @@ export default function PlaybackPage() {
   const [showTransfer, setShowTransfer] = useState(true);
   const [showFuel, setShowFuel] = useState(true);
   const [showWorkshop, setShowWorkshop] = useState(true);
+  const [showOpenDepots, setShowOpenDepots] = useState(true);
 
   // POI Data States
   const [parkingSpots, setParkingSpots] = useState<any[]>([]);
@@ -583,6 +585,7 @@ export default function PlaybackPage() {
   const transferStationsLayerRef = useRef<any>(null);
   const fuelStationsLayerRef = useRef<any>(null);
   const workshopsLayerRef = useRef<any>(null);
+  const openDepotsLayerRef = useRef<any>(null);
 
   const matchedCoordsRef = useRef<[number, number][]>([]);
   const activeLineRef = useRef<any>(null);
@@ -1122,6 +1125,7 @@ export default function PlaybackPage() {
     transferStationsLayerRef.current = L.layerGroup().addTo(mapRef.current);
     fuelStationsLayerRef.current = L.layerGroup().addTo(mapRef.current);
     workshopsLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    openDepotsLayerRef.current = L.layerGroup().addTo(mapRef.current);
 
     L.control.layers({
       "Google Maps (Default)": googleMapLayer,
@@ -1139,6 +1143,7 @@ export default function PlaybackPage() {
         transferStationsLayerRef.current = null;
         fuelStationsLayerRef.current = null;
         workshopsLayerRef.current = null;
+        openDepotsLayerRef.current = null;
       }
     };
   }, []);
@@ -1275,6 +1280,18 @@ export default function PlaybackPage() {
       workshops.forEach(w => renderFacility(w, "Workshop", "W", "#8b5cf6", workshopsLayerRef.current));
     }
   }, [parkingSpots, transferStations, fuelStations, workshops, showParking, showTransfer, showFuel, showWorkshop]);
+
+  // ─── Render Open Depots ───
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !openDepotsLayerRef.current) return;
+
+    openDepotsLayerRef.current.clearLayers();
+    if (showOpenDepots) {
+      const L = require("leaflet");
+      populateOpenDepotLayer(L, openDepotsLayerRef.current);
+    }
+  }, [showOpenDepots]);
 
   // Reusable helper to clear all playback state and layers from Leaflet map
   const clearPlaybackLayers = useCallback(() => {
@@ -2306,6 +2323,16 @@ export default function PlaybackPage() {
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
                 <span>Workshops</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                <input 
+                  type="checkbox" 
+                  checked={showOpenDepots} 
+                  onChange={(e) => setShowOpenDepots(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span>Open Depots</span>
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">

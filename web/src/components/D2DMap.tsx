@@ -11,6 +11,7 @@ import { toast } from "react-toastify";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { centroid } from "@turf/turf";
 import SearchableSelect from "@/components/ui/SearchableSelect";
+import { populateOpenDepotLayer } from "@/components/OpenDepotMapLayer";
 
 interface D2DAlert {
   id: number;
@@ -128,6 +129,7 @@ export default function D2DMap() {
   const geofencesLayerRef = useRef<L.LayerGroup | null>(null);
   const routesLayerRef = useRef<L.LayerGroup | null>(null);
   const wardsLayerRef = useRef<L.LayerGroup | null>(null);
+  const openDepotsLayerRef = useRef<L.LayerGroup | null>(null);
 
   // Loaded Data States
   const [alerts, setAlerts] = useState<D2DAlert[]>([]);
@@ -172,6 +174,7 @@ export default function D2DMap() {
   const [showTransfer, setShowTransfer] = useState(true);
   const [showFuel, setShowFuel] = useState(ENABLE_FUEL_FEATURES);
   const [showWorkshop, setShowWorkshop] = useState(true);
+  const [showOpenDepots, setShowOpenDepots] = useState(true);
 
   const [showStop5_10, setShowStop5_10] = useState(true);
   const [showStop10_15, setShowStop10_15] = useState(true);
@@ -425,6 +428,7 @@ export default function D2DMap() {
     routesLayerRef.current = L.layerGroup().addTo(m);
     wardsLayerRef.current = L.layerGroup().addTo(m);
     allRoutesLayerRef.current = L.layerGroup().addTo(m);
+    openDepotsLayerRef.current = L.layerGroup().addTo(m);
 
     // Reposition zoom controls manually to bottomright corner
     L.control.zoom({ position: "bottomright" }).addTo(m);
@@ -439,6 +443,7 @@ export default function D2DMap() {
       routesLayerRef.current = null;
       wardsLayerRef.current = null;
       allRoutesLayerRef.current = null;
+      openDepotsLayerRef.current = null;
     };
   }, []);
 
@@ -448,6 +453,7 @@ export default function D2DMap() {
     setShowTransfer(checked);
     setShowFuel(checked);
     setShowWorkshop(checked);
+    setShowOpenDepots(checked);
     setShowStop5_10(checked);
     setShowStop10_15(checked);
     setShowStop15_plus(checked);
@@ -464,7 +470,7 @@ export default function D2DMap() {
   };
 
   const isAllSelected = 
-    showParking && showTransfer && showFuel && showWorkshop &&
+    showParking && showTransfer && showFuel && showWorkshop && showOpenDepots &&
     showStop5_10 && showStop10_15 && showStop15_plus &&
     showOverspeeding && showFastCoverage && showDeviation && showDelay && showLateStarted && showUnauthorizedMovement &&
     showPlannedRoute && showActualMovement && showZoneBoundary && showWardBoundary;
@@ -507,6 +513,13 @@ export default function D2DMap() {
     markersLayerRef.current.clearLayers();
     geofencesLayerRef.current.clearLayers();
     routesLayerRef.current.clearLayers();
+
+    if (openDepotsLayerRef.current) {
+      openDepotsLayerRef.current.clearLayers();
+      if (showOpenDepots) {
+        populateOpenDepotLayer(L, openDepotsLayerRef.current);
+      }
+    }
 
     // 1. Draw Geofences
     geofences.forEach((geo) => {
@@ -795,6 +808,7 @@ export default function D2DMap() {
     showTransfer,
     showFuel,
     showWorkshop,
+    showOpenDepots,
     showStop5_10,
     showStop10_15,
     showStop15_plus,
@@ -2192,6 +2206,16 @@ export default function D2DMap() {
                   className="w-4 h-4 accent-purple-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
                 <span className="flex items-center gap-1.5">🛠️ Workshop</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showOpenDepots}
+                  onChange={(e) => setShowOpenDepots(e.target.checked)}
+                  className="w-4 h-4 accent-slate-500 rounded bg-theme-surface border-theme-border cursor-pointer"
+                />
+                <span className="flex items-center gap-1.5">🛖 Open Depot(s)</span>
               </label>
             </div>
           </details>

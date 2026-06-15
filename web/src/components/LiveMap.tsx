@@ -7,6 +7,7 @@ import type { Vehicle, LivePosition } from "@/lib/types";
 import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import * as turf from "@turf/turf";
+import { populateOpenDepotLayer } from "@/components/OpenDepotMapLayer";
 
 // ─── Smooth marker slide animation ───
 function slideMarkerTo(
@@ -210,6 +211,8 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     parkingSpotsLayerRef.current = L.layerGroup().addTo(m);
     fuelStationsLayerRef.current = L.layerGroup().addTo(m);
     workshopsLayerRef.current = L.layerGroup().addTo(m);
+    const openDepotsLayer = L.layerGroup().addTo(m);
+    populateOpenDepotLayer(L, openDepotsLayer);
     
     // Add zoom control manually in the bottom right corner
     L.control.zoom({ position: 'bottomright' }).addTo(m);
@@ -224,6 +227,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       "Parking Spots": parkingSpotsLayerRef.current,
       "Fuel Stations": fuelStationsLayerRef.current,
       "Workshops": workshopsLayerRef.current,
+      "Open Depots": openDepotsLayer,
     }, { position: 'topright' }).addTo(m);
     
     mapRef.current = m;
