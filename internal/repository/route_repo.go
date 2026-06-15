@@ -422,7 +422,7 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 			FROM generate_series($1::date, $2::date, '1 day'::interval) d
 		),
 		active_assign AS (
-			SELECT vehicle_id, route_id, is_active
+			SELECT DISTINCT vehicle_id, route_id
 			FROM vehicle_route_assignments
 			WHERE is_active = true
 		),
@@ -465,7 +465,11 @@ func (r *RouteRepository) GetD2DAssignments(ctx context.Context, fromDate, toDat
 		LEFT JOIN regions w ON rw.ward_id = w.id
 		LEFT JOIN vehicle_regions vr ON v.id = vr.vehicle_id
 		LEFT JOIN regions z ON COALESCE(vr.region_id, v.zone_id) = z.id
-		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
+		LEFT JOIN LATERAL (
+			SELECT device_id FROM vehicle_gps_map 
+			WHERE vehicle_id = v.id AND unassigned_at IS NULL 
+			ORDER BY assigned_at DESC LIMIT 1
+		) m ON true
 		LEFT JOIN gps_devices d ON m.device_id = d.id
 		ORDER BY c.report_date DESC, r.route_name ASC
 	`

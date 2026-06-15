@@ -16,6 +16,14 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var recalcLocks sync.Map // maps string key ("vehicle-route-date") to *sync.Mutex
+
+func getRecalcMutex(vehicleID, routeID int, dateStr string) *sync.Mutex {
+	key := fmt.Sprintf("%d-%d-%s", vehicleID, routeID, dateStr)
+	val, _ := recalcLocks.LoadOrStore(key, &sync.Mutex{})
+	return val.(*sync.Mutex)
+}
+
 func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -98,17 +106,22 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 			isToday := (a.Date == utils.CurrentTimeInIndia().Format("2006-01-02"))
 			localForceRecalc := forceRecalc || isToday
 
-			if !localForceRecalc {
-				var err error
-				hasHistory, err = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
-				if err != nil {
-					log.Error().Err(err).Msg("Failed to check coverage history")
-				}
-			}
-
 			if localForceRecalc || !hasHistory {
-				recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
-				h.routeEngine.RefreshCache()
+				// Acquire lock for this vehicle/route/date
+				mu := getRecalcMutex(a.VehicleID, a.RouteID, a.Date)
+				mu.Lock()
+
+				// Re-check hasHistory under the lock to avoid redundant calculation
+				var err error
+				if !localForceRecalc {
+					hasHistory, err = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
+				}
+
+				if localForceRecalc || err != nil || !hasHistory {
+					recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+					h.routeEngine.RefreshCache()
+				}
+				mu.Unlock()
 			}
 
 			logs, err := h.routeRepo.GetCoverageHitLogs(runCtx, a.VehicleID, a.RouteID, a.Date)

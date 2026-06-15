@@ -184,7 +184,19 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 	localForceRecalc := forceRecalc || isToday
 
 	if localForceRecalc || !hasHistory {
-		recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDateStr, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+		mu := getRecalcMutex(vehicleID, routeID, targetDateStr)
+		mu.Lock()
+
+		// Re-check hasHistory under the lock to avoid redundant calculation
+		var err error
+		if !localForceRecalc {
+			hasHistory, err = h.routeRepo.HasCoverageRecords(r.Context(), vehicleID, routeID, targetDateStr)
+		}
+
+		if localForceRecalc || err != nil || !hasHistory {
+			recalculateCoverage(context.Background(), h.gpsRepo, h.routeRepo, vehicleID, routeID, targetDateStr, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh)
+		}
+		mu.Unlock()
 	}
 
 	visitedIDs, err := h.routeRepo.GetVisitedCheckpoints(r.Context(), vehicleID, routeID, targetDate)
