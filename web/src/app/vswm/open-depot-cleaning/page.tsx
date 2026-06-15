@@ -358,7 +358,7 @@ export default function OpenDepotCleaningPage() {
                       <div>Reviewed on: <strong className="text-theme-text">{new Date(reviewItem.approved_time).toLocaleString()}</strong></div>
                     )}
                     {reviewItem.jhalli_patti_used !== null && (
-                      <div>Jhalli Patti Used: <strong className="text-theme-text">{reviewItem.jhalli_patti_used ? "Yes" : "No"}</strong></div>
+                      <div>Jhilli Patti Cleaned: <strong className="text-theme-text">{reviewItem.jhalli_patti_used ? "Yes" : "No"}</strong></div>
                     )}
                   </div>
                   {reviewItem.remarks && (
@@ -368,12 +368,12 @@ export default function OpenDepotCleaningPage() {
                   )}
                 </div>
               )}
-
+ 
               {/* Review decisions (for pending items) */}
               {reviewItem.approval_status === "Pending" && (
                 <div className="border-t border-theme-border/50 pt-4 space-y-4">
                   <span className="text-[10px] font-bold text-theme-text-dim tracking-wider uppercase block">Review Operations</span>
-
+ 
                   {!activeReviewAction ? (
                     <div className="flex gap-3">
                       <Button
@@ -394,7 +394,7 @@ export default function OpenDepotCleaningPage() {
                   ) : activeReviewAction === "approve" ? (
                     <div className="bg-theme-base p-4 rounded-xl border border-theme-border space-y-4">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold">Verify Jhalli Patti usage to approve:</span>
+                        <span className="text-xs font-bold">Jhilli Patti Cleaned?</span>
                         <button
                           onClick={() => setActiveReviewAction(null)}
                           className="text-[10px] text-theme-text-dim hover:text-theme-text cursor-pointer"
@@ -409,7 +409,7 @@ export default function OpenDepotCleaningPage() {
                           variant="accent"
                           className="py-3 text-xs font-bold"
                         >
-                          Yes, Jhalli Patti Used
+                          Yes
                         </Button>
                         <Button
                           onClick={() => handleAdminReview("Approved", false)}
@@ -417,7 +417,7 @@ export default function OpenDepotCleaningPage() {
                           variant="primary"
                           className="py-3 text-xs font-bold"
                         >
-                          No, Standard Cleaning
+                          No
                         </Button>
                       </div>
                     </div>

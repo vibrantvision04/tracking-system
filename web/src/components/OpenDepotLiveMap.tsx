@@ -21,6 +21,7 @@ interface OpenDepot {
   total_rejected: number;
   zone_name?: string;
   ward_name?: string;
+  last_cleaning_status?: string | null;
 }
 
 interface Zone {

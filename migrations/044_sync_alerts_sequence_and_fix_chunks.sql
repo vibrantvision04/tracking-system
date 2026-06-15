@@ -1,4 +1,8 @@
 -- 044_sync_alerts_sequence_and_fix_chunks.sql
+-- DISABLED FOR NOW (AS REQUESTED)
+-- Uncomment this code when you need to run the alert sequence sync and orphaned chunk cleanup.
+
+/*
 -- Part 1: Reset all primary key sequences in the database to prevent duplicate key violations (e.g. alerts_pkey)
 -- We only target tables in the 'public' schema to avoid modifying internal system or TimescaleDB catalogs.
 DO $$
@@ -62,3 +66,4 @@ BEGIN
         END IF;
     END IF;
 END $$;
+*/

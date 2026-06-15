@@ -3,6 +3,9 @@ package repository
 import (
 	"context"
 	"fmt"
+	"gps-tracking-system/internal/utils"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,6 +50,9 @@ type OpenDepotCleaning struct {
 	DistanceFromDepot  float64    `json:"distance_from_depot"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
+	// New shift awareness fields
+	ShiftID            *int       `json:"shift_id,omitempty"`
+	OperationalDate    *time.Time `json:"operational_date,omitempty"`
 	// Extra fields for frontend display
 	OpenDepotName      string     `json:"open_depot_name,omitempty"`
 	ZoneName           string     `json:"zone_name,omitempty"`
@@ -63,6 +69,59 @@ func NewOpenDepotRepository(db *pgxpool.Pool) *OpenDepotRepository {
 
 func (r *OpenDepotRepository) Pool() *pgxpool.Pool {
 	return r.db
+}
+
+func (r *OpenDepotRepository) GetShiftAndOperationalDate(ctx context.Context, t time.Time) (int, time.Time, error) {
+	query := `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE is_active = true`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return 0, t, err
+	}
+	defer rows.Close()
+
+	curMin := t.Hour()*60 + t.Minute()
+	for rows.Next() {
+		var id int
+		var name string
+		var startStr, endStr string
+		if err := rows.Scan(&id, &name, &startStr, &endStr); err != nil {
+			continue
+		}
+
+		var sh, sm, ss, eh, em, es int
+		fmt.Sscanf(startStr, "%d:%d:%d", &sh, &sm, &ss)
+		fmt.Sscanf(endStr, "%d:%d:%d", &eh, &em, &es)
+
+		stMin := sh*60 + sm
+		etMin := eh*60 + em
+
+		if stMin < etMin {
+			// Normal shift within same day
+			if curMin >= stMin && curMin <= etMin {
+				return id, t, nil
+			}
+		} else {
+			// Midnight crossing shift
+			if curMin >= stMin || curMin <= etMin {
+				if curMin <= etMin {
+					// Shift started yesterday
+					return id, t.AddDate(0, 0, -1), nil
+				}
+				return id, t, nil
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, t, err
+	}
+
+	// Fallback to first active shift or shift_id = 1 if none matched
+	var fallbackID int
+	err = r.db.QueryRow(ctx, `SELECT id FROM shifts WHERE is_active = true ORDER BY id ASC LIMIT 1`).Scan(&fallbackID)
+	if err != nil {
+		fallbackID = 1 // default fallback
+	}
+	return fallbackID, t, nil
 }
 
 func (r *OpenDepotRepository) Create(ctx context.Context, d *OpenDepot) error {
@@ -104,20 +163,36 @@ func (r *OpenDepotRepository) GetByID(ctx context.Context, id int) (*OpenDepot, 
 	return &d, nil
 }
 
-func (r *OpenDepotRepository) GetAll(ctx context.Context) ([]OpenDepot, error) {
+func (r *OpenDepotRepository) GetAll(ctx context.Context, shiftID int, operationalDate time.Time) ([]OpenDepot, error) {
 	query := `
 		SELECT 
 			d.id, d.name, d.zone_id, d.ward_id, d.latitude, d.longitude, d.radius, d.status,
 			d.cleaning_percentage, d.last_cleaned_at, d.created_at, d.updated_at,
-			d.total_submissions, d.total_approved, d.total_rejected, d.last_cleaning_status,
+			d.total_submissions, d.total_approved, d.total_rejected,
+			COALESCE(c.status_computed, 'NOT_COVERED') as last_cleaning_status,
 			COALESCE(z.region_name, '') as zone_name,
 			COALESCE(w.region_name, '') as ward_name
 		FROM open_depots d
+		LEFT JOIN LATERAL (
+			SELECT 
+				CASE 
+					WHEN c.approval_status = 'Approved' AND COALESCE(c.jhalli_patti_used, false) = true THEN 'APPROVED_COMPLETE'
+					WHEN c.approval_status = 'Approved' AND COALESCE(c.jhalli_patti_used, false) = false THEN 'APPROVED_PARTIAL'
+					WHEN c.approval_status = 'Rejected' THEN 'REJECTED'
+					ELSE 'PENDING'
+				END as status_computed
+			FROM open_depot_cleanings c
+			WHERE c.open_depot_id = d.id 
+			  AND c.shift_id = $1 
+			  AND c.operational_date = $2
+			ORDER BY c.upload_time DESC, c.id DESC
+			LIMIT 1
+		) c ON true
 		LEFT JOIN regions z ON d.zone_id = z.id
 		LEFT JOIN regions w ON d.ward_id = w.id
 		ORDER BY d.id DESC
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, shiftID, operationalDate.Format("2006-01-02"))
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +210,9 @@ func (r *OpenDepotRepository) GetAll(ctx context.Context) ([]OpenDepot, error) {
 		if err == nil {
 			list = append(list, d)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }
@@ -159,6 +237,15 @@ func (r *OpenDepotRepository) Delete(ctx context.Context, id int) error {
 }
 
 func (r *OpenDepotRepository) CreateCleaning(ctx context.Context, c *OpenDepotCleaning) error {
+	// Determine active shift and operational date based on current time
+	now := utils.CurrentTimeInIndia()
+	shiftID, opDate, err := r.GetShiftAndOperationalDate(ctx, now)
+	if err != nil {
+		return err
+	}
+	c.ShiftID = &shiftID
+	c.OperationalDate = &opDate
+
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return err
@@ -169,9 +256,9 @@ func (r *OpenDepotRepository) CreateCleaning(ctx context.Context, c *OpenDepotCl
 	query := `
 		INSERT INTO open_depot_cleanings (
 			open_depot_id, image_url, uploaded_by, uploaded_latitude, uploaded_longitude, 
-			verification_status, approval_status, distance_from_depot
+			verification_status, approval_status, distance_from_depot, shift_id, operational_date
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, upload_time, created_at, updated_at
 	`
 	if c.ApprovalStatus == "" {
@@ -179,7 +266,7 @@ func (r *OpenDepotRepository) CreateCleaning(ctx context.Context, c *OpenDepotCl
 	}
 	err = tx.QueryRow(ctx, query, 
 		c.OpenDepotID, c.ImageUrl, c.UploadedBy, c.UploadedLatitude, c.UploadedLongitude,
-		c.VerificationStatus, c.ApprovalStatus, c.DistanceFromDepot,
+		c.VerificationStatus, c.ApprovalStatus, c.DistanceFromDepot, c.ShiftID, c.OperationalDate,
 	).Scan(&c.ID, &c.UploadTime, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return err
@@ -189,7 +276,7 @@ func (r *OpenDepotRepository) CreateCleaning(ctx context.Context, c *OpenDepotCl
 	updateQuery := `
 		UPDATE open_depots
 		SET total_submissions = total_submissions + 1,
-		    last_cleaning_status = 'Pending Review',
+		    last_cleaning_status = 'PENDING',
 		    updated_at = NOW()
 		WHERE id = $1
 	`
@@ -249,14 +336,14 @@ func (r *OpenDepotRepository) ReviewCleaning(ctx context.Context, id int, status
 	var lastStatus string
 	if status == "Approved" {
 		if jhalliPattiUsed != nil && *jhalliPattiUsed {
-			lastStatus = "CLEANED_USING_JHALLI_PATTI"
+			lastStatus = "APPROVED_COMPLETE"
 		} else {
-			lastStatus = "CLEANED_NOT_USING_JHALLI_PATTI"
+			lastStatus = "APPROVED_PARTIAL"
 		}
 	} else if status == "Rejected" {
 		lastStatus = "REJECTED"
 	} else {
-		lastStatus = "Pending Review"
+		lastStatus = "PENDING"
 	}
 
 	// Get last cleaned time (latest approved cleaning upload_time)
@@ -297,28 +384,195 @@ func (r *OpenDepotRepository) ReviewCleaning(ctx context.Context, id int, status
 }
 
 func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters map[string]interface{}) ([]OpenDepotCleaning, error) {
+	// Case 1: Live Approval Queue
+	// If date and shift_id are not provided, or it is specifically looking for live Pending reviews
+	hasDate := false
+	if val, ok := filters["date"]; ok && val != nil && val != "" {
+		hasDate = true
+	}
+	
+	// Also check legacy start_date/end_date to see if it is a report query
+	if val, ok := filters["start_date"]; ok && val != nil && val != "" {
+		hasDate = true
+	}
+	if val, ok := filters["end_date"]; ok && val != nil && val != "" {
+		hasDate = true
+	}
+
+	// If no date filters are provided, we default to the Live Pending Queue (last 24 hours)
+	if !hasDate {
+		query := `
+			SELECT 
+				c.id, c.open_depot_id, c.image_url, c.uploaded_by, c.uploaded_latitude, c.uploaded_longitude, 
+				c.upload_time, c.verification_status, c.approval_status, c.jhalli_patti_used, 
+				c.approved_by, c.approved_time, c.remarks, COALESCE(c.distance_from_depot, 0.0) as distance_from_depot, c.created_at, c.updated_at,
+				c.shift_id, c.operational_date,
+				COALESCE(d.name, '') as open_depot_name,
+				COALESCE(z.region_name, '') as zone_name,
+				COALESCE(w.region_name, '') as ward_name
+			FROM open_depot_cleanings c
+			LEFT JOIN open_depots d ON c.open_depot_id = d.id
+			LEFT JOIN regions z ON d.zone_id = z.id
+			LEFT JOIN regions w ON d.ward_id = w.id
+			WHERE c.upload_time >= NOW() - INTERVAL '24 hours'
+		`
+		var args []interface{}
+		argCount := 1
+
+		if val, ok := filters["approval_status"]; ok && val != nil && val != "" {
+			query += fmt.Sprintf(" AND c.approval_status = $%d", argCount)
+			args = append(args, val)
+			argCount++
+		}
+		if val, ok := filters["zone_id"]; ok && val != nil {
+			query += fmt.Sprintf(" AND d.zone_id = $%d", argCount)
+			args = append(args, val)
+			argCount++
+		}
+		if val, ok := filters["ward_id"]; ok && val != nil {
+			query += fmt.Sprintf(" AND d.ward_id = $%d", argCount)
+			args = append(args, val)
+			argCount++
+		}
+		if val, ok := filters["open_depot_id"]; ok && val != nil {
+			query += fmt.Sprintf(" AND c.open_depot_id = $%d", argCount)
+			args = append(args, val)
+			argCount++
+		}
+
+		query += " ORDER BY c.id DESC"
+
+		rows, err := r.db.Query(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var list []OpenDepotCleaning
+		for rows.Next() {
+			var c OpenDepotCleaning
+			err := rows.Scan(
+				&c.ID, &c.OpenDepotID, &c.ImageUrl, &c.UploadedBy, &c.UploadedLatitude, &c.UploadedLongitude,
+				&c.UploadTime, &c.VerificationStatus, &c.ApprovalStatus, &c.JhalliPattiUsed,
+				&c.ApprovedBy, &c.ApprovedTime, &c.Remarks, &c.DistanceFromDepot, &c.CreatedAt, &c.UpdatedAt,
+				&c.ShiftID, &c.OperationalDate,
+				&c.OpenDepotName, &c.ZoneName, &c.WardName,
+			)
+			if err == nil {
+				list = append(list, c)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return list, nil
+	}
+
+	// Case 2: Historical Reports
+	var shiftID int
+	var opDate time.Time
+
+	if val, ok := filters["shift_id"]; ok && val != nil {
+		if sID, ok := val.(int); ok {
+			shiftID = sID
+		} else if sIDStr, ok := val.(string); ok && sIDStr != "" {
+			importStr, _ := strconv.Atoi(sIDStr)
+			shiftID = importStr
+		}
+	}
+	if val, ok := filters["date"]; ok && val != nil {
+		if dVal, ok := val.(time.Time); ok {
+			opDate = dVal
+		} else if dStr, ok := val.(string); ok && dStr != "" {
+			parts := strings.Split(dStr, "T")
+			opDate, _ = time.Parse("2006-01-02", parts[0])
+		}
+	} else if val, ok := filters["start_date"]; ok && val != nil {
+		if dStr, ok := val.(string); ok && dStr != "" {
+			parts := strings.Split(dStr, "T")
+			opDate, _ = time.Parse("2006-01-02", parts[0])
+		}
+	}
+
+	// If operational date is zero, default to today
+	if opDate.IsZero() {
+		opDate = utils.CurrentTimeInIndia()
+	}
+	
+	// If shiftID is zero, default to active shift for that date
+	if shiftID == 0 {
+		resolvedShiftID, _, err := r.GetShiftAndOperationalDate(ctx, opDate)
+		if err == nil {
+			shiftID = resolvedShiftID
+		} else {
+			shiftID = 1 // default fallback
+		}
+	}
+
 	query := `
 		SELECT 
-			c.id, c.open_depot_id, c.image_url, c.uploaded_by, c.uploaded_latitude, c.uploaded_longitude, 
-			c.upload_time, c.verification_status, c.approval_status, c.jhalli_patti_used, 
-			c.approved_by, c.approved_time, c.remarks, c.distance_from_depot, c.created_at, c.updated_at,
+			d.id as open_depot_id,
+			COALESCE(c.id, 0) as cleaning_id,
+			COALESCE(c.image_url, '') as image_url,
+			COALESCE(c.uploaded_by, '') as uploaded_by,
+			COALESCE(c.uploaded_latitude, 0.0) as uploaded_latitude,
+			COALESCE(c.uploaded_longitude, 0.0) as uploaded_longitude,
+			c.upload_time,
+			COALESCE(c.verification_status, '') as verification_status,
+			COALESCE(c.status_computed, 'NOT_COVERED') as approval_status,
+			c.jhalli_patti_used,
+			c.approved_by,
+			c.approved_time,
+			c.remarks,
+			COALESCE(c.distance_from_depot, 0.0) as distance_from_depot,
+			c.created_at,
+			c.updated_at,
+			COALESCE(c.shift_id, $1) as shift_id,
+			COALESCE(c.operational_date, $2) as operational_date,
 			COALESCE(d.name, '') as open_depot_name,
 			COALESCE(z.region_name, '') as zone_name,
 			COALESCE(w.region_name, '') as ward_name
-		FROM open_depot_cleanings c
-		LEFT JOIN open_depots d ON c.open_depot_id = d.id
+		FROM open_depots d
+		LEFT JOIN LATERAL (
+			SELECT 
+				c.id,
+				c.image_url,
+				c.uploaded_by,
+				c.uploaded_latitude,
+				c.uploaded_longitude,
+				c.upload_time,
+				c.verification_status,
+				c.approval_status,
+				c.jhalli_patti_used,
+				c.approved_by,
+				c.approved_time,
+				c.remarks,
+				c.distance_from_depot,
+				c.created_at,
+				c.updated_at,
+				c.shift_id,
+				c.operational_date,
+				CASE 
+					WHEN c.approval_status = 'Approved' AND COALESCE(c.jhalli_patti_used, false) = true THEN 'APPROVED_COMPLETE'
+					WHEN c.approval_status = 'Approved' AND COALESCE(c.jhalli_patti_used, false) = false THEN 'APPROVED_PARTIAL'
+					WHEN c.approval_status = 'Rejected' THEN 'REJECTED'
+					ELSE 'PENDING'
+				END as status_computed
+			FROM open_depot_cleanings c
+			WHERE c.open_depot_id = d.id 
+			  AND c.shift_id = $1 
+			  AND c.operational_date = $2
+			ORDER BY c.upload_time DESC, c.id DESC
+			LIMIT 1
+		) c ON true
 		LEFT JOIN regions z ON d.zone_id = z.id
 		LEFT JOIN regions w ON d.ward_id = w.id
 		WHERE 1=1
 	`
 	var args []interface{}
-	argCount := 1
+	args = append(args, shiftID, opDate.Format("2006-01-02"))
+	argCount := 3
 
-	if val, ok := filters["open_depot_id"]; ok && val != nil {
-		query += fmt.Sprintf(" AND c.open_depot_id = $%d", argCount)
-		args = append(args, val)
-		argCount++
-	}
 	if val, ok := filters["zone_id"]; ok && val != nil {
 		query += fmt.Sprintf(" AND d.zone_id = $%d", argCount)
 		args = append(args, val)
@@ -329,23 +583,25 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 		args = append(args, val)
 		argCount++
 	}
+	if val, ok := filters["open_depot_id"]; ok && val != nil {
+		query += fmt.Sprintf(" AND d.id = $%d", argCount)
+		args = append(args, val)
+		argCount++
+	}
+	
+	// Status filter:
 	if val, ok := filters["approval_status"]; ok && val != nil && val != "" {
-		query += fmt.Sprintf(" AND c.approval_status = $%d", argCount)
-		args = append(args, val)
-		argCount++
-	}
-	if val, ok := filters["start_date"]; ok && val != nil && val != "" {
-		query += fmt.Sprintf(" AND c.upload_time >= $%d", argCount)
-		args = append(args, val)
-		argCount++
-	}
-	if val, ok := filters["end_date"]; ok && val != nil && val != "" {
-		query += fmt.Sprintf(" AND c.upload_time <= $%d", argCount)
-		args = append(args, val)
-		argCount++
+		statusStr := fmt.Sprintf("%v", val)
+		if statusStr == "NOT_COVERED" {
+			query += " AND (c.status_computed IS NULL OR c.status_computed = 'NOT_COVERED')"
+		} else {
+			query += fmt.Sprintf(" AND c.status_computed = $%d", argCount)
+			args = append(args, statusStr)
+			argCount++
+		}
 	}
 
-	query += " ORDER BY c.id DESC"
+	query += " ORDER BY d.id DESC"
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
@@ -356,15 +612,52 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 	var list []OpenDepotCleaning
 	for rows.Next() {
 		var c OpenDepotCleaning
+		var uploadTimeVal *time.Time
+		var createdAtVal *time.Time
+		var updatedAtVal *time.Time
+		var opDateVal *time.Time
+
 		err := rows.Scan(
-			&c.ID, &c.OpenDepotID, &c.ImageUrl, &c.UploadedBy, &c.UploadedLatitude, &c.UploadedLongitude,
-			&c.UploadTime, &c.VerificationStatus, &c.ApprovalStatus, &c.JhalliPattiUsed,
-			&c.ApprovedBy, &c.ApprovedTime, &c.Remarks, &c.DistanceFromDepot, &c.CreatedAt, &c.UpdatedAt,
-			&c.OpenDepotName, &c.ZoneName, &c.WardName,
+			&c.OpenDepotID,
+			&c.ID,
+			&c.ImageUrl,
+			&c.UploadedBy,
+			&c.UploadedLatitude,
+			&c.UploadedLongitude,
+			&uploadTimeVal,
+			&c.VerificationStatus,
+			&c.ApprovalStatus,
+			&c.JhalliPattiUsed,
+			&c.ApprovedBy,
+			&c.ApprovedTime,
+			&c.Remarks,
+			&c.DistanceFromDepot,
+			&createdAtVal,
+			&updatedAtVal,
+			&c.ShiftID,
+			&opDateVal,
+			&c.OpenDepotName,
+			&c.ZoneName,
+			&c.WardName,
 		)
 		if err == nil {
+			if uploadTimeVal != nil {
+				c.UploadTime = *uploadTimeVal
+			}
+			if createdAtVal != nil {
+				c.CreatedAt = *createdAtVal
+			}
+			if updatedAtVal != nil {
+				c.UpdatedAt = *updatedAtVal
+			}
+			if opDateVal != nil {
+				c.OperationalDate = opDateVal
+			}
 			list = append(list, c)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }

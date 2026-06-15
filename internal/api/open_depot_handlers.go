@@ -3,22 +3,66 @@ package api
 import (
 	"encoding/json"
 	"gps-tracking-system/internal/repository"
+	"gps-tracking-system/internal/utils"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func (h *Handler) GetOpenDepots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	depots, err := h.openDepotRepo.GetAll(ctx)
+	
+	// Parse optional shift_id and date
+	q := r.URL.Query()
+	var shiftID int
+	var opDate time.Time
+	var err error
+	
+	if sIDStr := q.Get("shift_id"); sIDStr != "" {
+		shiftID, err = strconv.Atoi(sIDStr)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid shift_id"})
+			return
+		}
+	}
+	
+	if dateStr := q.Get("date"); dateStr != "" {
+		opDate, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
+			return
+		}
+	}
+	
+	// If shiftID or opDate are not specified, dynamically compute them using India timezone
+	if shiftID == 0 || opDate.IsZero() {
+		now := utils.CurrentTimeInIndia()
+		resolvedShiftID, resolvedOpDate, err := h.openDepotRepo.GetShiftAndOperationalDate(ctx, now)
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to resolve active shift: " + err.Error()})
+			return
+		}
+		if shiftID == 0 {
+			shiftID = resolvedShiftID
+		}
+		if opDate.IsZero() {
+			opDate = resolvedOpDate
+		}
+	}
+	
+	depots, err := h.openDepotRepo.GetAll(ctx, shiftID, opDate)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch open depots: " + err.Error()})
 		return
 	}
+	
 	sendJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"data":    depots,
+		"success":  true,
+		"shift_id": shiftID,
+		"date":     opDate.Format("2006-01-02"),
+		"data":     depots,
 	})
 }
 

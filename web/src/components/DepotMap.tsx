@@ -20,6 +20,7 @@ interface OpenDepot {
   total_rejected: number;
   zone_name?: string;
   ward_name?: string;
+  last_cleaning_status?: string | null;
 }
 
 interface DepotMapProps {
@@ -249,16 +250,30 @@ export default function DepotMap({
       const position = L.latLng(d.latitude, d.longitude);
       bounds.push([d.latitude, d.longitude]);
 
-      // Color code based on cleaning score
-      let color = "#3B82F6"; // Default blue
-      if (d.total_submissions === 0) {
-        color = "#94A3B8"; // Gray if never submitted
-      } else if (d.cleaning_percentage >= 80) {
-        color = "#10B981"; // Green (Good cleaning)
-      } else if (d.cleaning_percentage >= 40) {
-        color = "#F59E0B"; // Orange (Medium)
+      // Color code based on cleaning status
+      let color = "#000000"; // Default black (NOT_COVERED)
+      const status = (d.last_cleaning_status || "").toUpperCase();
+      if (status === "APPROVED_COMPLETE") {
+        color = "#10B981"; // Green
+      } else if (status === "APPROVED_PARTIAL") {
+        color = "#FBBF24"; // Yellow
+      } else if (status === "REJECTED") {
+        color = "#EF4444"; // Red
+      } else if (status === "PENDING") {
+        color = "#F97316"; // Orange
+      } else if (status === "NOT_COVERED") {
+        color = "#000000"; // Black
       } else {
-        color = "#EF4444"; // Red (Poor/Dirty)
+        // Fallback to old cleaning percentage color if status is unknown/empty
+        if (d.total_submissions === 0) {
+          color = "#000000"; // Black
+        } else if (d.cleaning_percentage >= 80) {
+          color = "#10B981"; // Green
+        } else if (d.cleaning_percentage >= 40) {
+          color = "#FBBF24"; // Yellow
+        } else {
+          color = "#EF4444"; // Red
+        }
       }
 
       // Draw the depot radius circle
@@ -304,10 +319,10 @@ export default function DepotMap({
             <span class="font-semibold text-right">${d.ward_name || "N/A"}</span>
             <span class="text-slate-400 font-medium">Radius:</span>
             <span class="font-mono text-right">${d.radius} m</span>
-            <span class="text-slate-400 font-medium">Clean Score:</span>
-            <span class="font-bold text-right ${
-              d.cleaning_percentage >= 80 ? "text-emerald-600" : d.cleaning_percentage >= 40 ? "text-amber-500" : "text-rose-500"
-            }">${d.cleaning_percentage.toFixed(0)}%</span>
+            <span class="text-slate-400 font-medium">Shift Status:</span>
+            <span class="font-extrabold text-right ${
+              status === "APPROVED_COMPLETE" ? "text-emerald-600" : status === "APPROVED_PARTIAL" ? "text-amber-500" : status === "REJECTED" ? "text-rose-550" : status === "PENDING" ? "text-orange-550" : "text-slate-950 font-bold"
+            }">${d.last_cleaning_status || "NOT_COVERED"}</span>
           </div>
           <div class="border-t border-slate-100 pt-1.5 flex flex-col text-[10px] text-slate-500">
             <span>Submissions: ${d.total_submissions} (${d.total_approved} Appr / ${d.total_rejected} Rej)</span>

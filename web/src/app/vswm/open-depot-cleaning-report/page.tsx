@@ -61,10 +61,12 @@ export default function OpenDepotCleaningReportPage() {
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
 
+  const [shifts, setShifts] = useState<{ id: number; shift_name: string }[]>([]);
+
   // Filter form states
   const [filters, setFilters] = useState({
-    start_date: new Date().toISOString().split("T")[0],
-    end_date: new Date().toISOString().split("T")[0],
+    date: new Date().toISOString().split("T")[0],
+    shift_id: "",
     zone_id: "",
     ward_id: "",
     open_depot_id: "",
@@ -82,22 +84,41 @@ export default function OpenDepotCleaningReportPage() {
       const wardsRes = await api<{ data: Ward[] }>("/api/wards");
       setAllWards(wardsRes.data || []);
 
-      const depotsRes = await api<{ data: OpenDepot[] }>("/api/open-depots");
+      const shiftsRes = await api<{ data: { id: number; shift_name: string }[] }>("/api/shifts");
+      setShifts(shiftsRes.data || []);
+
+      const depotsRes = await api<{ shift_id: number; date: string; data: OpenDepot[] }>("/api/open-depots");
       setDepots(depotsRes.data || []);
+
+      if (depotsRes.shift_id && depotsRes.date) {
+        setFilters((prev) => ({
+          ...prev,
+          date: depotsRes.date,
+          shift_id: depotsRes.shift_id.toString(),
+        }));
+      }
     } catch (err) {
       toast.error("Failed to load initial report options.");
     }
   };
 
   const loadReport = async () => {
+    // 1. Mandatory Shift for past dates
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isHistorical = filters.date < todayStr;
+    if (isHistorical && !filters.shift_id) {
+      toast.warning("Shift selection is mandatory for historical dates.");
+      return;
+    }
+
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
-      if (filters.start_date) {
-        queryParams.append("start_date", `${filters.start_date}T00:00:00Z`);
+      if (filters.date) {
+        queryParams.append("date", filters.date);
       }
-      if (filters.end_date) {
-        queryParams.append("end_date", `${filters.end_date}T23:59:59Z`);
+      if (filters.shift_id) {
+        queryParams.append("shift_id", filters.shift_id);
       }
       if (filters.zone_id) queryParams.append("zone_id", filters.zone_id);
       if (filters.ward_id) queryParams.append("ward_id", filters.ward_id);
@@ -180,7 +201,7 @@ export default function OpenDepotCleaningReportPage() {
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
 
-    const filename = `open_depot_cleaning_report_${filters.start_date}_to_${filters.end_date}.${
+    const filename = `open_depot_cleaning_report_${filters.date}_shift_${filters.shift_id || "all"}.${
       format === "csv" ? "csv" : "xls"
     }`;
     link.setAttribute("download", filename);
@@ -304,36 +325,48 @@ export default function OpenDepotCleaningReportPage() {
                   className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
                 >
                   <option value="">All Statuses</option>
-                  <option value="Pending">Pending Review</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Rejected">Rejected</option>
+                  <option value="APPROVED_COMPLETE">Approved Complete</option>
+                  <option value="APPROVED_PARTIAL">Approved Partial</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="NOT_COVERED">Not Covered</option>
                 </select>
               </div>
 
-              {/* Start Date */}
+              {/* Date */}
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  From Date
+                  Date
                 </span>
                 <input
                   type="date"
-                  value={filters.start_date}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, start_date: e.target.value }))}
+                  value={filters.date}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
                   className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px]"
                 />
               </div>
 
-              {/* End Date */}
+              {/* Shift */}
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  To Date
+                  Shift
                 </span>
-                <input
-                  type="date"
-                  value={filters.end_date}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, end_date: e.target.value }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px]"
-                />
+                <select
+                  value={filters.shift_id}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, shift_id: e.target.value }))}
+                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
+                >
+                  {filters.date < new Date().toISOString().split("T")[0] ? (
+                    <option value="">Select Shift *</option>
+                  ) : (
+                    <option value="">Active Shift (Auto)</option>
+                  )}
+                  {shifts.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.shift_name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -386,15 +419,21 @@ export default function OpenDepotCleaningReportPage() {
                 }
               >
                 {reportData.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/50 border-b border-slate-100 transition-colors print:border-black">
+                  <tr key={item.id || item.open_depot_id} className="hover:bg-slate-50/50 border-b border-slate-100 transition-colors print:border-black">
                     <td className="py-3 px-5 text-center">
-                      <img
-                        src={item.image_url}
-                        alt="Cleaning proof"
-                        onClick={() => setViewItem(item)}
-                        className="w-12 h-12 rounded-lg object-cover cursor-pointer border border-slate-200 hover:scale-105 transition duration-300 shadow-sm"
-                        title="Click to view details"
-                      />
+                      {item.image_url ? (
+                        <img
+                          src={item.image_url}
+                          alt="Cleaning proof"
+                          onClick={() => setViewItem(item)}
+                          className="w-12 h-12 rounded-lg object-cover cursor-pointer border border-slate-200 hover:scale-105 transition duration-300 shadow-sm mx-auto"
+                          title="Click to view details"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 font-bold text-[10px] mx-auto select-none">
+                          N/A
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-5 font-bold text-slate-850 text-[12px] print:text-black">
                       {item.open_depot_name}
@@ -403,31 +442,51 @@ export default function OpenDepotCleaningReportPage() {
                       <span className="block font-semibold">{item.zone_name}</span>
                       <span className="block text-[10px] text-slate-400 mt-0.5">{item.ward_name}</span>
                     </td>
-                    <td className="py-3 px-5 font-semibold text-slate-700 text-[12px]">{item.uploaded_by}</td>
+                    <td className="py-3 px-5 font-semibold text-slate-700 text-[12px]">{item.uploaded_by || "—"}</td>
                     <td className="py-3 px-5 text-[11px] text-slate-400">
-                      {new Date(item.upload_time).toLocaleString()}
+                      {item.upload_time && item.upload_time !== "0001-01-01T00:00:00Z" && item.upload_time !== "0001-01-01T05:30:00+05:30"
+                        ? new Date(item.upload_time).toLocaleString()
+                        : "—"}
                     </td>
                     <td className="py-3 px-5 text-[12px]">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
-                        item.verification_status === "VALID"
-                          ? "bg-emerald-500/10 text-emerald-600"
-                          : "bg-rose-500/10 text-rose-600"
-                      }`}>
-                        {item.verification_status === "VALID" ? "VALID LOCATION" : "OUTSIDE GEOFENCE"}
-                      </span>
-                      <span className="block text-[10px] text-slate-400 mt-1">
-                        Distance: {item.distance_from_depot.toFixed(1)}m
-                      </span>
+                      {item.verification_status && item.verification_status !== "NOT_COVERED" && item.verification_status !== "" ? (
+                        <>
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
+                            item.verification_status === "VALID"
+                              ? "bg-emerald-500/10 text-emerald-600"
+                              : "bg-rose-500/10 text-rose-600"
+                          }`}>
+                            {item.verification_status === "VALID" ? "VALID LOCATION" : "OUTSIDE GEOFENCE"}
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-1">
+                            Distance: {item.distance_from_depot.toFixed(1)}m
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-5 text-[12px]">
                       <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-sm ${
-                        item.approval_status === "Approved"
-                          ? "bg-emerald-500 text-white"
-                          : item.approval_status === "Rejected"
-                          ? "bg-rose-500 text-white"
-                          : "bg-amber-500 text-black"
+                        item.approval_status === "APPROVED_COMPLETE"
+                          ? "bg-emerald-600 text-white"
+                          : item.approval_status === "APPROVED_PARTIAL"
+                          ? "bg-yellow-500 text-black"
+                          : item.approval_status === "REJECTED"
+                          ? "bg-rose-600 text-white"
+                          : item.approval_status === "PENDING"
+                          ? "bg-orange-500 text-white"
+                          : "bg-slate-900 text-white" // NOT_COVERED
                       }`}>
-                        {item.approval_status}
+                        {item.approval_status === "APPROVED_COMPLETE"
+                          ? "APPROVED COMPLETE"
+                          : item.approval_status === "APPROVED_PARTIAL"
+                          ? "APPROVED PARTIAL"
+                          : item.approval_status === "REJECTED"
+                          ? "REJECTED"
+                          : item.approval_status === "PENDING"
+                          ? "PENDING"
+                          : "NOT COVERED"}
                       </span>
                     </td>
                     <td className="py-3 px-5 text-[12px]">
@@ -444,7 +503,7 @@ export default function OpenDepotCleaningReportPage() {
                       )}
                     </td>
                     <td className="py-3 px-5 max-w-[200px] truncate text-[11px]">
-                      {item.approval_status !== "Pending" ? (
+                      {item.approval_status !== "PENDING" && item.approval_status !== "NOT_COVERED" ? (
                         <div className="space-y-0.5 text-slate-600">
                           <span className="block font-semibold">Audited by: {item.approved_by || "Admin"}</span>
                           {item.approved_time && (
@@ -458,8 +517,10 @@ export default function OpenDepotCleaningReportPage() {
                             </span>
                           )}
                         </div>
-                      ) : (
+                      ) : item.approval_status === "PENDING" ? (
                         <span className="text-slate-400 italic">Awaiting review</span>
+                      ) : (
+                        <span className="text-slate-400 italic">—</span>
                       )}
                     </td>
                     <td className="py-3 px-5 text-right print:hidden">
@@ -537,7 +598,7 @@ export default function OpenDepotCleaningReportPage() {
                   <div className="h-[210px] rounded-xl overflow-hidden relative shadow-inner">
                     {(() => {
                       const activeDepotObj = depots.find(d => d.id === viewItem.open_depot_id);
-                      return activeDepotObj ? (
+                      return activeDepotObj && viewItem.uploaded_latitude !== 0 ? (
                         <CleaningMap
                           depotLat={activeDepotObj.latitude}
                           depotLng={activeDepotObj.longitude}
@@ -545,6 +606,16 @@ export default function OpenDepotCleaningReportPage() {
                           uploadLat={viewItem.uploaded_latitude}
                           uploadLng={viewItem.uploaded_longitude}
                           verificationStatus={viewItem.verification_status}
+                          depotName={activeDepotObj.name}
+                        />
+                      ) : activeDepotObj ? (
+                        <CleaningMap
+                          depotLat={activeDepotObj.latitude}
+                          depotLng={activeDepotObj.longitude}
+                          radius={activeDepotObj.radius}
+                          uploadLat={activeDepotObj.latitude}
+                          uploadLng={activeDepotObj.longitude}
+                          verificationStatus="NOT_COVERED"
                           depotName={activeDepotObj.name}
                         />
                       ) : (
@@ -572,7 +643,7 @@ export default function OpenDepotCleaningReportPage() {
                       <div>
                         <span className="text-theme-text-dim block">Worker Coordinates:</span>
                         <span className="font-semibold text-theme-text">
-                          {viewItem.uploaded_latitude.toFixed(6)}, {viewItem.uploaded_longitude.toFixed(6)}
+                          {viewItem.uploaded_latitude !== 0 ? `${viewItem.uploaded_latitude.toFixed(6)}, ${viewItem.uploaded_longitude.toFixed(6)}` : "—"}
                         </span>
                       </div>
                       <div>
@@ -584,7 +655,7 @@ export default function OpenDepotCleaningReportPage() {
                         <span className={`font-semibold ${
                           viewItem.verification_status === "VALID" ? "text-emerald-400" : "text-rose-400"
                         }`}>
-                          {viewItem.distance_from_depot.toFixed(2)} meters
+                          {viewItem.uploaded_latitude !== 0 ? `${viewItem.distance_from_depot.toFixed(2)} meters` : "—"}
                         </span>
                       </div>
                     </>
@@ -597,20 +668,38 @@ export default function OpenDepotCleaningReportPage() {
                 <div className="flex items-center gap-3">
                   <span className="font-bold">Audit Result:</span>
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    viewItem.approval_status === "Approved" ? "bg-emerald-500/10 text-emerald-400" : viewItem.approval_status === "Rejected" ? "bg-rose-500/10 text-rose-400" : "bg-amber-500/10 text-amber-400"
+                    viewItem.approval_status === "APPROVED_COMPLETE"
+                      ? "bg-emerald-500/10 text-emerald-400"
+                      : viewItem.approval_status === "APPROVED_PARTIAL"
+                      ? "bg-yellow-500/10 text-yellow-400"
+                      : viewItem.approval_status === "REJECTED"
+                      ? "bg-rose-500/10 text-rose-400"
+                      : viewItem.approval_status === "PENDING"
+                      ? "bg-orange-500/10 text-orange-400"
+                      : "bg-slate-500/10 text-slate-400"
                   }`}>
-                    {viewItem.approval_status}
+                    {viewItem.approval_status === "APPROVED_COMPLETE"
+                      ? "APPROVED COMPLETE"
+                      : viewItem.approval_status === "APPROVED_PARTIAL"
+                      ? "APPROVED PARTIAL"
+                      : viewItem.approval_status === "REJECTED"
+                      ? "REJECTED"
+                      : viewItem.approval_status === "PENDING"
+                      ? "PENDING"
+                      : "NOT COVERED"}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-theme-text-dim mt-1">
-                  <div>Reviewed by: <strong className="text-theme-text">{viewItem.approved_by || "Admin"}</strong></div>
-                  {viewItem.approved_time && (
-                    <div>Reviewed on: <strong className="text-theme-text">{new Date(viewItem.approved_time).toLocaleString()}</strong></div>
-                  )}
-                  {viewItem.jhalli_patti_used !== null && (
-                    <div>Jhalli Patti Used: <strong className="text-theme-text">{viewItem.jhalli_patti_used ? "Yes" : "No"}</strong></div>
-                  )}
-                </div>
+                {viewItem.approval_status !== "NOT_COVERED" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-theme-text-dim mt-1">
+                    <div>Reviewed by: <strong className="text-theme-text">{viewItem.approved_by || "Admin"}</strong></div>
+                    {viewItem.approved_time && (
+                      <div>Reviewed on: <strong className="text-theme-text">{new Date(viewItem.approved_time).toLocaleString()}</strong></div>
+                    )}
+                    {viewItem.jhalli_patti_used !== null && (
+                      <div>Jhilli Patti Cleaned: <strong className="text-theme-text">{viewItem.jhalli_patti_used ? "Yes" : "No"}</strong></div>
+                    )}
+                  </div>
+                )}
                 {viewItem.remarks && (
                   <div className="border-t border-theme-border/50 pt-2 text-rose-400 italic font-semibold">
                     Remarks: "{viewItem.remarks}"

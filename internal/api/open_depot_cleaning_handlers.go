@@ -291,6 +291,14 @@ func (h *Handler) GetCleaningSubmissions(w http.ResponseWriter, r *http.Request)
 	if endDate := q.Get("end_date"); endDate != "" {
 		filters["end_date"] = endDate
 	}
+	if shiftIDStr := q.Get("shift_id"); shiftIDStr != "" {
+		if id, err := strconv.Atoi(shiftIDStr); err == nil {
+			filters["shift_id"] = id
+		}
+	}
+	if dateStr := q.Get("date"); dateStr != "" {
+		filters["date"] = dateStr
+	}
 
 	cleanings, err := h.openDepotRepo.GetCleaningsReport(ctx, filters)
 	if err != nil {
