@@ -1,16 +1,14 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+
+import { useEffect, useState } from "react";
 import { api, post, put, del } from "@/lib/api";
 import { toast } from "react-toastify";
 import { z } from "zod";
 
-import PageHeader from "@/components/shared/PageHeader";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
+import CrudDirectory from "@/components/shared/CrudDirectory";
 import Input from "@/components/ui/Input";
-import Button from "@/components/ui/Button";
 import DeleteButton from "@/components/ui/DeleteButton";
 import EditButton from "@/components/ui/EditButton";
-import Table from "@/components/shared/Table";
 
 interface FuelCompany {
   id: number;
@@ -33,7 +31,6 @@ export default function FuelCompanyPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const fetchCompanies = async () => {
     try {
@@ -57,7 +54,6 @@ export default function FuelCompanyPage() {
       setIsEditing(false);
     }
     setIsFormOpen(true);
-    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const handleCloseForm = () => {
@@ -65,14 +61,6 @@ export default function FuelCompanyPage() {
     setFormData({ id: null, name: "", short_name: "" });
     setIsEditing(false);
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isFormOpen) handleCloseForm();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFormOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,101 +98,64 @@ export default function FuelCompanyPage() {
   };
 
   const filteredCompanies = companies.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.short_name.toLowerCase().includes(searchQuery.toLowerCase())
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    c.short_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-6 lg:p-8">
-
-      <PageHeader
-        title="Fuel Company"
-        description="Manage the list of available fuel companies for assigning to fuel stations."
-        breadcrumbs={[{ label: "VSWM", href: "/vswm/shift" }, { label: "Fuel Company" }]}
-        actions={
-          <Button onClick={isFormOpen ? handleCloseForm : () => handleOpenForm()} variant={isFormOpen ? "secondary" : "primary"}>
-            {isFormOpen ? "✕ Close" : "+ Add Fuel Company"}
-          </Button>
-        }
-      />
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8">
-
-        {isFormOpen && (
-          <Card className="animate-fade-in">
-            <CardHeader>
-              <CardTitle>{isEditing ? "✏️ Edit Fuel Company" : "🏢 Add Fuel Company"}</CardTitle>
-              <CardDescription>Enter the company name and short name. Press Escape to close.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4 max-w-xl">
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Name *"
-                    placeholder="Eg. H.P."
-                    required
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  />
-                  <Input
-                    label="Short Name *"
-                    placeholder="Eg. HPBO"
-                    required
-                    value={formData.short_name}
-                    onChange={e => setFormData({ ...formData, short_name: e.target.value })}
-                  />
-                </div>
-                <div className="flex items-center gap-3 pt-2 border-t border-theme-border">
-                  <Button type="submit" variant="accent" loading={submitting} loadingText="Submitting...">Submit</Button>
-                  <Button type="button" variant="outline" onClick={handleCloseForm}>Close</Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className="flex flex-col h-[600px]">
-          <CardHeader className="flex flex-row items-center justify-between py-4">
-            <div>
-              <CardTitle>Fuel Companies Directory</CardTitle>
-              <CardDescription>All registered fuel companies.</CardDescription>
+    <CrudDirectory
+      title="Fuel Company"
+      description="Manage the list of available fuel companies for assigning to fuel stations."
+      breadcrumbs={[{ label: "VSWM", href: "/vswm/shift" }, { label: "Fuel Company" }]}
+      addBtnLabel="Add Fuel Company"
+      loading={loading}
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+      searchPlaceholder="Search companies..."
+      formOpen={isFormOpen}
+      onFormOpenChange={setIsFormOpen}
+      isEditing={isEditing}
+      submitting={submitting}
+      onSubmit={handleSubmit}
+      formFields={
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            label="Name *"
+            placeholder="Eg. H.P."
+            required
+            value={formData.name}
+            onChange={e => setFormData({ ...formData, name: e.target.value })}
+          />
+          <Input
+            label="Short Name *"
+            placeholder="Eg. HPBO"
+            required
+            value={formData.short_name}
+            onChange={e => setFormData({ ...formData, short_name: e.target.value })}
+          />
+        </div>
+      }
+      tableHeaders={[
+        <div key="s" className="text-center w-16">S. No.</div>,
+        "Name",
+        "Short Name",
+        <div key="a" className="text-right pr-4 w-24">Action</div>
+      ]}
+      totalCount={filteredCompanies.length}
+    >
+      {filteredCompanies.map((company, idx) => (
+        <tr key={company.id} className="hover:bg-theme-base/40 transition-colors group">
+          <td className="py-3 px-5 text-center text-theme-text-dim font-mono text-[11px]">{idx + 1}</td>
+          <td className="py-3 px-5 font-medium">{company.name}</td>
+          <td className="py-3 px-5 text-theme-text-dim text-xs">{company.short_name || "-"}</td>
+          <td className="py-3 px-5 text-right">
+            <div className="flex items-center justify-end gap-2">
+              <EditButton onClick={() => handleOpenForm(company)} />
+              <DeleteButton onDelete={() => handleDelete(company)} confirmMessage={`Delete ${company.name}?`} />
             </div>
-            <Input
-              placeholder="Search companies..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-64"
-            />
-          </CardHeader>
-          <CardContent className="p-0 flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto custom-scrollbar">
-              <Table
-                headers={[
-                  <div key="s" className="text-center w-16">S. No.</div>,
-                  "Name",
-                  "Short Name",
-                  <div key="a" className="text-right pr-4 w-24">Action</div>
-                ]}
-                isLoading={loading}
-                emptyState="No fuel companies found."
-              >
-                {filteredCompanies.map((company, idx) => (
-                  <tr key={company.id} className="hover:bg-theme-base/40 transition-colors group">
-                    <td className="py-3 px-5 text-center text-theme-text-dim font-mono text-[11px]">{idx + 1}</td>
-                    <td className="py-3 px-5 font-medium">{company.name}</td>
-                    <td className="py-3 px-5 text-theme-text-dim text-xs">{company.short_name || "-"}</td>
-                    <td className="py-3 px-5 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <EditButton onClick={() => handleOpenForm(company)} />
-                        <DeleteButton onDelete={() => handleDelete(company)} confirmMessage={`Delete ${company.name}?`} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          </td>
+        </tr>
+      ))}
+    </CrudDirectory>
   );
 }

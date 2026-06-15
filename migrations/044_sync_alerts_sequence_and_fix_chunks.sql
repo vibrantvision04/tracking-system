@@ -24,32 +24,41 @@ BEGIN
 END $$;
 
 -- Part 2: Resolve the TimescaleDB orphaned chunk issue for _hyper_1_2_chunk
--- The error is: relation "_timescaledb_internal._hyper_1_2_chunk" not found
--- We drop the chunk using TimescaleDB's drop_chunks helper for the specific date range: June 14, 2026 to June 16, 2026.
--- This cleans up TimescaleDB's metadata. TimescaleDB will then automatically create a healthy chunk
--- next time GPS data for June 15 is sent.
+-- Safeguard: Only run drop_chunks if the orphaned chunk metadata is detected (exists in catalog but physically missing).
+-- This ensures that on future restarts, new healthy chunks (like _hyper_1_24_chunk) are NOT dropped.
 DO $$
 DECLARE
     ts_active BOOLEAN := FALSE;
+    orphaned_chunk_exists BOOLEAN := FALSE;
 BEGIN
     SELECT EXISTS (
         SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'
     ) INTO ts_active;
 
     IF ts_active THEN
-        -- Safely drop chunk metadata for the date range covering June 15, 2026
-        -- Note: drop_chunks takes 'older_than' and 'newer_than' arguments to bound the drop.
-        -- Using timestamptz to safely match the captured_at dimension type.
-        BEGIN
-            PERFORM drop_chunks(
-                relation => 'gps_data',
-                older_than => '2026-06-16 00:00:00+00'::timestamptz,
-                newer_than => '2026-06-14 00:00:00+00'::timestamptz,
-                verbose => true
-            );
-            RAISE NOTICE 'Orphaned TimescaleDB chunks in the June 14-16 range dropped successfully.';
-        EXCEPTION WHEN OTHERS THEN
-            RAISE WARNING 'Failed to drop chunks: %', SQLERRM;
-        END;
+        -- Check if _hyper_1_2_chunk exists in TimescaleDB catalog but is physically missing from pg_class
+        SELECT EXISTS (
+            SELECT 1 
+            FROM _timescaledb_catalog.chunk c
+            LEFT JOIN pg_class p ON p.relname = c.table_name AND p.relnamespace::regnamespace::text = c.schema_name
+            WHERE c.table_name = '_hyper_1_2_chunk' AND p.oid IS NULL
+        ) INTO orphaned_chunk_exists;
+
+        IF orphaned_chunk_exists THEN
+            RAISE NOTICE 'Orphaned chunk _hyper_1_2_chunk detected. Cleaning up...';
+            BEGIN
+                PERFORM drop_chunks(
+                    relation => 'gps_data',
+                    older_than => '2026-06-16 00:00:00+00'::timestamptz,
+                    newer_than => '2026-06-14 00:00:00+00'::timestamptz,
+                    verbose => true
+                );
+                RAISE NOTICE 'Orphaned TimescaleDB chunks in the June 14-16 range dropped successfully.';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE WARNING 'Failed to drop chunks: %', SQLERRM;
+            END;
+        ELSE
+            RAISE NOTICE 'No orphaned chunk _hyper_1_2_chunk detected. Skipping cleanup to prevent any data loss.';
+        END IF;
     END IF;
 END $$;
