@@ -73,7 +73,11 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			COALESCE(r.id, 0) as assigned_route_id
 		FROM vehicles v
 		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
-		LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
+		LEFT JOIN LATERAL (
+			SELECT device_id FROM vehicle_gps_map 
+			WHERE vehicle_id = v.id AND unassigned_at IS NULL 
+			ORDER BY assigned_at DESC LIMIT 1
+		) m ON true
 		LEFT JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
 		LEFT JOIN (

@@ -410,9 +410,18 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 	}
 
-	// 1. Delete all existing logs and miss reasons for this vehicle, route, and date
-	_, _ = gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
-	_, _ = gpsRepo.Pool().Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+	// 1. Start a database transaction to group deletes and inserts together.
+	// This prevents concurrent read queries from seeing a "0 coverage logs" state (zero downtime).
+	tx, err := gpsRepo.Pool().Begin(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to start transaction for recalculation")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	// Delete all existing logs and miss reasons for this vehicle, route, and date
+	_, _ = tx.Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+	_, _ = tx.Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
 
 	// 2. Batch insert physicalHits
 	if len(physicalHits) > 0 {
@@ -425,9 +434,10 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 		query = query[:len(query)-1] // trim trailing comma
 		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO NOTHING"
-		_, err = gpsRepo.Pool().Exec(ctx, query, vals...)
+		_, err = tx.Exec(ctx, query, vals...)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to batch insert coverage hits during recalculation")
+			return
 		}
 	}
 
@@ -442,9 +452,14 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 		}
 		query = query[:len(query)-1] // trim trailing comma
 		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO UPDATE SET reason = EXCLUDED.reason"
-		_, err = gpsRepo.Pool().Exec(ctx, query, vals...)
+		_, err = tx.Exec(ctx, query, vals...)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to batch insert miss reasons during recalculation")
+			return
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to commit transaction for recalculation")
 	}
 }
