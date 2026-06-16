@@ -17,6 +17,11 @@ func InitDB(cfg *config.Config) (*pgxpool.Pool, error) {
 	dbConfig.MaxConns = 50
 	dbConfig.MinConns = 10
 
+	if dbConfig.ConnConfig.RuntimeParams == nil {
+		dbConfig.ConnConfig.RuntimeParams = make(map[string]string)
+	}
+	dbConfig.ConnConfig.RuntimeParams["plan_cache_mode"] = "force_custom_plan"
+
 	pool, err := pgxpool.NewWithConfig(context.Background(), dbConfig)
 	if err != nil {
 		return nil, err
