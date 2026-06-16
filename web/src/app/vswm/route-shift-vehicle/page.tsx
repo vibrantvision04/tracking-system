@@ -2,6 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { api, post, del } from '@/lib/api';
 import { toast } from 'react-toastify';
+import Table from '@/components/shared/Table';
+import EditButton from '@/components/ui/EditButton';
+import DeleteButton from '@/components/ui/DeleteButton';
 
 interface Vehicle {
   id: number;
@@ -58,9 +61,7 @@ export default function RouteShiftVehicle() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -68,7 +69,7 @@ export default function RouteShiftVehicle() {
       const [vehiclesRes, routesRes, shiftsRes, wardsRes] = await Promise.all([
         api<{ success: boolean; data: Vehicle[] }>('/api/vehicles'),
         api<{ success: boolean; data: Route[] }>('/api/routes'),
-        api<{ success: boolean; data: Shift[] }>('/api/shifts'),
+        api<{ success: boolean; data: Shift[] }>('/api/shifts?group=VEHICLE_MOVEMENT'),
         api<{ success: boolean; data: Ward[] }>('/api/wards'),
       ]);
 
@@ -223,16 +224,7 @@ export default function RouteShiftVehicle() {
     );
   });
 
-  // Pagination calculations
-  const totalItems = filteredAssignments.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-  const currentData = filteredAssignments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f4f6f9] text-gray-800 overflow-hidden font-sans p-6 lg:p-8 space-y-6">
@@ -363,7 +355,7 @@ export default function RouteShiftVehicle() {
         )}
 
         {/* Assignments Table Card */}
-        <div className="bg-white rounded-xl border border-gray-150 shadow-sm flex flex-col overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-150 shadow-sm flex flex-col overflow-hidden p-0">
           
           {/* Table Header Filter Search */}
           <div className="p-5 flex justify-end items-center bg-white border-b border-gray-100">
@@ -371,176 +363,50 @@ export default function RouteShiftVehicle() {
               type="text" 
               placeholder="Filter..." 
               value={searchFilter}
-              onChange={e => {
-                setSearchFilter(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={e => setSearchFilter(e.target.value)}
               className="w-64 bg-white border border-gray-200 rounded-lg px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-emerald-500 transition shadow-inner"
             />
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-gray-150 bg-gray-50/50 text-[10px] font-bold text-gray-500 uppercase tracking-wider select-none">
-                  <th className="px-6 py-4 font-semibold text-center w-20">S. NO.</th>
-                  <th className="px-6 py-4 font-semibold">ROUTE</th>
-                  <th className="px-6 py-4 font-semibold w-48">SHIFT</th>
-                  <th className="px-6 py-4 font-semibold w-64">VEHICLE</th>
-                  <th className="px-6 py-4 font-semibold text-center w-32">ACTION</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
-                      <div className="flex flex-col items-center justify-center gap-3">
-                        <span className="w-6 h-6 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
-                        <span className="text-[11px] font-bold tracking-wide uppercase">Loading assignments...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : totalItems === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
-                      <div className="flex flex-col items-center justify-center gap-1.5 py-4">
-                        <span className="text-xl">📭</span>
-                        <span className="text-[11px] font-semibold uppercase tracking-wider">No assignments found</span>
-                        <span className="text-[10px] text-gray-400/80">Try adjusting your filters or adding a new assignment.</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  currentData.map((item, idx) => (
-                    <tr key={`${item.id}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="py-4 px-6 text-center text-gray-400 font-mono text-[11px]">
-                        {(currentPage - 1) * itemsPerPage + idx + 1}
-                      </td>
-                      <td className="py-4 px-6 text-gray-900 font-semibold">{item.route_name}</td>
-                      <td className="py-4 px-6 text-gray-600">{item.shift_name}</td>
-                      <td className="py-4 px-6 text-gray-600 font-semibold">{item.vehicle_reg_no}</td>
-                      <td className="py-4 px-6 text-center">
-                        <div className="flex items-center justify-center gap-3">
-                          
-                          {/* Edit Action Button */}
-                          <button 
-                            onClick={() => handleOpenEditForm(item)}
-                            className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition duration-200 border border-transparent hover:border-blue-100"
-                            title="Edit Assignment"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-
-                          {/* Delete Action Button */}
-                          <button 
-                            onClick={() => {
-                              if (confirm(`Delete assignment for vehicle ${item.vehicle_reg_no} in ${item.shift_name}?`)) {
-                                handleDeleteAssignment(item.id);
-                              }
-                            }}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition duration-200 border border-transparent hover:border-red-100"
-                            title="Delete Assignment"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Table Footer with Counts & Pagination */}
-          {!loading && totalItems > 0 && (
-            <div className="border-t border-gray-100 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50/50">
-              
-              {/* Total Entries Count */}
-              <span className="text-xs text-gray-500 font-semibold">
-                {totalItems} total
-              </span>
-
-              {/* Mock Pagination matching screenshot: |< < 1 2 3 4 5 > >| */}
-              <div className="flex items-center gap-1 select-none">
-                
-                {/* First Page Button */}
-                <button 
-                  onClick={() => handlePageChange(1)}
-                  disabled={currentPage === 1}
-                  className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs font-bold"
-                  title="First Page"
-                >
-                  |&lt;
-                </button>
-
-                {/* Prev Page Button */}
-                <button 
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs font-bold"
-                  title="Previous Page"
-                >
-                  &lt;
-                </button>
-
-                {/* Page Number Buttons */}
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum = i + 1;
-                  if (totalPages > 5) {
-                    if (currentPage > 3) {
-                      pageNum = currentPage - 2 + i;
-                      if (currentPage + 2 > totalPages) {
-                        pageNum = totalPages - (4 - i);
-                      }
-                    }
-                  }
-                  const active = currentPage === pageNum;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => handlePageChange(pageNum)}
-                      className={`w-7 h-7 flex items-center justify-center rounded-md border text-xs font-bold transition ${
-                        active 
-                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" 
-                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                {/* Next Page Button */}
-                <button 
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs font-bold"
-                  title="Next Page"
-                >
-                  &gt;
-                </button>
-
-                {/* Last Page Button */}
-                <button 
-                  onClick={() => handlePageChange(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs font-bold"
-                  title="Last Page"
-                >
-                  &gt;|
-                </button>
-
+          <Table
+            headers={[
+              <div key="s" className="text-center w-20 text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">S. NO.</div>,
+              <span key="route" className="text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">Route</span>,
+              <span key="shift" className="text-gray-500 font-extrabold uppercase text-[10px] tracking-wider w-48 block">Shift</span>,
+              <span key="veh" className="text-gray-500 font-extrabold uppercase text-[10px] tracking-wider w-64 block">Vehicle</span>,
+              <div key="action" className="text-center w-32 text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">Action</div>,
+            ]}
+            isLoading={loading}
+            itemsPerPage={20}
+            emptyState={
+              <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
+                <span className="text-3xl">📭</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider">No assignments found</span>
+                <span className="text-[10px]">Try adjusting your filters or adding a new assignment.</span>
               </div>
-            </div>
-          )}
-
+            }
+          >
+            {filteredAssignments.map((item, idx) => (
+              <tr key={`${item.id}-${idx}`} className="hover:bg-gray-50/50 transition-colors border-b border-theme-border">
+                <td className="py-4 px-6 text-center text-gray-400 font-mono text-[11px]">
+                  {idx + 1}
+                </td>
+                <td className="py-4 px-6 text-gray-900 font-semibold">{item.route_name}</td>
+                <td className="py-4 px-6 text-gray-600">{item.shift_name}</td>
+                <td className="py-4 px-6 text-gray-600 font-semibold">{item.vehicle_reg_no}</td>
+                <td className="py-4 px-6 text-center">
+                  <div className="flex items-center justify-center gap-3">
+                    <EditButton onClick={() => handleOpenEditForm(item)} title="Edit Assignment" />
+                    <DeleteButton
+                      onDelete={() => handleDeleteAssignment(item.id)}
+                      confirmMessage={`Delete assignment for vehicle ${item.vehicle_reg_no} in ${item.shift_name}?`}
+                    />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </Table>
         </div>
       </div>
     </div>

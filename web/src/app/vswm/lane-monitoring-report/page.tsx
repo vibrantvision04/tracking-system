@@ -88,7 +88,7 @@ export default function LaneMonitoringReportPage() {
     try {
       const [regRes, shiftRes, routeRes] = await Promise.all([
         api<Region[]>("/api/regions"),
-        api<{ data: Shift[] }>("/api/shifts"),
+        api<{ data: Shift[] }>("/api/shifts?group=VEHICLE_MOVEMENT"),
         api<{ data: Route[] }>("/api/routes")
       ]);
 

@@ -16,17 +16,20 @@ type Shift = {
   start_time: string;
   end_time: string;
   time_duration: number;
+  report_type_id: number;
 };
 
 const shiftSchema = z.object({
   shift_name: z.string().trim().min(1, "Shift Name is required").max(100, "Shift Name cannot exceed 100 characters"),
   start_time: z.string().min(1, "Start Time is required"),
   end_time: z.string().min(1, "End Time is required"),
-  time_duration: z.number().int().min(1, "Duration must be at least 1 hour").max(24, "Duration cannot exceed 24 hours")
+  time_duration: z.number().int().min(1, "Duration must be at least 1 hour").max(24, "Duration cannot exceed 24 hours"),
+  report_type_id: z.number().int().min(1, "Report Type is required")
 });
 
 export default function ShiftManager() {
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [reportTypes, setReportTypes] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -36,7 +39,8 @@ export default function ShiftManager() {
     shift_name: "",
     start_time: "",
     end_time: "",
-    time_duration: 8
+    time_duration: 8,
+    report_type_id: 1
   });
 
   const loadShifts = async () => {
@@ -53,8 +57,23 @@ export default function ShiftManager() {
     }
   };
 
+  const loadReportTypes = async () => {
+    try {
+      const res: any = await api('/api/report-types');
+      if (res.success && res.data) {
+        setReportTypes(res.data);
+        if (res.data.length > 0 && !form.report_type_id) {
+          setForm(prev => ({ ...prev, report_type_id: res.data[0].id }));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load report types", err);
+    }
+  };
+
   useEffect(() => {
     loadShifts();
+    loadReportTypes();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,11 +105,12 @@ export default function ShiftManager() {
         shift_name: form.shift_name,
         start_time: st,
         end_time: et,
-        time_duration: Number(form.time_duration) * 60
+        time_duration: Number(form.time_duration) * 60,
+        report_type_id: Number(form.report_type_id)
       });
       if (res.success) {
         setMessage("Shift created successfully!");
-        setForm({ shift_name: "", start_time: "", end_time: "", time_duration: 8 });
+        setForm({ shift_name: "", start_time: "", end_time: "", time_duration: 8, report_type_id: 1 });
         loadShifts();
       } else {
         setMessage(res.error || "Failed to create shift");
@@ -186,6 +206,21 @@ export default function ShiftManager() {
                   error={errors.time_duration}
                 />
 
+                <div className="flex flex-col space-y-1.5">
+                  <label className="text-xs font-semibold text-theme-text-dim">Report Type</label>
+                  <select
+                    className="w-full bg-theme-base border border-theme-border/60 hover:border-theme-border focus:border-theme-accent focus:ring-1 focus:ring-theme-accent rounded-lg p-2.5 text-sm outline-none transition-colors"
+                    value={form.report_type_id}
+                    onChange={e => setForm({...form, report_type_id: Number(e.target.value)})}
+                  >
+                    {reportTypes.map((rt) => (
+                      <option key={rt.id} value={rt.id}>
+                        {rt.name.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="pt-2">
                   <Button
                     type="submit"
@@ -215,6 +250,7 @@ export default function ShiftManager() {
                 headers={[
                   "ID",
                   "Name",
+                  "Report Type",
                   "Start",
                   "End",
                   <div key="dur" className="text-center">Duration</div>,
@@ -226,6 +262,9 @@ export default function ShiftManager() {
                   <tr key={s.id} className="hover:bg-theme-base/40 transition-colors">
                     <td className="px-5 py-3.5 text-theme-text-dim font-mono">{s.id}</td>
                     <td className="px-5 py-3.5 font-semibold text-theme-text">{s.shift_name}</td>
+                    <td className="px-5 py-3.5 font-medium text-xs text-theme-text-dim">
+                      {reportTypes.find(rt => rt.id === s.report_type_id)?.name.replace(/_/g, " ") || `ID: ${s.report_type_id}`}
+                    </td>
                     <td className="px-5 py-3.5 font-medium">{s.start_time}</td>
                     <td className="px-5 py-3.5 font-medium">{s.end_time}</td>
                     <td className="px-5 py-3.5 text-center font-bold text-theme-accent">

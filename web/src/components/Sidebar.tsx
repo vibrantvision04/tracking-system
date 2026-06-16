@@ -165,9 +165,16 @@ const navData = [
     icon: BarChart3,
     children: [
       {
-        label: "Vehicle & Movement",
+        label: "Primary Reports",
         children: [
           { label: "Vehicle Movement Report", href: "/reports" },
+          { label: "Open Depot Report", href: "/vswm/open-depot-cleaning-report" },
+          { label: "Special Operations Report", href: "/vswm/special-operations-report" },
+        ],
+      },
+      {
+        label: "Vehicle & Movement",
+        children: [
           { label: "Active Vehicle Summary", href: "/vswm/active-vehicle-summary" },
           { label: "Ward Wise Active Vehicle Summary", href: "/vswm/active-inactive-vehicle-summary-by-ward" },
           { label: "Unauthorized Movement Report", href: "/vswm/unauthorized-movement" },
@@ -196,7 +203,6 @@ const navData = [
           { label: "Waste Generator Coverage Report", href: "/vswm/waste-generator-coverage-report" },
           { label: "Waste Generator Summary Report", href: "/vswm/waste-generator-summary-report" },
           { label: "Waste Weight Report", href: "/vswm/waste-weight-report" },
-          { label: "Open Depot Cleaning Report", href: "/vswm/open-depot-cleaning-report" },
         ],
       },
       {

@@ -11,6 +11,7 @@ import (
 	"gps-tracking-system/internal/repository"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 )
 
 type RouteResponse struct {
@@ -122,32 +123,70 @@ func (h *Handler) DeleteRouteType(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetShifts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rows, err := h.gpsRepo.Pool().Query(ctx, `
-		SELECT id, shift_name, 
-		       COALESCE(start_time::text, ''), 
-		       COALESCE(end_time::text, ''), 
-		       COALESCE(time_duration, 0) 
-		FROM shifts 
-		ORDER BY id ASC
-	`)
+	group := r.URL.Query().Get("group")
+	if group == "" {
+		group = r.URL.Query().Get("report_type")
+	}
+	reportTypeIDStr := r.URL.Query().Get("report_type_id")
+
+	var rows pgx.Rows
+	var err error
+
+	if group != "" {
+		rows, err = h.gpsRepo.Pool().Query(ctx, `
+			SELECT s.id, s.shift_name, 
+			       COALESCE(s.start_time::text, ''), 
+			       COALESCE(s.end_time::text, ''), 
+			       COALESCE(s.time_duration, 0),
+			       s.report_type_id
+			FROM shifts s
+			JOIN report_types rt ON s.report_type_id = rt.id
+			WHERE rt.name = $1 AND s.is_active = true
+			ORDER BY s.id ASC
+		`, group)
+	} else if reportTypeIDStr != "" {
+		id, _ := strconv.Atoi(reportTypeIDStr)
+		rows, err = h.gpsRepo.Pool().Query(ctx, `
+			SELECT id, shift_name, 
+			       COALESCE(start_time::text, ''), 
+			       COALESCE(end_time::text, ''), 
+			       COALESCE(time_duration, 0),
+			       report_type_id
+			FROM shifts 
+			WHERE report_type_id = $1 AND is_active = true
+			ORDER BY id ASC
+		`, id)
+	} else {
+		rows, err = h.gpsRepo.Pool().Query(ctx, `
+			SELECT id, shift_name, 
+			       COALESCE(start_time::text, ''), 
+			       COALESCE(end_time::text, ''), 
+			       COALESCE(time_duration, 0),
+			       report_type_id
+			FROM shifts 
+			ORDER BY id ASC
+		`)
+	}
+
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query shifts: " + err.Error()})
 		return
 	}
 	defer rows.Close()
 
-	var shifts []map[string]interface{}
+	shifts := []map[string]interface{}{}
 	for rows.Next() {
-		var id, duration int
+		var id, duration, reportTypeID int
 		var name, startTime, endTime string
-		if err := rows.Scan(&id, &name, &startTime, &endTime, &duration); err == nil {
+		if err := rows.Scan(&id, &name, &startTime, &endTime, &duration, &reportTypeID); err == nil {
 			shifts = append(shifts, map[string]interface{}{
-				"id":            id,
-				"shift_name":    name,
-				"name":          name,
-				"start_time":    startTime,
-				"end_time":      endTime,
-				"time_duration": duration,
+				"id":             id,
+				"shift_name":     name,
+				"name":           name,
+				"start_time":     startTime,
+				"end_time":       endTime,
+				"time_duration":  duration,
+				"report_type_id": reportTypeID,
 			})
 		}
 	}
@@ -166,18 +205,23 @@ func (h *Handler) CreateShift(w http.ResponseWriter, r *http.Request) {
 		StartTime    string `json:"start_time"` // "HH:MM:SS"
 		EndTime      string `json:"end_time"`   // "HH:MM:SS"
 		TimeDuration int    `json:"time_duration"`
+		ReportTypeID int    `json:"report_type_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
 		return
 	}
 
+	if req.ReportTypeID == 0 {
+		req.ReportTypeID = 1 // Default to VEHICLE_MOVEMENT
+	}
+
 	var shiftID int
 	err := h.gpsRepo.Pool().QueryRow(ctx, `
-		INSERT INTO shifts (shift_name, start_time, end_time, time_duration)
-		VALUES ($1, $2::time, $3::time, $4)
+		INSERT INTO shifts (shift_name, start_time, end_time, time_duration, report_type_id)
+		VALUES ($1, $2::time, $3::time, $4, $5)
 		RETURNING id
-	`, req.ShiftName, req.StartTime, req.EndTime, req.TimeDuration).Scan(&shiftID)
+	`, req.ShiftName, req.StartTime, req.EndTime, req.TimeDuration, req.ReportTypeID).Scan(&shiftID)
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create shift: " + err.Error()})
@@ -187,6 +231,34 @@ func (h *Handler) CreateShift(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, http.StatusCreated, map[string]interface{}{
 		"success": true,
 		"id":      shiftID,
+	})
+}
+
+func (h *Handler) GetReportTypes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rows, err := h.gpsRepo.Pool().Query(ctx, "SELECT id, name, COALESCE(description, '') FROM report_types ORDER BY id ASC")
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query report types: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	types := []map[string]interface{}{}
+	for rows.Next() {
+		var id int
+		var name, desc string
+		if err := rows.Scan(&id, &name, &desc); err == nil {
+			types = append(types, map[string]interface{}{
+				"id":          id,
+				"name":        name,
+				"description": desc,
+			})
+		}
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    types,
 	})
 }
 

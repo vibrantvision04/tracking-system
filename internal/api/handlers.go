@@ -768,7 +768,7 @@ func (h *Handler) GetZones(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var zones []map[string]interface{}
+	zones := []map[string]interface{}{}
 	for rows.Next() {
 		var id int
 		var name string
@@ -797,7 +797,7 @@ func (h *Handler) GetWards(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var wards []map[string]interface{}
+	wards := []map[string]interface{}{}
 	for rows.Next() {
 		var id int
 		var name string
@@ -996,7 +996,7 @@ func (h *Handler) GetD2DDashboard(w http.ResponseWriter, r *http.Request) {
 		Str("location", now.Location().String()).
 		Msg("Evaluating active shift for dashboard")
 
-	shiftRows, err := h.gpsRepo.Pool().Query(ctx, `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE is_active = true`)
+	shiftRows, err := h.gpsRepo.Pool().Query(ctx, `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE is_active = true AND report_type_id = 1`)
 	if err == nil {
 		defer shiftRows.Close()
 		for shiftRows.Next() {

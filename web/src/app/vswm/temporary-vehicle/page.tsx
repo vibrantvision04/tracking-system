@@ -109,7 +109,7 @@ export default function TemporaryVehiclePage() {
     try {
       const [regRes, shiftRes, routeRes, vehRes, rwRes] = await Promise.all([
         api<{ data: Region[] }>("/api/regions"),
-        api<{ data: Shift[] }>("/api/shifts"),
+        api<{ data: Shift[] }>("/api/shifts?group=VEHICLE_MOVEMENT"),
         api<{ data: Route[] }>("/api/routes"),
         api<{ data: Vehicle[] }>("/api/vehicles"),
         api<{ data: RouteWard[] }>("/api/route-wards")

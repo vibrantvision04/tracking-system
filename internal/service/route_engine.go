@@ -60,6 +60,9 @@ func (e *RouteEngine) getShiftIDForTime(t time.Time) int {
 		if !s.IsActive {
 			continue
 		}
+		if s.ReportTypeID != 1 {
+			continue
+		}
 		start := s.StartTime
 		end := s.EndTime
 		if start == "" || end == "" {

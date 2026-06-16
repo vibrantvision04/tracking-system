@@ -1029,7 +1029,7 @@ export default function PlaybackPage() {
     api<{ success: boolean; data: any[] }>("/api/routes").then((res) => {
       if (res.success) setRoutesList(res.data || []);
     }).catch(() => {});
-    api<{ success: boolean; data: any[] }>("/api/shifts").then((res) => {
+    api<{ success: boolean; data: any[] }>("/api/shifts?group=VEHICLE_MOVEMENT").then((res) => {
       if (res.success) setShiftsList(res.data || []);
     }).catch(() => {});
 

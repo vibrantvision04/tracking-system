@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import Table from '@/components/shared/Table';
 
 export default function D2DRouteCoverageReport() {
   const [loading, setLoading] = useState(false);
@@ -24,19 +25,14 @@ export default function D2DRouteCoverageReport() {
   const [fromDate, setFromDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0]);
   
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
 
-  const totalPages = Math.ceil(data.length / pageSize);
-  const paginatedData = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   useEffect(() => {
-    api('/api/zones').then((d: any) => d.success && setZones(d.data)).catch(console.error);
-    api('/api/wards').then((d: any) => d.success && setWards(d.data)).catch(console.error);
-    api('/api/shifts').then((d: any) => d.success && setShifts(d.data)).catch(console.error);
-    api('/api/route-types').then((d: any) => d.success && setRouteTypes(d.data)).catch(console.error);
-    api('/api/routes').then((d: any) => d.success && setRoutes(d.data)).catch(console.error);
+    api('/api/zones').then((d: any) => d.success && setZones(d.data || [])).catch(console.error);
+    api('/api/wards').then((d: any) => d.success && setWards(d.data || [])).catch(console.error);
+    api('/api/shifts?group=VEHICLE_MOVEMENT').then((d: any) => d.success && setShifts(d.data || [])).catch(console.error);
+    api('/api/route-types').then((d: any) => d.success && setRouteTypes(d.data || [])).catch(console.error);
+    api('/api/routes').then((d: any) => d.success && setRoutes(d.data || [])).catch(console.error);
   }, []);
 
   const allowHistoricalRecalculation = true; // Set to false to disable recalculation in UI
@@ -96,7 +92,7 @@ export default function D2DRouteCoverageReport() {
         console.log("[D2D-FRONTEND] Backend Errors:", backendErrors);
       }
 
-      setCurrentPage(1);
+
     } catch (err) {
       console.error(err);
     } finally {
@@ -235,100 +231,51 @@ export default function D2DRouteCoverageReport() {
       </div>
 
       {/* Data Table */}
-      <div className="bg-theme-surface rounded-md shadow-sm border border-theme-border overflow-hidden flex flex-col">
-        <div className="overflow-x-auto overflow-y-auto max-h-[45vh]">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="sticky top-0 bg-theme-surface shadow-sm z-10">
-              <tr className="bg-theme-surface text-theme-text-dim text-[11px] font-bold uppercase tracking-wider border-b-2 border-theme-border">
-                <th className="px-6 py-4">S. NO.</th>
-                <th className="px-6 py-4">DATE</th>
-                <th className="px-6 py-4">ROUTE</th>
-                <th className="px-6 py-4">ZONE</th>
-                <th className="px-6 py-4">WARD</th>
-                <th className="px-6 py-4">VEHICLE REG. NO.</th>
-                <th className="px-6 py-4">COVERED %</th>
-                <th className="px-6 py-4">INORDER % COVERED</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-theme-text">
-              {data.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-theme-text-dim">
-                    No data available.
-                  </td>
-                </tr>
-              ) : (
-                paginatedData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-theme-surface transition-colors">
-                    <td className="px-6 py-3">{(currentPage - 1) * pageSize + idx + 1}</td>
-                    <td className="px-6 py-3">{row.date}</td>
-                    <td className="px-6 py-3 text-theme-text-dim">{row.route_name}</td>
-                    <td className="px-6 py-3">{row.zone_name || '-'}</td>
-                    <td className="px-6 py-3">{row.ward_name || '-'}</td>
-                    <td className="px-6 py-3 font-medium">
-                      {row.imei ? (
-                        <Link 
-                          href={`/playback?imei=${row.imei}&date=${row.date}&route_id=${row.route_id}`}
-                          className="text-[#f39c12] hover:text-[#d68910] hover:underline"
-                        >
-                          {row.vehicle_reg_no}
-                        </Link>
-                      ) : (
-                        <span className="text-[#f39c12]">{row.vehicle_reg_no}</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-3">{row.covered_percentage}</td>
-                    <td className="px-6 py-3">{row.in_order_percentage}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* Pagination */}
-        {data.length > 0 && (
-          <div className="flex items-center justify-between border-t border-theme-border p-4 bg-theme-surface">
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-theme-text-dim">
-                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, data.length)} of {data.length} entries
-              </span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="border border-slate-300 rounded px-2 py-1 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border border-slate-300 rounded text-sm disabled:opacity-50 hover:bg-slate-50 transition-colors"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-theme-text-dim px-2">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-slate-300 rounded text-sm disabled:opacity-50 hover:bg-slate-50 transition-colors"
-              >
-                Next
-              </button>
-            </div>
+      <Table
+        headers={[
+          <div key="s" className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">S. No.</div>,
+          <span key="date" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Date</span>,
+          <span key="route" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Route</span>,
+          <span key="zone" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Zone</span>,
+          <span key="ward" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Ward</span>,
+          <span key="veh" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Vehicle Reg. No.</span>,
+          <span key="cov" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Covered %</span>,
+          <span key="inorder" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Inorder % Covered</span>,
+        ]}
+        isLoading={loading}
+        itemsPerPage={50}
+        emptyState={
+          <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
+            <span className="text-3xl">📭</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider">No data available</span>
+            <span className="text-[10px]">Select filters and click "Load" to fetch coverage logs.</span>
           </div>
-        )}
-      </div>
+        }
+      >
+        {data.map((row, idx) => (
+          <tr key={idx} className="hover:bg-theme-surface transition-colors border-b border-theme-border">
+            <td className="px-6 py-3 text-center">{idx + 1}</td>
+            <td className="px-6 py-3">{row.date}</td>
+            <td className="px-6 py-3 text-theme-text-dim">{row.route_name}</td>
+            <td className="px-6 py-3">{row.zone_name || '-'}</td>
+            <td className="px-6 py-3">{row.ward_name || '-'}</td>
+            <td className="px-6 py-3 font-medium">
+              {row.imei ? (
+                <Link 
+                  href={`/playback?imei=${row.imei}&date=${row.date}&route_id=${row.route_id}`}
+                  className="text-[#f39c12] hover:text-[#d68910] hover:underline"
+                >
+                  {row.vehicle_reg_no}
+                </Link>
+              ) : (
+                <span className="text-[#f39c12]">{row.vehicle_reg_no}</span>
+              )}
+            </td>
+            <td className="px-6 py-3">{row.covered_percentage}%</td>
+            <td className="px-6 py-3">{row.in_order_percentage}%</td>
+          </tr>
+        ))}
+      </Table>
 
     </div>
   );

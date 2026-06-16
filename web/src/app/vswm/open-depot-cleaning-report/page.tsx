@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
+import StatCard from "@/components/shared/StatCard";
 import dynamic from "next/dynamic";
 
 const CleaningMap = dynamic(() => import("@/components/CleaningMap"), { ssr: false });
@@ -50,6 +51,7 @@ interface CleaningReportItem {
   open_depot_name: string;
   zone_name: string;
   ward_name: string;
+  shift_name?: string;
 }
 
 export default function OpenDepotCleaningReportPage() {
@@ -84,7 +86,7 @@ export default function OpenDepotCleaningReportPage() {
       const wardsRes = await api<{ data: Ward[] }>("/api/wards");
       setAllWards(wardsRes.data || []);
 
-      const shiftsRes = await api<{ data: { id: number; shift_name: string }[] }>("/api/shifts");
+      const shiftsRes = await api<{ data: { id: number; shift_name: string }[] }>("/api/shifts?group=OPEN_DEPOT");
       setShifts(shiftsRes.data || []);
 
       const depotsRes = await api<{ shift_id: number; date: string; data: OpenDepot[] }>("/api/open-depots");
@@ -217,6 +219,19 @@ export default function OpenDepotCleaningReportPage() {
     if (filters.ward_id && d.ward_id !== parseInt(filters.ward_id)) return false;
     return true;
   });
+
+  const stats = {
+    approvedComplete: reportData.filter(item => item.approval_status === "APPROVED_COMPLETE").length,
+    approvedPartial: reportData.filter(item => item.approval_status === "APPROVED_PARTIAL").length,
+    rejected: reportData.filter(item => item.approval_status === "REJECTED").length,
+    pending: reportData.filter(item => item.approval_status === "PENDING").length,
+    notCovered: reportData.filter(item => item.approval_status === "NOT_COVERED" || !item.approval_status).length,
+    total: reportData.length,
+    coverage: 0
+  };
+
+  const resolvedCount = stats.approvedComplete + stats.approvedPartial + stats.rejected;
+  stats.coverage = stats.total > 0 ? Math.round((resolvedCount / stats.total) * 100) : 0;
 
   return (
     <div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 overflow-hidden font-sans w-full">
@@ -384,6 +399,42 @@ export default function OpenDepotCleaningReportPage() {
           </CardContent>
         </Card>
 
+        {/* Stats Grid */}
+        {hasLoaded && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 print:hidden animate-fade-in">
+            <StatCard
+              title="Approved Complete"
+              value={stats.approvedComplete}
+              icon={<span className="text-emerald-600 font-bold">✓</span>}
+            />
+            <StatCard
+              title="Approved Partial"
+              value={stats.approvedPartial}
+              icon={<span className="text-yellow-605 font-bold">⚡</span>}
+            />
+            <StatCard
+              title="Rejected"
+              value={stats.rejected}
+              icon={<span className="text-rose-600 font-bold">✗</span>}
+            />
+            <StatCard
+              title="Pending"
+              value={stats.pending}
+              icon={<span className="text-orange-600 font-bold">🕒</span>}
+            />
+            <StatCard
+              title="Not Covered"
+              value={stats.notCovered}
+              icon={<span className="text-slate-650 font-bold">■</span>}
+            />
+            <StatCard
+              title="Overall Coverage"
+              value={`${stats.coverage}%`}
+              icon={<span className="text-theme-accent font-bold">%</span>}
+            />
+          </div>
+        )}
+
         {/* Results Table Card */}
         <Card className="border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
           <CardContent className="p-0 flex-1 flex flex-col justify-between overflow-hidden">
@@ -393,6 +444,7 @@ export default function OpenDepotCleaningReportPage() {
                   <div key="photo" className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Photo</div>,
                   <span key="depot" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Open Depot</span>,
                   <span key="zw" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Zone / Ward</span>,
+                  <span key="sh" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Shift</span>,
                   <span key="ub" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Uploaded By</span>,
                   <span key="ut" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Upload Time</span>,
                   <span key="ga" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Geofence (Distance)</span>,
@@ -438,9 +490,18 @@ export default function OpenDepotCleaningReportPage() {
                     <td className="py-3 px-5 font-bold text-slate-850 text-[12px] print:text-black">
                       {item.open_depot_name}
                     </td>
-                    <td className="py-3 px-5 text-[12px] text-slate-600">
+                    <td className="py-3 px-5 text-[12px] text-slate-605">
                       <span className="block font-semibold">{item.zone_name}</span>
                       <span className="block text-[10px] text-slate-400 mt-0.5">{item.ward_name}</span>
+                    </td>
+                    <td className="py-3 px-5 text-[12px] text-slate-700 font-medium whitespace-nowrap">
+                      {item.shift_name ? (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-650 text-[10px] uppercase font-bold">
+                          {item.shift_name}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-5 font-semibold text-slate-700 text-[12px]">{item.uploaded_by || "—"}</td>
                     <td className="py-3 px-5 text-[11px] text-slate-400">

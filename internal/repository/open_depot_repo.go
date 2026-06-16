@@ -59,6 +59,7 @@ type OpenDepotCleaning struct {
 	OpenDepotName      string     `json:"open_depot_name,omitempty"`
 	ZoneName           string     `json:"zone_name,omitempty"`
 	WardName           string     `json:"ward_name,omitempty"`
+	ShiftName          string     `json:"shift_name,omitempty"`
 }
 
 type OpenDepotRepository struct {
@@ -74,7 +75,12 @@ func (r *OpenDepotRepository) Pool() *pgxpool.Pool {
 }
 
 func (r *OpenDepotRepository) GetShiftAndOperationalDate(ctx context.Context, t time.Time) (int, time.Time, error) {
-	query := `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE is_active = true`
+	query := `
+		SELECT s.id, s.shift_name, COALESCE(s.start_time::text, ''), COALESCE(s.end_time::text, '') 
+		FROM shifts s
+		JOIN report_types rt ON s.report_type_id = rt.id
+		WHERE s.is_active = true AND rt.name = 'OPEN_DEPOT'
+	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return 0, t, err
@@ -119,7 +125,13 @@ func (r *OpenDepotRepository) GetShiftAndOperationalDate(ctx context.Context, t 
 
 	// Fallback to first active shift or shift_id = 1 if none matched
 	var fallbackID int
-	err = r.db.QueryRow(ctx, `SELECT id FROM shifts WHERE is_active = true ORDER BY id ASC LIMIT 1`).Scan(&fallbackID)
+	err = r.db.QueryRow(ctx, `
+		SELECT s.id 
+		FROM shifts s
+		JOIN report_types rt ON s.report_type_id = rt.id
+		WHERE s.is_active = true AND rt.name = 'OPEN_DEPOT'
+		ORDER BY s.id ASC LIMIT 1
+	`).Scan(&fallbackID)
 	if err != nil {
 		fallbackID = 1 // default fallback
 	}
@@ -411,12 +423,14 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 				c.shift_id, c.operational_date,
 				COALESCE(d.name, '') as open_depot_name,
 				COALESCE(z.region_name, '') as zone_name,
-				COALESCE(w.region_name, '') as ward_name
+				COALESCE(w.region_name, '') as ward_name,
+				COALESCE(s.shift_name, '') as shift_name
 			FROM open_depot_cleanings c
 			LEFT JOIN open_depots d ON c.open_depot_id = d.id
 			LEFT JOIN regions z ON d.zone_id = z.id
 			LEFT JOIN regions w ON d.ward_id = w.id
-			WHERE c.upload_time >= NOW() - INTERVAL '24 hours'
+			LEFT JOIN shifts s ON c.shift_id = s.id
+			WHERE (c.approval_status = 'Pending' OR c.upload_time >= NOW() - INTERVAL '24 hours')
 		`
 		var args []interface{}
 		argCount := 1
@@ -458,7 +472,7 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 				&c.UploadTime, &c.VerificationStatus, &c.ApprovalStatus, &c.JhalliPattiUsed,
 				&c.ApprovedBy, &c.ApprovedTime, &c.Remarks, &c.DistanceFromDepot, &c.CreatedAt, &c.UpdatedAt,
 				&c.ShiftID, &c.OperationalDate,
-				&c.OpenDepotName, &c.ZoneName, &c.WardName,
+				&c.OpenDepotName, &c.ZoneName, &c.WardName, &c.ShiftName,
 			)
 			if err == nil {
 				list = append(list, c)
@@ -533,7 +547,8 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 			COALESCE(c.operational_date, $2) as operational_date,
 			COALESCE(d.name, '') as open_depot_name,
 			COALESCE(z.region_name, '') as zone_name,
-			COALESCE(w.region_name, '') as ward_name
+			COALESCE(w.region_name, '') as ward_name,
+			COALESCE(s.shift_name, '') as shift_name
 		FROM open_depots d
 		LEFT JOIN LATERAL (
 			SELECT 
@@ -569,6 +584,7 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 		) c ON true
 		LEFT JOIN regions z ON d.zone_id = z.id
 		LEFT JOIN regions w ON d.ward_id = w.id
+		LEFT JOIN shifts s ON COALESCE(c.shift_id, $1) = s.id
 		WHERE 1=1
 	`
 	var args []interface{}
@@ -641,6 +657,7 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 			&c.OpenDepotName,
 			&c.ZoneName,
 			&c.WardName,
+			&c.ShiftName,
 		)
 		if err == nil {
 			if uploadTimeVal != nil {

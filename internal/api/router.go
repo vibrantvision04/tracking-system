@@ -69,6 +69,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Get("/shifts", h.GetShifts)
 		r.Post("/shifts", h.CreateShift)
 		r.Delete("/shifts/{id}", h.DeleteShift)
+		r.Get("/report-types", h.GetReportTypes)
 		r.Get("/route-types", h.GetRouteTypes)
 		r.Post("/route-types", h.CreateRouteType)
 		r.Delete("/route-types/{id}", h.DeleteRouteType)
@@ -155,6 +156,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Get("/reports/geofence-event", h.GetGeofenceEventReport)
 		r.Get("/reports/ward-geofence", h.GetWardGeofenceReport)
 		r.Get("/reports/gts-trips", h.GetGTSTripReport)
+		r.Get("/reports/special-operations", h.GetShiftBasedOpsReport)
 
 		// Ultimate Reports — new independent module (does not affect existing Reports)
 		r.Get("/ultimate-reports/daily-excel", h.GetUltimateDailyExcelReport)

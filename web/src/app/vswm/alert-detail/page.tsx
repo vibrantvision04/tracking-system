@@ -107,7 +107,7 @@ export default function AlertDetailReportPage() {
       const [regRes, vehRes, shiftRes] = await Promise.all([
         api<Region[]>("/api/regions"),
         api<{ data: Vehicle[] }>("/api/vehicles"),
-        api<{ data: Shift[] }>("/api/shifts")
+        api<{ data: Shift[] }>("/api/shifts?group=VEHICLE_MOVEMENT")
       ]);
       
       const allRegions = Array.isArray(regRes) ? regRes : (regRes as any).data || [];

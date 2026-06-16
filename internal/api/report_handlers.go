@@ -17,6 +17,7 @@ import (
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/utils"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 )
 
@@ -827,32 +828,533 @@ func recalculateCoverage(ctx context.Context, gpsRepo *repository.GPSRepository,
 
 	errCommit := tx.Commit(ctx)
 	success := (errCommit == nil)
-	if dbg != nil {
-		dbg.Log("[D2D][TX_COMMIT] request_id=%s vehicle_id=%d success=%t", requestID, vehicleID, success)
-	}
-	if !success {
-		log.Error().Err(errCommit).Msg("Failed to commit transaction for recalculation")
+	if success {
+		committed = true
 		if dbg != nil {
-			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=TX_COMMIT_FAILED err=%q", requestID, vehicleID, errCommit.Error()))
+			var logsCount, reasonsCount int
+			_ = gpsRepo.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr).Scan(&logsCount)
+			_ = gpsRepo.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr).Scan(&reasonsCount)
+			recomputedPct := 0.0
+			totalCps := len(checkpoints)
+			if totalCps > 0 {
+				recomputedPct = float64(logsCount) / float64(totalCps) * 100.0
+			}
+			dbg.Log("[D2D][POST_COMMIT_VALIDATION] request_id=%s vehicle_id=%d coverage_logs_found=%d miss_reasons_found=%d coverage_percentage_recomputed=%.2f",
+				requestID, vehicleID, logsCount, reasonsCount, recomputedPct)
+		}
+	}
+}
+
+func GetReportTypeForVehicleType(typeName string) string {
+	lower := strings.ToLower(typeName)
+	if strings.Contains(lower, "rcv") || strings.Contains(lower, "dumper") || 
+	   strings.Contains(lower, "sweeping") || strings.Contains(lower, "road") || strings.Contains(lower, "clean") || 
+	   strings.Contains(lower, "animal") || strings.Contains(lower, "rescue") || strings.Contains(lower, "crane") {
+		return "SPECIAL_OPERATIONS"
+	}
+	return "VEHICLE_MOVEMENT"
+}
+
+func ResolveActiveShift(ctx context.Context, pool *pgxpool.Pool, group string, targetTime time.Time) (int, string, time.Time, time.Time, time.Time, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT s.id, s.shift_name, 
+		       COALESCE(s.start_time::text, ''), 
+		       COALESCE(s.end_time::text, ''), 
+		       COALESCE(s.time_duration, 0)
+		FROM shifts s
+		JOIN report_types rt ON s.report_type_id = rt.id
+		WHERE s.is_active = true AND rt.name = $1
+	`, group)
+	if err != nil {
+		return 0, "", targetTime, time.Time{}, time.Time{}, err
+	}
+	defer rows.Close()
+
+	curMin := targetTime.Hour()*60 + targetTime.Minute()
+	for rows.Next() {
+		var id, duration int
+		var name, startStr, endStr string
+		if err := rows.Scan(&id, &name, &startStr, &endStr, &duration); err != nil {
+			continue
+		}
+
+		var sh, sm, ss, eh, em, es int
+		fmt.Sscanf(startStr, "%d:%d:%d", &sh, &sm, &ss)
+		fmt.Sscanf(endStr, "%d:%d:%d", &eh, &em, &es)
+
+		stMin := sh*60 + sm
+		etMin := eh*60 + em
+
+		isWithinShift := false
+		var actualStart, actualEnd time.Time
+		var opDate time.Time
+
+		if stMin < etMin {
+			// Normal shift within same day
+			if curMin >= stMin && curMin <= etMin {
+				isWithinShift = true
+				opDate = targetTime
+				actualStart = time.Date(targetTime.Year(), targetTime.Month(), targetTime.Day(), sh, sm, ss, 0, targetTime.Location())
+				actualEnd = time.Date(targetTime.Year(), targetTime.Month(), targetTime.Day(), eh, em, es, 0, targetTime.Location())
+			}
+		} else {
+			// Midnight crossing shift
+			if curMin >= stMin || curMin <= etMin {
+				isWithinShift = true
+				if curMin >= stMin {
+					opDate = targetTime
+					actualStart = time.Date(targetTime.Year(), targetTime.Month(), targetTime.Day(), sh, sm, ss, 0, targetTime.Location())
+					tomorrow := targetTime.Add(24 * time.Hour)
+					actualEnd = time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), eh, em, es, 0, targetTime.Location())
+				} else {
+					opDate = targetTime.AddDate(0, 0, -1)
+					yesterday := targetTime.Add(-24 * time.Hour)
+					actualStart = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), sh, sm, ss, 0, targetTime.Location())
+					actualEnd = time.Date(targetTime.Year(), targetTime.Month(), targetTime.Day(), eh, em, es, 0, targetTime.Location())
+				}
+			}
+		}
+
+		if isWithinShift {
+			return id, name, opDate, actualStart, actualEnd, nil
+		}
+	}
+
+	// Default fallback: return first active shift in the group
+	var fallbackID int
+	var fallbackName, startStr, endStr string
+	err = pool.QueryRow(ctx, `
+		SELECT s.id, s.shift_name, COALESCE(s.start_time::text, ''), COALESCE(s.end_time::text, '') 
+		FROM shifts s
+		JOIN report_types rt ON s.report_type_id = rt.id
+		WHERE s.is_active = true AND rt.name = $1 
+		ORDER BY s.id ASC LIMIT 1
+	`, group).Scan(&fallbackID, &fallbackName, &startStr, &endStr)
+	if err == nil {
+		var sh, sm, ss, eh, em, es int
+		fmt.Sscanf(startStr, "%d:%d:%d", &sh, &sm, &ss)
+		fmt.Sscanf(endStr, "%d:%d:%d", &eh, &em, &es)
+		actualStart := time.Date(targetTime.Year(), targetTime.Month(), targetTime.Day(), sh, sm, ss, 0, targetTime.Location())
+		actualEnd := actualStart.Add(12 * time.Hour) // fallback
+		return fallbackID, fallbackName, targetTime, actualStart, actualEnd, nil
+	}
+
+	return 0, "", targetTime, time.Time{}, time.Time{}, fmt.Errorf("no active shifts in group %s", group)
+}
+
+func ResolveSelectedShiftTimes(ctx context.Context, pool *pgxpool.Pool, shiftID int, selectedDate time.Time) (string, time.Time, time.Time, error) {
+	var name, startStr, endStr string
+	err := pool.QueryRow(ctx, `
+		SELECT shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') 
+		FROM shifts WHERE id = $1
+	`, shiftID).Scan(&name, &startStr, &endStr)
+	if err != nil {
+		return "", time.Time{}, time.Time{}, err
+	}
+
+	var sh, sm, ss, eh, em, es int
+	fmt.Sscanf(startStr, "%d:%d:%d", &sh, &sm, &ss)
+	fmt.Sscanf(endStr, "%d:%d:%d", &eh, &em, &es)
+
+	stMin := sh*60 + sm
+	etMin := eh*60 + em
+
+	actualStart := time.Date(selectedDate.Year(), selectedDate.Month(), selectedDate.Day(), sh, sm, ss, 0, selectedDate.Location())
+	var actualEnd time.Time
+	if stMin < etMin {
+		actualEnd = time.Date(selectedDate.Year(), selectedDate.Month(), selectedDate.Day(), eh, em, es, 0, selectedDate.Location())
+	} else {
+		tomorrow := selectedDate.Add(24 * time.Hour)
+		actualEnd = time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), eh, em, es, 0, selectedDate.Location())
+	}
+
+	return name, actualStart, actualEnd, nil
+}
+
+func (h *Handler) GetShiftBasedOpsReport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	dateStr := r.URL.Query().Get("date")
+	shiftGroup := r.URL.Query().Get("shift_group") // e.g. "SPECIAL_OPERATIONS", "ROAD_CLEANING", "ANIMAL_RESCUE", "RCV_OPERATIONS"
+	shiftIDStr := r.URL.Query().Get("shift_id")
+	forceRecalc := r.URL.Query().Get("force_recalc") == "true"
+
+	if dateStr == "" {
+		dateStr = utils.CurrentTimeInIndia().Format("2006-01-02")
+	}
+	if shiftGroup == "" {
+		shiftGroup = "SPECIAL_OPERATIONS"
+	}
+
+	selectedDate, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid date format, use YYYY-MM-DD"})
+		return
+	}
+
+	var shiftID int
+	var shiftName string
+	var opDate time.Time
+	var actualStart, actualEnd time.Time
+
+	if shiftIDStr != "" {
+		shiftID, _ = strconv.Atoi(shiftIDStr)
+		name, start, end, err := ResolveSelectedShiftTimes(ctx, h.gpsRepo.Pool(), shiftID, selectedDate)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to resolve shift: " + err.Error()})
+			return
+		}
+		shiftName = name
+		opDate = selectedDate
+		actualStart = start
+		actualEnd = end
+	} else {
+		// Only allow auto-detection for today's date
+		todayStr := utils.CurrentTimeInIndia().Format("2006-01-02")
+		if dateStr != todayStr {
+			sendJSON(w, http.StatusBadRequest, map[string]string{"error": "Shift selection is mandatory for historical dates."})
+			return
+		}
+
+		now := utils.CurrentTimeInIndia()
+		id, name, oDate, start, end, err := ResolveActiveShift(ctx, h.gpsRepo.Pool(), "SPECIAL_OPERATIONS", now)
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to resolve active shift: " + err.Error()})
+			return
+		}
+		shiftID = id
+		shiftName = name
+		opDate = oDate
+		actualStart = start
+		actualEnd = end
+	}
+
+	// Fetch all vehicles
+	vehicles, err := h.vRepo.GetAll(ctx)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch vehicles: " + err.Error()})
+		return
+	}
+
+	results := []map[string]interface{}{}
+
+	for _, v := range vehicles {
+		// Check report type for this vehicle
+		if GetReportTypeForVehicleType(v.VehicleType.Name) != "SPECIAL_OPERATIONS" {
+			continue
+		}
+
+		if v.GpsDevice == nil || v.GpsDevice.IMEI == "" {
+			continue
+		}
+
+		// Check if route is assigned
+		var routeID int
+		var routeName string
+		err := h.gpsRepo.Pool().QueryRow(ctx, `
+			SELECT r.id, COALESCE(r.route_name, '')
+			FROM vehicle_route_assignments vra
+			JOIN routes r ON vra.route_id = r.id
+			WHERE vra.vehicle_id = $1 AND vra.shift_id = $2 AND vra.is_active = true
+			ORDER BY vra.assigned_date DESC, vra.id DESC LIMIT 1
+		`, v.ID, shiftID).Scan(&routeID, &routeName)
+		
+		hasRoute := err == nil && routeID > 0
+
+		var coveredPct *float64
+		if hasRoute {
+			// Query route checkpoints
+			cps, err := h.routeRepo.GetCheckpointsByRoute(ctx, routeID)
+			if err == nil && len(cps) > 0 {
+				opDateStr := opDate.Format("2006-01-02")
+				
+				// Re-calculate if today, or if force is true, or if no logs exist
+				isToday := opDateStr == utils.CurrentTimeInIndia().Format("2006-01-02")
+				localForceRecalc := forceRecalc || isToday
+				
+				hasHistory := false
+				if !localForceRecalc {
+					hasHistory, _ = h.routeRepo.HasCoverageRecords(ctx, v.ID, routeID, opDateStr)
+				}
+
+				if localForceRecalc || !hasHistory {
+					recalculateShiftCoverage(ctx, h.gpsRepo, h.routeRepo, v.ID, routeID, opDateStr, actualStart, actualEnd, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh, v.GpsDevice.IMEI, nil)
+				}
+
+				// Query hits
+				logs, err := h.routeRepo.GetCoverageHitLogs(ctx, v.ID, routeID, opDateStr)
+				if err == nil {
+					uniqueHits := make(map[int]bool)
+					for _, log := range logs {
+						uniqueHits[log.CheckpointID] = true
+					}
+					pct := math.Round((float64(len(uniqueHits)) / float64(len(cps))) * 100)
+					coveredPct = &pct
+				}
+			}
+		}
+
+		// Calculate movement metrics
+		gpsData, err := h.gpsRepo.GetByVehicle(ctx, v.ID, actualStart, actualEnd)
+		
+		var totalDistance float64
+		var maxSpeed float64
+		var totalIgnitionSec float64
+		var idleSec float64
+
+		isIgnitionOn := func(p decoder.AVLData) bool {
+			return p.Ignition || p.Speed > 2
+		}
+
+		if err == nil && len(gpsData) > 0 {
+			gpsData = smoothGpsData(gpsData)
+			var lastOp *decoder.AVLData
+			for i := 0; i < len(gpsData); i++ {
+				p := gpsData[i]
+				if p.Speed > maxSpeed {
+					maxSpeed = p.Speed
+				}
+				if lastOp == nil {
+					lastOp = &gpsData[i]
+					continue
+				}
+				if utils.IsValidGPSTransition(*lastOp, p) {
+					totalDistance += utils.Haversine(lastOp.Lat, lastOp.Lng, p.Lat, p.Lng)
+					lastOp = &gpsData[i]
+				}
+			}
+
+			// Ignition & Idle durations
+			for i := 1; i < len(gpsData); i++ {
+				prev := gpsData[i-1]
+				curr := gpsData[i]
+				prevOn := isIgnitionOn(prev)
+				currOn := isIgnitionOn(curr)
+				if prevOn && currOn {
+					dt := curr.Time.Sub(prev.Time).Seconds()
+					if dt > 0 && dt < 3600 {
+						totalIgnitionSec += dt
+					}
+				}
+				if currOn && curr.Speed == 0 {
+					dt := curr.Time.Sub(prev.Time).Seconds()
+					if dt > 0 && dt < 3600 {
+						idleSec += dt
+					}
+				}
+			}
+		}
+
+		// Query trip count
+		var tripCount int
+		_ = h.gpsRepo.Pool().QueryRow(ctx, `
+			SELECT COUNT(*) FROM trips 
+			WHERE vehicle_id = $1 AND start_time BETWEEN $2 AND $3
+		`, v.ID, actualStart, actualEnd).Scan(&tripCount)
+
+		runningSec := int(totalIgnitionSec - idleSec)
+		if runningSec < 0 {
+			runningSec = 0
+		}
+
+		runningHoursStr := formatDuration(runningSec)
+		idleHoursStr := formatDuration(int(idleSec))
+		engineHoursStr := formatDuration(int(totalIgnitionSec))
+
+		var summary string
+		if totalDistance > 0 {
+			summary = fmt.Sprintf("Travelled %.2f km. Engine running for %s, idle for %s.", totalDistance, runningHoursStr, idleHoursStr)
+		} else {
+			summary = "No movement detected."
+		}
+
+		// If no route, assign appropriate defaults
+		dispRouteName := routeName
+		if !hasRoute {
+			dispRouteName = "N/A"
+		}
+
+		results = append(results, map[string]interface{}{
+			"vehicle_id":         v.ID,
+			"registration_no":    v.RegistrationNo,
+			"vehicle_type":       v.VehicleType.Name,
+			"route_id":           routeID,
+			"route_name":         dispRouteName,
+			"covered_percentage": coveredPct,
+			"distance_travelled": totalDistance,
+			"trip_count":         tripCount,
+			"running_hours":      runningHoursStr,
+			"idle_hours":         idleHoursStr,
+			"engine_hours":       engineHoursStr,
+			"movement_summary":   summary,
+			"imei":               v.GpsDevice.IMEI,
+		})
+	}
+
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success":          true,
+		"shift_id":         shiftID,
+		"shift_name":       shiftName,
+		"operational_date": opDate.Format("2006-01-02"),
+		"start_time":       actualStart.Format(time.RFC3339),
+		"end_time":         actualEnd.Format(time.RFC3339),
+		"data":             results,
+	})
+}
+
+func recalculateShiftCoverage(ctx context.Context, gpsRepo *repository.GPSRepository, routeRepo *repository.RouteRepository, vehicleID int, routeID int, dateStr string, startTime time.Time, endTime time.Time, requireSequential bool, maxSpeed float64, imei string, dbg *d2dDebugLogger) {
+	requestID := "N/A"
+	if dbg != nil {
+		requestID = dbg.requestID
+	}
+
+	// Fetch checkpoints first
+	checkpoints, err := routeRepo.GetCheckpointsByRoute(ctx, routeID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch checkpoints for route")
+		if dbg != nil {
+			dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d route_id=%d event=CHECKPOINTS_FETCH_FAILED err=%q", requestID, vehicleID, routeID, err.Error()))
 		}
 		return
 	}
 
-	committed = true
-
-	if dbg != nil {
-		// Re-fetch to validate post-commit
-		var logsCount int
-		var reasonsCount int
-		_ = gpsRepo.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr).Scan(&logsCount)
-		_ = gpsRepo.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr).Scan(&reasonsCount)
-
-		recomputedPct := 0.0
-		totalCps := len(checkpoints)
-		if totalCps > 0 {
-			recomputedPct = float64(logsCount) / float64(totalCps) * 100.0
-		}
-		dbg.Log("[D2D][POST_COMMIT_VALIDATION] request_id=%s vehicle_id=%d coverage_logs_found=%d miss_reasons_found=%d coverage_percentage_recomputed=%.2f",
-			requestID, vehicleID, logsCount, reasonsCount, recomputedPct)
+	if len(checkpoints) == 0 {
+		return
 	}
+
+	// Fetch GPS data
+	gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, startTime, endTime)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to query GPS data for shift coverage calculation")
+		return
+	}
+
+	if len(gpsData) == 0 {
+		return
+	}
+
+	gpsData = smoothGpsData(gpsData)
+
+	missReasons := make(map[int]string)
+	for _, cp := range checkpoints {
+		missReasons[cp.ID] = "Never Reached"
+	}
+
+	physicalHits := make(map[int]time.Time)
+
+	// If we have GPS data, run segment checking and checkpoint hits detection
+	if len(gpsData) > 0 {
+		expectedIdx := 0 // index of the checkpoint we are currently looking for
+
+		for idx, p := range gpsData {
+			if p.Lat == 0.0 || p.Lng == 0.0 {
+				continue
+			}
+
+			// Sequential checking logic (same as D2D recalculation)
+			if requireSequential {
+				if expectedIdx < len(checkpoints) {
+					targetCP := checkpoints[expectedIdx]
+					distKm := utils.Haversine(p.Lat, p.Lng, targetCP.Latitude, targetCP.Longitude)
+					distMeters := distKm * 1000.0
+
+					if distMeters <= targetCP.RadiusMeters {
+						physicalHits[targetCP.ID] = p.Time
+						delete(missReasons, targetCP.ID)
+						expectedIdx++
+					} else if idx > 0 {
+						prev := gpsData[idx-1]
+						if prev.Lat != 0.0 && prev.Lng != 0.0 {
+							distSeg := distanceToSegment(targetCP.Latitude, targetCP.Longitude, prev.Lat, prev.Lng, p.Lat, p.Lng)
+							if distSeg <= targetCP.RadiusMeters {
+								physicalHits[targetCP.ID] = p.Time
+								delete(missReasons, targetCP.ID)
+								expectedIdx++
+							}
+						}
+					}
+				}
+			} else {
+				// Non-sequential checkpoint hitting logic
+				for _, cp := range checkpoints {
+					if _, hit := physicalHits[cp.ID]; hit {
+						continue
+					}
+					distKm := utils.Haversine(p.Lat, p.Lng, cp.Latitude, cp.Longitude)
+					distMeters := distKm * 1000.0
+
+					if distMeters <= cp.RadiusMeters {
+						physicalHits[cp.ID] = p.Time
+						delete(missReasons, cp.ID)
+					} else if idx > 0 {
+						prev := gpsData[idx-1]
+						if prev.Lat != 0.0 && prev.Lng != 0.0 {
+							distSeg := distanceToSegment(cp.Latitude, cp.Longitude, prev.Lat, prev.Lng, p.Lat, p.Lng)
+							if distSeg <= cp.RadiusMeters {
+								physicalHits[cp.ID] = p.Time
+								delete(missReasons, cp.ID)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Database Transaction
+	tx, errTx := gpsRepo.Pool().Begin(ctx)
+	if errTx != nil {
+		log.Error().Err(errTx).Msg("Failed to start transaction for shift recalculation")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	// Delete all existing logs and miss reasons for this vehicle, route, and date
+	_, _ = tx.Exec(ctx, "DELETE FROM route_coverage_logs WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+	_, _ = tx.Exec(ctx, "DELETE FROM route_coverage_miss_reasons WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3", vehicleID, routeID, dateStr)
+
+	// Batch insert physicalHits
+	if len(physicalHits) > 0 {
+		query := "INSERT INTO route_coverage_logs (vehicle_id, route_id, checkpoint_id, report_date, hit_time) VALUES "
+		vals := []interface{}{}
+		for cpID, hitTime := range physicalHits {
+			idx := len(vals)
+			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d),", idx+1, idx+2, idx+3, idx+4, idx+5)
+			vals = append(vals, vehicleID, routeID, cpID, dateStr, hitTime)
+		}
+		query = query[:len(query)-1] // trim trailing comma
+		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO NOTHING"
+		_, err := tx.Exec(ctx, query, vals...)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to batch insert coverage hits during shift recalculation")
+			return
+		}
+	}
+
+	// Batch insert miss reasons
+	if len(missReasons) > 0 {
+		query := "INSERT INTO route_coverage_miss_reasons (vehicle_id, route_id, checkpoint_id, report_date, reason) VALUES "
+		vals := []interface{}{}
+		for cpID, reason := range missReasons {
+			idx := len(vals)
+			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d),", idx+1, idx+2, idx+3, idx+4, idx+5)
+			vals = append(vals, vehicleID, routeID, cpID, dateStr, reason)
+		}
+		query = query[:len(query)-1] // trim trailing comma
+		query += " ON CONFLICT (vehicle_id, route_id, checkpoint_id, report_date) DO NOTHING"
+		_, err := tx.Exec(ctx, query, vals...)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to batch insert miss reasons during shift recalculation")
+			return
+		}
+	}
+
+	_ = tx.Commit(ctx)
+}
+
+func formatDuration(seconds int) string {
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
+	s := seconds % 60
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
 }

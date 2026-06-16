@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import Table from "@/components/shared/Table";
 
 const CleaningMap = dynamic(() => import("@/components/CleaningMap"), { ssr: false });
 
@@ -147,103 +148,97 @@ export default function OpenDepotCleaningPage() {
 
       {/* Professional List Table */}
       <Card className="border border-theme-border bg-theme-surface shadow-sm overflow-hidden">
-        <CardContent className="p-0 overflow-x-auto">
-          {loading ? (
-            <div className="py-20 text-center text-theme-text-dim font-bold text-xs">
-              Fetching submitted cleaning records...
-            </div>
-          ) : filteredSubmissions.length === 0 ? (
-            <div className="py-20 text-center text-theme-text-dim">
-              <span className="text-3xl block mb-2">📋</span>
-              <span className="text-xs font-bold block">No submissions found matching criteria.</span>
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-theme-base/60 border-b border-theme-border font-bold text-theme-text text-[11px] uppercase tracking-wider">
-                  <th className="p-4 w-16">Photo</th>
-                  <th className="p-4">Open Depot</th>
-                  <th className="p-4">Uploaded By</th>
-                  <th className="p-4">Upload Time</th>
-                  <th className="p-4">Geofence Audit</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-theme-border">
-                {filteredSubmissions.map((s) => (
-                  <tr key={s.id} className="hover:bg-theme-base/40 transition duration-150">
-                    <td className="p-4">
-                      <img
-                        src={s.image_url}
-                        alt="Thumbnail"
-                        className="w-12 h-12 rounded-lg object-cover border border-theme-border shadow-sm cursor-pointer hover:scale-105 transition"
-                        onClick={() => setReviewItem(s)}
-                      />
-                    </td>
-                    <td className="p-4">
-                      <span className="font-bold text-theme-text block">{s.open_depot_name || `Depot #${s.open_depot_id}`}</span>
-                      <span className="text-[10px] text-theme-text-dim block mt-0.5">
-                        {s.zone_name} • {s.ward_name}
-                      </span>
-                    </td>
-                    <td className="p-4 font-semibold">{s.uploaded_by}</td>
-                    <td className="p-4 text-theme-text-dim">
-                      {new Date(s.upload_time).toLocaleString()}
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
-                        s.verification_status === "VALID"
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : "bg-rose-500/10 text-rose-400"
-                      }`}>
-                        {s.verification_status === "VALID" ? "✓ VALID" : "⚠️ OUTSIDE"}
-                      </span>
-                      <span className="block text-[10px] text-theme-text-dim mt-1">
-                        Distance: {s.distance_from_depot.toFixed(1)} meters
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                        s.approval_status === "Approved"
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          : s.approval_status === "Rejected"
-                          ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                          : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                      }`}>
-                        {s.approval_status}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right">
-                      {s.approval_status === "Pending" ? (
-                        <Button
-                          onClick={() => {
-                            setReviewItem(s);
-                            setActiveReviewAction(null);
-                          }}
-                          variant="accent"
-                          className="text-xs px-3.5 py-1.5"
-                        >
-                          Review
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={() => {
-                            setReviewItem(s);
-                            setActiveReviewAction(null);
-                          }}
-                          variant="outline"
-                          className="text-xs px-3.5 py-1.5"
-                        >
-                          View Details
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <CardContent className="p-0">
+          <Table
+            headers={[
+              <div key="photo" className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Photo</div>,
+              <span key="depot" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Open Depot</span>,
+              <span key="ub" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Uploaded By</span>,
+              <span key="ut" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Upload Time</span>,
+              <span key="ga" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Geofence Audit</span>,
+              <span key="st" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Status</span>,
+              <div key="action" className="text-right pr-4 w-24 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Action</div>,
+            ]}
+            isLoading={loading}
+            emptyState={
+              <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
+                <span className="text-3xl">📋</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider">No submissions found</span>
+                <span className="text-[10px]">No pending reviews matching criteria.</span>
+              </div>
+            }
+          >
+            {filteredSubmissions.map((s) => (
+              <tr key={s.id} className="hover:bg-theme-base/40 transition duration-150 border-b border-theme-border">
+                <td className="p-4">
+                  <img
+                    src={s.image_url}
+                    alt="Thumbnail"
+                    className="w-12 h-12 rounded-lg object-cover border border-theme-border shadow-sm cursor-pointer hover:scale-105 transition"
+                    onClick={() => setReviewItem(s)}
+                  />
+                </td>
+                <td className="p-4">
+                  <span className="font-bold text-theme-text block">{s.open_depot_name || `Depot #${s.open_depot_id}`}</span>
+                  <span className="text-[10px] text-theme-text-dim block mt-0.5">
+                    {s.zone_name} • {s.ward_name}
+                  </span>
+                </td>
+                <td className="p-4 font-semibold">{s.uploaded_by}</td>
+                <td className="p-4 text-theme-text-dim">
+                  {new Date(s.upload_time).toLocaleString()}
+                </td>
+                <td className="p-4">
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
+                    s.verification_status === "VALID"
+                      ? "bg-emerald-500/10 text-emerald-400"
+                      : "bg-rose-500/10 text-rose-400"
+                  }`}>
+                    {s.verification_status === "VALID" ? "✓ VALID" : "⚠️ OUTSIDE"}
+                  </span>
+                  <span className="block text-[10px] text-theme-text-dim mt-1">
+                    Distance: {s.distance_from_depot.toFixed(1)} meters
+                  </span>
+                </td>
+                <td className="p-4">
+                  <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                    s.approval_status === "Approved"
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      : s.approval_status === "Rejected"
+                      ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                      : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  }`}>
+                    {s.approval_status}
+                  </span>
+                </td>
+                <td className="p-4 text-right">
+                  {s.approval_status === "Pending" ? (
+                    <Button
+                      onClick={() => {
+                        setReviewItem(s);
+                        setActiveReviewAction(null);
+                      }}
+                      variant="accent"
+                      className="text-xs px-3.5 py-1.5"
+                    >
+                      Review
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => {
+                        setReviewItem(s);
+                        setActiveReviewAction(null);
+                      }}
+                      variant="outline"
+                      className="text-xs px-3.5 py-1.5"
+                    >
+                      View Details
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
         </CardContent>
       </Card>
 

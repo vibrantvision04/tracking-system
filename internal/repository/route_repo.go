@@ -47,6 +47,7 @@ type Shift struct {
 	EndTime      string    `json:"end_time"`
 	TimeDuration int       `json:"time_duration"`
 	IsActive     bool      `json:"is_active"`
+	ReportTypeID int       `json:"report_type_id"`
 }
 
 type VehicleRouteAssignmentDetail struct {
@@ -249,7 +250,7 @@ func (r *RouteRepository) GetAssignedRoute(ctx context.Context, vehicleID int, d
 }
 
 func (r *RouteRepository) GetShifts(ctx context.Context) ([]Shift, error) {
-	query := `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, ''), COALESCE(time_duration, 0), is_active FROM shifts ORDER BY id ASC`
+	query := `SELECT id, shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, ''), COALESCE(time_duration, 0), is_active, COALESCE(report_type_id, 1) FROM shifts ORDER BY id ASC`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -258,7 +259,7 @@ func (r *RouteRepository) GetShifts(ctx context.Context) ([]Shift, error) {
 	var list []Shift
 	for rows.Next() {
 		var s Shift
-		if err := rows.Scan(&s.ID, &s.ShiftName, &s.StartTime, &s.EndTime, &s.TimeDuration, &s.IsActive); err != nil {
+		if err := rows.Scan(&s.ID, &s.ShiftName, &s.StartTime, &s.EndTime, &s.TimeDuration, &s.IsActive, &s.ReportTypeID); err != nil {
 			return nil, err
 		}
 		list = append(list, s)

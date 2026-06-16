@@ -230,7 +230,7 @@ func (h *Handler) GetVehicleRouteCoverage(w http.ResponseWriter, r *http.Request
 	}
 	
 	visitedCount := 0
-	var visitedDetails []map[string]interface{}
+	visitedDetails := []map[string]interface{}{}
 	
 	for _, cp := range checkpoints {
 		hit := visitedMap[cp.ID]

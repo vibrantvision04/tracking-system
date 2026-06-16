@@ -284,7 +284,7 @@ export default function D2DMap() {
           console.error("Failed to load routes:", err);
           return { success: false, data: [] };
         }),
-        api<{ success: boolean; data: any[] }>("/api/shifts").catch(err => {
+        api<{ success: boolean; data: any[] }>("/api/shifts?group=VEHICLE_MOVEMENT").catch(err => {
           console.error("Failed to load shifts:", err);
           return { success: false, data: [] };
         })

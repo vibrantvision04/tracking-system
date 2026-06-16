@@ -187,7 +187,7 @@ export default function RoutePage() {
   useEffect(() => {
     loadRoutes();
     api<{ data: any[] }>("/api/wards").then(res => setWards(res.data || []));
-    api<{ data: any[] }>("/api/shifts").then(res => setShifts(res.data || []));
+    api<{ data: any[] }>("/api/shifts?group=VEHICLE_MOVEMENT").then(res => setShifts(res.data || []));
     api<{ data: any[] }>("/api/route-types").then(res => setRouteTypes(res.data || []));
   }, []);
 
