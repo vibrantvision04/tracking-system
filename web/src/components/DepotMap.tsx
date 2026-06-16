@@ -31,6 +31,9 @@ interface DepotMapProps {
   onRadiusChange?: (radius: number) => void;
   previewOnly?: boolean;
   depots?: OpenDepot[];
+  regions?: any[];
+  selectedZone?: string;
+  selectedWard?: string;
 }
 
 export default function DepotMap({
@@ -41,6 +44,9 @@ export default function DepotMap({
   onRadiusChange,
   previewOnly = false,
   depots,
+  regions,
+  selectedZone,
+  selectedWard,
 }: DepotMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   
@@ -50,6 +56,8 @@ export default function DepotMap({
   const markerRef = useRef<L.Marker | null>(null);
   const circleRef = useRef<L.Circle | null>(null);
   const multiDepotsLayerRef = useRef<L.LayerGroup | null>(null);
+  const zonesLayerRef = useRef<L.FeatureGroup | null>(null);
+  const wardsLayerRef = useRef<L.FeatureGroup | null>(null);
   const initialFitPerformed = useRef(false);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -87,6 +95,8 @@ export default function DepotMap({
     L.control.zoom({ position: "topright" }).addTo(m);
 
     multiDepotsLayerRef.current = L.layerGroup().addTo(m);
+    zonesLayerRef.current = L.featureGroup().addTo(m);
+    wardsLayerRef.current = L.featureGroup().addTo(m);
 
     setMapInstance(m);
 
@@ -348,6 +358,57 @@ export default function DepotMap({
     }
   }, [mapInstance, depots]);
 
+  // 2.7 Render Zone and Ward Boundaries
+  useEffect(() => {
+    if (!mapInstance || !zonesLayerRef.current || !wardsLayerRef.current) return;
+
+    zonesLayerRef.current.clearLayers();
+    wardsLayerRef.current.clearLayers();
+
+    if (!regions || regions.length === 0) return;
+
+    regions.forEach((r) => {
+      if (!r.geojson) return;
+
+      const isZone = r.region_type_id === 2;
+      const isWard = r.region_type_id === 3;
+
+      // Draw Zone Boundary
+      if (isZone) {
+        if (selectedZone && r.id !== parseInt(selectedZone)) return;
+
+        const color = r.color || "#3b82f6";
+        const zoneGeoJSON = L.geoJSON(r.geojson, {
+          style: {
+            color: color,
+            weight: 3.5,
+            fillColor: color,
+            fillOpacity: 0.05,
+          }
+        });
+        zoneGeoJSON.bindPopup(`<strong>Zone:</strong> ${r.region_name}`);
+        zonesLayerRef.current?.addLayer(zoneGeoJSON);
+      }
+
+      // Draw Ward Boundary
+      if (isWard) {
+        if (selectedZone && r.parent_id !== parseInt(selectedZone)) return;
+        if (selectedWard && r.id !== parseInt(selectedWard)) return;
+
+        const wardGeoJSON = L.geoJSON(r.geojson, {
+          style: {
+            color: "#10b981",
+            weight: 1.5,
+            fillColor: "#10b981",
+            fillOpacity: 0.02,
+          }
+        });
+        wardGeoJSON.bindPopup(`<strong>Ward:</strong> ${r.region_name}`);
+        wardsLayerRef.current?.addLayer(wardGeoJSON);
+      }
+    });
+  }, [mapInstance, regions, selectedZone, selectedWard]);
+
   // 3. Handle resize and invalidate map size when fullscreen toggles
   useEffect(() => {
     if (!mapInstance) return;
@@ -412,7 +473,7 @@ export default function DepotMap({
               <span className="text-xs font-bold text-theme-text">Radius:</span>
               <input
                 type="range"
-                min="10"
+                min="5"
                 max="500"
                 step="5"
                 value={radNum || 50}

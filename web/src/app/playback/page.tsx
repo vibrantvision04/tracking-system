@@ -555,7 +555,7 @@ export default function PlaybackPage() {
   const [showTransfer, setShowTransfer] = useState(true);
   const [showFuel, setShowFuel] = useState(true);
   const [showWorkshop, setShowWorkshop] = useState(true);
-  const [showOpenDepots, setShowOpenDepots] = useState(true);
+  const [showOpenDepots, setShowOpenDepots] = useState(false);
 
   // POI Data States
   const [parkingSpots, setParkingSpots] = useState<any[]>([]);
@@ -2325,15 +2325,7 @@ export default function PlaybackPage() {
                 <span>Workshops</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showOpenDepots} 
-                  onChange={(e) => setShowOpenDepots(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
-                />
-                <span>Open Depots</span>
-              </label>
+
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
                 <input 

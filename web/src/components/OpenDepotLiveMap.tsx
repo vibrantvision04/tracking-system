@@ -39,35 +39,72 @@ export default function OpenDepotLiveMap() {
   const [depots, setDepots] = useState<OpenDepot[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
+  const [regions, setRegions] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
   
   const [selectedZone, setSelectedZone] = useState("");
   const [selectedWard, setSelectedWard] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  
+  const [selectedShift, setSelectedShift] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
 
-  // Load initial data
+  const [loading, setLoading] = useState(true);
+  const [loadingDepots, setLoadingDepots] = useState(false);
+
+  // Load static layers
   useEffect(() => {
-    loadData();
+    loadStaticData();
   }, []);
 
-  const loadData = async () => {
+  // Fetch depots on shift/date change
+  useEffect(() => {
+    loadDepots();
+  }, [selectedShift, selectedDate]);
+
+  const loadStaticData = async () => {
     setLoading(true);
     try {
-      const [depotsRes, zonesRes, wardsRes] = await Promise.all([
-        api<{ success: boolean; data: OpenDepot[] }>("/api/open-depots"),
+      const [zonesRes, wardsRes, regionsRes, shiftsRes] = await Promise.all([
         api<{ success: boolean; data: Zone[] }>("/api/zones"),
         api<{ success: boolean; data: Ward[] }>("/api/wards"),
+        api<{ success: boolean; data: any[] }>("/api/regions"),
+        api<{ success: boolean; data: any[] }>("/api/shifts?group=OPEN_DEPOT"),
       ]);
 
-      if (depotsRes.success) setDepots(depotsRes.data || []);
       if (zonesRes.success) setZones(zonesRes.data || []);
       if (wardsRes.success) setWards(wardsRes.data || []);
+      if (regionsRes.success) setRegions(regionsRes.data || []);
+      if (shiftsRes.success) setShifts(shiftsRes.data || []);
     } catch (err) {
-      toast.error("Failed to load map data.");
+      toast.error("Failed to load map data layers.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadDepots = async () => {
+    setLoadingDepots(true);
+    try {
+      const queryParams = new URLSearchParams({
+        ...(selectedShift && { shift_id: selectedShift }),
+        ...(selectedDate && { date: selectedDate }),
+      });
+      const res = await api<{ success: boolean; data: OpenDepot[] }>(`/api/open-depots?${queryParams.toString()}`);
+      if (res.success) {
+        setDepots(res.data || []);
+      }
+    } catch (err) {
+      toast.error("Failed to load depots data.");
+    } finally {
+      setLoadingDepots(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    loadStaticData();
+    loadDepots();
   };
 
   // Filter depots based on selections
@@ -104,6 +141,32 @@ export default function OpenDepotLiveMap() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition w-48 shadow-inner"
           />
+        </div>
+
+        {/* Date Filter */}
+        <div className="flex flex-col space-y-1">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Date</label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm w-36"
+          />
+        </div>
+
+        {/* Shift Filter */}
+        <div className="flex flex-col space-y-1">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shift</label>
+          <select
+            value={selectedShift}
+            onChange={(e) => setSelectedShift(e.target.value)}
+            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm w-40"
+          >
+            <option value="">Live/Active Shift</option>
+            {shifts.map((s) => (
+              <option key={s.id} value={s.id}>{s.shift_name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Zone Filter */}
@@ -157,24 +220,30 @@ export default function OpenDepotLiveMap() {
 
         {/* Refresh button */}
         <button
-          onClick={loadData}
-          disabled={loading}
+          onClick={handleRefresh}
+          disabled={loading || loadingDepots}
           className="self-end px-3.5 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-bold transition shadow-sm h-[34px]"
         >
-          {loading ? "Refreshing..." : "↻ Refresh"}
+          {loading || loadingDepots ? "Refreshing..." : "↻ Refresh"}
         </button>
 
       </div>
 
       {/* Map Element */}
       <div className="flex-1 w-full h-full min-h-0 relative z-0">
-        {loading && depots.length === 0 ? (
+        {(loading || loadingDepots) && depots.length === 0 ? (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-3">
             <span className="w-8 h-8 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider animate-pulse">Loading depot layers...</span>
           </div>
         ) : null}
-        <DepotMap depots={filteredDepots} previewOnly={true} />
+        <DepotMap 
+          depots={filteredDepots} 
+          previewOnly={true} 
+          regions={regions}
+          selectedZone={selectedZone}
+          selectedWard={selectedWard}
+        />
       </div>
 
     </div>

@@ -343,7 +343,7 @@ export default function OpenDepotPage() {
                       </label>
                       <input
                         type="range"
-                        min="10"
+                        min="5"
                         max="500"
                         step="5"
                         value={form.radius || "50"}
@@ -351,7 +351,7 @@ export default function OpenDepotPage() {
                         className="w-full h-1.5 bg-theme-border rounded-lg appearance-none cursor-pointer accent-emerald-500"
                       />
                       <div className="flex justify-between text-[10px] text-theme-text-dim mt-1 font-semibold">
-                        <span>10m</span>
+                        <span>5m</span>
                         <span className="text-emerald-400 font-bold">{form.radius}m</span>
                         <span>500m</span>
                       </div>
