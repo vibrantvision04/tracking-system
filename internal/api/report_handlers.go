@@ -123,13 +123,6 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 		toDate = utils.CurrentTimeInIndia()
 	}
 
-	// Fetch all assignments for the date range
-	assignments, err := h.routeRepo.GetD2DAssignments(ctx, fromDate, toDate)
-	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch assignments: " + err.Error()})
-		return
-	}
-
 	// Parse optional filters
 	filterZoneID, _ := strconv.Atoi(r.URL.Query().Get("zone_id"))
 	filterWardID, _ := strconv.Atoi(r.URL.Query().Get("ward_id"))
@@ -137,6 +130,37 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 	filterRouteTypeID, _ := strconv.Atoi(r.URL.Query().Get("route_type_id"))
 	filterRouteID, _ := strconv.Atoi(r.URL.Query().Get("route_id"))
 	filterVehicleID, _ := strconv.Atoi(r.URL.Query().Get("vehicle_id"))
+
+	activeShiftParam := r.URL.Query().Get("active_shift") == "true"
+	var activeShiftName string
+	if activeShiftParam {
+		now := utils.CurrentTimeInIndia()
+		id, name, opDate, _, _, err := ResolveActiveShift(ctx, h.gpsRepo.Pool(), "VEHICLE_MOVEMENT", now)
+		if err == nil && id > 0 {
+			filterShiftID = id
+			activeShiftName = name
+			fromDate = opDate
+			toDate = opDate
+			fromDateStr = opDate.Format("2006-01-02")
+			toDateStr = opDate.Format("2006-01-02")
+		} else {
+			activeShiftName = "No Active Shift"
+			responsePayload := map[string]interface{}{
+				"success":           true,
+				"data":              []interface{}{},
+				"active_shift_name": activeShiftName,
+			}
+			sendJSON(w, http.StatusOK, responsePayload)
+			return
+		}
+	}
+
+	// Fetch all assignments for the date range
+	assignments, err := h.routeRepo.GetD2DAssignments(ctx, fromDate, toDate)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch assignments: " + err.Error()})
+		return
+	}
 
 	dbg.Log("[D2D][REQUEST_START] request_id=%s route_id=%d vehicle_id=%d date=%s_to_%s force_recalc=%t timestamp=%s",
 		requestID, filterRouteID, filterVehicleID, fromDateStr, toDateStr, forceRecalc, time.Now().Format(time.RFC3339))
@@ -323,6 +347,9 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 	responsePayload := map[string]interface{}{
 		"success": true,
 		"data":    filtered,
+	}
+	if activeShiftParam {
+		responsePayload["active_shift_name"] = activeShiftName
 	}
 	if debugMode {
 		dbg.mu.Lock()

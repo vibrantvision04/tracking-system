@@ -39,7 +39,9 @@ export default function HomePage() {
   const { data: employees = [], isValidating: loadingEM } = useSWR("/api/employees", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
 
   const todayStr = new Date().toISOString().split("T")[0];
-  const { data: d2dReport = [] } = useSWR(`/api/reports/d2d-coverage?from_date=${todayStr}&to_date=${todayStr}`, fetcher, { revalidateOnFocus: false, dedupingInterval: 30000 });
+  const { data: d2dPayload } = useSWR(`/api/reports/d2d-coverage?active_shift=true`, (url) => api<{ success: boolean; data?: any[]; active_shift_name?: string }>(url).then(res => res), { revalidateOnFocus: false, dedupingInterval: 30000 });
+  const d2dReport = d2dPayload?.data || [];
+  const d2dActiveShiftName = d2dPayload?.active_shift_name || "No Active Shift";
   const { data: openDepotDashboard } = useSWR("/api/open-depots/dashboard", (url) => api<{ data?: any }>(url).then(res => res.data), { refreshInterval: 10000 });
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -66,9 +68,11 @@ export default function HomePage() {
   });
 
   // Calculate overall D2D coverage (average of zone coverages)
-  const computedD2D = zoneCoverages.length > 0
-    ? Math.round(zoneCoverages.reduce((acc, z) => acc + z.percentage, 0) / zoneCoverages.length)
-    : 85;
+  const computedD2D = d2dActiveShiftName === "No Active Shift"
+    ? 0
+    : (zoneCoverages.length > 0
+        ? Math.round(zoneCoverages.reduce((acc, z) => acc + z.percentage, 0) / zoneCoverages.length)
+        : 0);
 
   // Mocked for now based on user instruction
   const gvpCount = "24"; 
@@ -117,14 +121,14 @@ export default function HomePage() {
               title="D2D Coverage" 
               percentage={computedD2D} 
               color="#10b981" 
-              subtitle="Households" 
+              subtitle={d2dActiveShiftName} 
               onClick={() => setIsDrawerOpen(true)}
             />
             <CoverageChart 
               title="Open Depot Coverage" 
               percentage={openDepotDashboard?.kpis?.coverage_percentage ?? 0} 
               color="#f59e0b" 
-              subtitle={openDepotDashboard?.active_shift?.shift_name || "Live Shift"} 
+              subtitle={openDepotDashboard?.active_shift?.shift_name || "No Active Shift"} 
               onClick={() => setIsOpenDepotDrawerOpen(true)}
             />
           </div>
@@ -251,7 +255,7 @@ export default function HomePage() {
               <div>
                 <h3 className="text-lg font-bold text-slate-800">Open Depot Live Coverage</h3>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Shift: <span className="text-amber-600 font-bold">{openDepotDashboard?.active_shift?.shift_name || "Morning Shift"}</span> | Date: {openDepotDashboard?.operational_date || todayStr}
+                  Shift: <span className="text-amber-600 font-bold">{openDepotDashboard?.active_shift?.shift_name || "No Active Shift"}</span> | Date: {openDepotDashboard?.operational_date || todayStr}
                 </p>
               </div>
               <button 

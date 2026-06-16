@@ -123,7 +123,7 @@ func (r *OpenDepotRepository) GetShiftAndOperationalDate(ctx context.Context, t 
 		return 0, t, err
 	}
 
-	// Fallback to first active shift or shift_id = 1 if none matched
+	// Fallback to first active shift or shift_id = 0 if none matched
 	var fallbackID int
 	err = r.db.QueryRow(ctx, `
 		SELECT s.id 
@@ -133,7 +133,7 @@ func (r *OpenDepotRepository) GetShiftAndOperationalDate(ctx context.Context, t 
 		ORDER BY s.id ASC LIMIT 1
 	`).Scan(&fallbackID)
 	if err != nil {
-		fallbackID = 1 // default fallback
+		fallbackID = 0 // default fallback
 	}
 	return fallbackID, t, nil
 }
@@ -257,7 +257,11 @@ func (r *OpenDepotRepository) CreateCleaning(ctx context.Context, c *OpenDepotCl
 	if err != nil {
 		return err
 	}
-	c.ShiftID = &shiftID
+	if shiftID == 0 {
+		c.ShiftID = nil
+	} else {
+		c.ShiftID = &shiftID
+	}
 	c.OperationalDate = &opDate
 
 	tx, err := r.db.Begin(ctx)
@@ -521,7 +525,7 @@ func (r *OpenDepotRepository) GetCleaningsReport(ctx context.Context, filters ma
 		if err == nil {
 			shiftID = resolvedShiftID
 		} else {
-			shiftID = 1 // default fallback
+			shiftID = 0 // default fallback
 		}
 	}
 
@@ -869,10 +873,14 @@ func (r *OpenDepotRepository) GetLiveShiftDashboard(ctx context.Context) (map[st
 	// Fetch active shift details
 	var shiftName string
 	var startTimeStr, endTimeStr string
-	err = r.db.QueryRow(ctx, "SELECT shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE id = $1", shiftID).
-		Scan(&shiftName, &startTimeStr, &endTimeStr)
-	if err != nil {
-		shiftName = "Morning Shift" // fallback
+	if shiftID > 0 {
+		err = r.db.QueryRow(ctx, "SELECT shift_name, COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE id = $1", shiftID).
+			Scan(&shiftName, &startTimeStr, &endTimeStr)
+		if err != nil {
+			shiftName = "No Active Shift"
+		}
+	} else {
+		shiftName = "No Active Shift"
 	}
 
 	// Fetch all depots with lateral join for the active shift and operational date
