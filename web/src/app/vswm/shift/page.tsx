@@ -248,7 +248,7 @@ export default function ShiftManager() {
             <CardContent className="p-0">
               <Table
                 headers={[
-                  "ID",
+                  "S. NO.",
                   "Name",
                   "Report Type",
                   "Start",
@@ -258,9 +258,9 @@ export default function ShiftManager() {
                 ]}
                 isLoading={tableLoading}
               >
-                {shifts.map((s) => (
+                {shifts.map((s, idx) => (
                   <tr key={s.id} className="hover:bg-theme-base/40 transition-colors">
-                    <td className="px-5 py-3.5 text-theme-text-dim font-mono">{s.id}</td>
+                    <td className="px-5 py-3.5 text-theme-text-dim font-mono text-center w-16">{idx + 1}</td>
                     <td className="px-5 py-3.5 font-semibold text-theme-text">{s.shift_name}</td>
                     <td className="px-5 py-3.5 font-medium text-xs text-theme-text-dim">
                       {reportTypes.find(rt => rt.id === s.report_type_id)?.name.replace(/_/g, " ") || `ID: ${s.report_type_id}`}
