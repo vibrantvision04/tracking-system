@@ -43,6 +43,22 @@ func (c *Checker) Check(ctx context.Context, data decoder.AVLData) {
 	}
 
 	for _, g := range geofences {
+		gType := c.cache.GetGeofenceType(g.ID)
+
+		// Filter Zone geofences (region_type_id = 2) to only process assigned zone
+		if gType == 2 {
+			if v.ZoneGeofenceID == 0 || g.ID != v.ZoneGeofenceID {
+				continue
+			}
+		}
+
+		// Filter Ward geofences (region_type_id = 3) to only process assigned ward
+		if gType == 3 {
+			if v.WardGeofenceID == 0 || g.ID != v.WardGeofenceID {
+				continue
+			}
+		}
+
 		isInside := PointInPolygon(p, g.Points)
 		
 		// Get previous state from Redis

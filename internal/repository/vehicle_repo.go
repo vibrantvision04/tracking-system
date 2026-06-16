@@ -44,6 +44,8 @@ type Vehicle struct {
 	AssignedRouteID   int       `json:"assigned_route_id,omitempty"`
 	ZoneID         *int         `json:"zone_id,omitempty"`
 	WardID         *int         `json:"ward_id,omitempty"`
+	ZoneGeofenceID int          `json:"zone_geofence_id,omitempty"`
+	WardGeofenceID int          `json:"ward_geofence_id,omitempty"`
 }
 
 type VehicleRepository struct {
@@ -151,12 +153,16 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 			d.id, d.imei, COALESCE(d.serial_no, ''), COALESCE(d.sim_no, ''), COALESCE(d.device_type, ''), d.is_active, COALESCE(d.blocked, false),
 			COALESCE(lp.lat, 0), COALESCE(lp.lng, 0), lp.captured_at,
 			COALESCE(lp.speed, 0),
-			v.zone_id, v.ward_id
+			v.zone_id, v.ward_id,
+			COALESCE(z.geofence_id, 0) AS zone_geofence_id,
+			COALESCE(w.geofence_id, 0) AS ward_geofence_id
 		FROM vehicles v
 		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
 		JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 		JOIN gps_devices d ON m.device_id = d.id
 		LEFT JOIN latest_gps_data lp ON d.imei = lp.imei
+		LEFT JOIN regions z ON v.zone_id = z.id
+		LEFT JOIN regions w ON v.ward_id = w.id
 		WHERE d.imei = $1
 	`
 	var v Vehicle
@@ -172,6 +178,7 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 		&v.LastLat, &v.LastLng, &v.LastTime,
 		&speed,
 		&v.ZoneID, &v.WardID,
+		&v.ZoneGeofenceID, &v.WardGeofenceID,
 	)
 	if err != nil {
 		return nil, err

@@ -21,6 +21,7 @@ type GeofenceData struct {
 type Cache struct {
 	repo      *repository.GeofenceRepository
 	geofences []GeofenceData
+	types     map[int]int // geofence_id -> region_type_id (2 for Zone, 3 for Ward)
 	mu        sync.RWMutex
 }
 
@@ -131,6 +132,12 @@ func (c *Cache) refresh() {
 		return
 	}
 
+	dbTypes, err := c.repo.GetGeofenceTypes(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to refresh geofence types in cache")
+		dbTypes = make(map[int]int)
+	}
+
 	newData := make([]GeofenceData, 0, len(dbGeofences))
 	for _, g := range dbGeofences {
 		if g.Type != "polygon" {
@@ -151,6 +158,7 @@ func (c *Cache) refresh() {
 
 	c.mu.Lock()
 	c.geofences = newData
+	c.types = dbTypes
 	c.mu.Unlock()
 	log.Debug().Int("count", len(newData)).Msg("Geofence cache refreshed")
 }
@@ -159,4 +167,13 @@ func (c *Cache) GetActive() []GeofenceData {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.geofences
+}
+
+func (c *Cache) GetGeofenceType(gID int) int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.types == nil {
+		return 0
+	}
+	return c.types[gID]
 }

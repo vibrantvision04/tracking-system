@@ -59,3 +59,21 @@ func (r *GeofenceRepository) SaveEvent(ctx context.Context, e *GeofenceEvent) er
 			  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 	return r.pool.QueryRow(ctx, query, e.VehicleID, e.GeofenceID, e.EventType, e.Time, e.Lat, e.Lng).Scan(&e.ID)
 }
+
+func (r *GeofenceRepository) GetGeofenceTypes(ctx context.Context) (map[int]int, error) {
+	query := `SELECT geofence_id, region_type_id FROM regions WHERE geofence_id IS NOT NULL AND is_active = true`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	types := make(map[int]int)
+	for rows.Next() {
+		var gID, rType int
+		if err := rows.Scan(&gID, &rType); err == nil {
+			types[gID] = rType
+		}
+	}
+	return types, nil
+}
