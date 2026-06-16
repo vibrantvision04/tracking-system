@@ -107,6 +107,10 @@ export default function GTSTripReportPage() {
 		}
 	};
 
+	useEffect(() => {
+		loadReport();
+	}, []);
+
 	const handleExportCSV = () => {
 		if (data.length === 0) {
 			toast.warning("No data to export");
@@ -164,7 +168,7 @@ export default function GTSTripReportPage() {
 
 			<div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
 				{/* Filter Form Card */}
-				<Card className="border border-slate-200 bg-white rounded-xl shadow-sm print:hidden">
+				<Card className="border border-slate-200 bg-white rounded-xl shadow-sm print:hidden !overflow-visible">
 					<CardContent className="p-6">
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
 							<SearchableDropdown

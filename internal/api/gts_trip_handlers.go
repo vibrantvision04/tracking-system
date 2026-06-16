@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"gps-tracking-system/internal/decoder"
@@ -188,320 +189,337 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	results := make([]GTSTripReportRow, 0)
+	// Bulk load GPS data for all matching vehicles
+	var allGPSData map[int][]decoder.AVLData
+	if len(tasks) > 0 {
+		if filterVehicleID > 0 {
+			singleData, err := h.gpsRepo.GetByVehicle(ctx, filterVehicleID, dayStart, dayEnd)
+			if err != nil {
+				log.Error().Err(err).Int("vehicle_id", filterVehicleID).Msg("Failed to query GPS data for single vehicle")
+			}
+			allGPSData = map[int][]decoder.AVLData{
+				filterVehicleID: singleData,
+			}
+		} else {
+			allGPSData, err = h.gpsRepo.GetAllByTimeWindow(ctx, dayStart, dayEnd)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to query GPS data in bulk")
+				sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch GPS data: " + err.Error()})
+				return
+			}
+		}
+	} else {
+		allGPSData = make(map[int][]decoder.AVLData)
+	}
 
-	// Process each vehicle chronologically
-	for _, task := range tasks {
-		// 1. Parse Ward Geofence polygon points
-		var wardPolygonPoints []geofence.Point
-		if len(task.WardPolygon) > 0 {
-			coords, err := parsePolygonCoordinates(task.WardPolygon)
-			if err == nil {
-				for _, c := range coords {
-					if len(c) >= 2 {
-						wardPolygonPoints = append(wardPolygonPoints, geofence.Point{Lng: c[0], Lat: c[1]})
+	// Bulk load route checkpoints for all assigned routes
+	routeIDs := []int{}
+	routeIDMap := make(map[int]bool)
+	for _, t := range tasks {
+		if t.RouteID != nil {
+			if !routeIDMap[*t.RouteID] {
+				routeIDMap[*t.RouteID] = true
+				routeIDs = append(routeIDs, *t.RouteID)
+			}
+		}
+	}
+
+	checkpointsMap := make(map[int][]RouteCheckpointInfo)
+	if len(routeIDs) > 0 {
+		cpQuery := `
+			SELECT route_id, id, latitude, longitude, radius_meters, sequence_order
+			FROM route_checkpoints
+			WHERE route_id = ANY($1)
+			ORDER BY route_id, sequence_order ASC
+		`
+		cpRows, err := db.Query(ctx, cpQuery, routeIDs)
+		if err == nil {
+			defer cpRows.Close()
+			for cpRows.Next() {
+				var rID int
+				var cp RouteCheckpointInfo
+				if err := cpRows.Scan(&rID, &cp.ID, &cp.Latitude, &cp.Longitude, &cp.RadiusMeters, &cp.SequenceOrder); err == nil {
+					checkpointsMap[rID] = append(checkpointsMap[rID], cp)
+				}
+			}
+		} else {
+			log.Error().Err(err).Msg("Failed to query route checkpoints in bulk")
+		}
+	}
+
+	results := make([]GTSTripReportRow, len(tasks))
+	var wg sync.WaitGroup
+
+	for idx, task := range tasks {
+		wg.Add(1)
+		go func(idx int, task VehicleTask) {
+			defer wg.Done()
+
+			// 1. Parse Ward Geofence polygon points
+			var wardPolygonPoints []geofence.Point
+			if len(task.WardPolygon) > 0 {
+				coords, err := parsePolygonCoordinates(task.WardPolygon)
+				if err == nil {
+					for _, c := range coords {
+						if len(c) >= 2 {
+							wardPolygonPoints = append(wardPolygonPoints, geofence.Point{Lng: c[0], Lat: c[1]})
+						}
 					}
 				}
 			}
-		}
 
-		// 2. Fetch Route Checkpoints if route is assigned
-		var checkpoints []RouteCheckpointInfo
-		if task.RouteID != nil {
-			cpRows, err := db.Query(ctx, `
-				SELECT id, latitude, longitude, radius_meters, sequence_order
-				FROM route_checkpoints
-				WHERE route_id = $1
-				ORDER BY sequence_order ASC
-			`, *task.RouteID)
-			if err == nil {
-				for cpRows.Next() {
-					var cp RouteCheckpointInfo
-					if err := cpRows.Scan(&cp.ID, &cp.Latitude, &cp.Longitude, &cp.RadiusMeters, &cp.SequenceOrder); err == nil {
-						checkpoints = append(checkpoints, cp)
-					}
+			// 2. Get Route Checkpoints from the bulk map
+			var checkpoints []RouteCheckpointInfo
+			if task.RouteID != nil {
+				checkpoints = checkpointsMap[*task.RouteID]
+			}
+
+			// 3. Get GPS data from the bulk map
+			gpsData := allGPSData[task.ID]
+
+			// Smooth data
+			gpsData = smoothGpsData(gpsData)
+			if len(gpsData) == 0 {
+				results[idx] = GTSTripReportRow{
+					VehicleID:        task.ID,
+					RegistrationNo:   task.RegistrationNo,
+					ZoneName:         task.ZoneName,
+					WardName:         task.WardName,
+					TripCount:        0,
+					RejectedCount:    0,
+					RejectionReasons: []string{"No GPS data available"},
 				}
-				cpRows.Close()
-			}
-		}
-
-		// 3. Fetch historical GPS data for this vehicle
-		gpsData, err := h.gpsRepo.GetByVehicle(ctx, task.ID, dayStart, dayEnd)
-		if err != nil {
-			log.Error().Err(err).Int("vehicle_id", task.ID).Msg("Failed to query GPS data for GTS Trip report")
-			continue
-		}
-
-		// Smooth data
-		gpsData = smoothGpsData(gpsData)
-		if len(gpsData) == 0 {
-			// No data, trip count is 0
-			results = append(results, GTSTripReportRow{
-				VehicleID:        task.ID,
-				RegistrationNo:   task.RegistrationNo,
-				ZoneName:         task.ZoneName,
-				WardName:         task.WardName,
-				TripCount:        0,
-				RejectedCount:    0,
-				RejectionReasons: []string{"No GPS data available"},
-			})
-			continue
-		}
-
-		// 4. Chronological State-Machine Validation Engine
-		tripCount := 0
-		rejectedCount := 0
-		var rejectionReasons []string
-		eligibleForDump := false
-		var cooldownUntil *time.Time
-		var lastInsideWardTime *time.Time
-		var insideWardDuration time.Duration
-
-		// Route activity state
-		laneCheckpointsValidated := make(map[int]bool)
-		routeDistanceCovered := 0.0
-
-		// Transfer station session state
-		sessionActive := false
-		var sessionIgnitionOnStartTime *time.Time
-		var sessionMaxContinuousIgnitionOnTime time.Duration
-		var sessionMaxSpeed float64
-		sessionTouchedDump := false
-		sessionTSID := 0
-		var sessionStartTime *time.Time
-
-		var prevPt *decoder.AVLData
-
-		for idx, pt := range gpsData {
-			isLastPoint := idx == len(gpsData)-1
-
-			// Check if cooldown timer has completed
-			cooldownComplete := cooldownUntil == nil || pt.Time.After(*cooldownUntil) || pt.Time.Equal(*cooldownUntil)
-
-			// --- WARD STAY TIME VALIDATION ---
-			isInsideWard := false
-			if len(wardPolygonPoints) > 0 {
-				isInsideWard = geofence.PointInPolygon(geofence.Point{Lat: pt.Lat, Lng: pt.Lng}, wardPolygonPoints)
-			} else {
-				// Fallback if ward has no geofence: treat as inside ward
-				isInsideWard = true
+				return
 			}
 
-			if isInsideWard {
-				if lastInsideWardTime != nil {
-					diff := pt.Time.Sub(*lastInsideWardTime)
-					if diff < 15*time.Minute {
-						insideWardDuration += diff
-					}
+			// 4. Chronological State-Machine Validation Engine
+			tripCount := 0
+			rejectedCount := 0
+			var rejectionReasons []string
+			eligibleForDump := false
+			var cooldownUntil *time.Time
+			var lastInsideWardTime *time.Time
+			var insideWardDuration time.Duration
+
+			// Route activity state
+			laneCheckpointsValidated := make(map[int]bool)
+			routeDistanceCovered := 0.0
+
+			// Transfer station session state
+			sessionActive := false
+			var sessionIgnitionOnStartTime *time.Time
+			var sessionMaxContinuousIgnitionOnTime time.Duration
+			var sessionMaxSpeed float64
+			sessionTouchedDump := false
+			sessionTSID := 0
+			var sessionStartTime *time.Time
+
+			var prevPt *decoder.AVLData
+
+			for idx, pt := range gpsData {
+				isLastPoint := idx == len(gpsData)-1
+				cooldownComplete := cooldownUntil == nil || pt.Time.After(*cooldownUntil) || pt.Time.Equal(*cooldownUntil)
+
+				// --- WARD STAY TIME VALIDATION ---
+				isInsideWard := false
+				if len(wardPolygonPoints) > 0 {
+					isInsideWard = geofence.PointInPolygon(geofence.Point{Lat: pt.Lat, Lng: pt.Lng}, wardPolygonPoints)
+				} else {
+					isInsideWard = true
 				}
-				t := pt.Time
-				lastInsideWardTime = &t
-			} else {
-				lastInsideWardTime = nil
-			}
 
-			// Check if within any checkpoint
-			for _, cp := range checkpoints {
-				distToCP := utils.Haversine(pt.Lat, pt.Lng, cp.Latitude, cp.Longitude) * 1000.0
-				if distToCP <= cp.RadiusMeters {
-					laneCheckpointsValidated[cp.ID] = true
-				}
-			}
-
-			// Calculate route distance covered (speed > 3 km/h on route)
-			if pt.Speed > 3.0 && prevPt != nil {
-				dist := utils.Haversine(prevPt.Lat, prevPt.Lng, pt.Lat, pt.Lng) // in km
 				if isInsideWard {
-					routeDistanceCovered += dist
+					if lastInsideWardTime != nil {
+						diff := pt.Time.Sub(*lastInsideWardTime)
+						if diff < 15*time.Minute {
+							insideWardDuration += diff
+						}
+					}
+					t := pt.Time
+					lastInsideWardTime = &t
+				} else {
+					lastInsideWardTime = nil
 				}
-			}
 
-			// --- ELIGIBILITY EVALUATION ---
-			wardTimeSatisfied := insideWardDuration >= 10*time.Minute
-			routeActivitySatisfied := false
+				// Check if within any checkpoint
+				for _, cp := range checkpoints {
+					distToCP := utils.Haversine(pt.Lat, pt.Lng, cp.Latitude, cp.Longitude) * 1000.0
+					if distToCP <= cp.RadiusMeters {
+						laneCheckpointsValidated[cp.ID] = true
+					}
+				}
 
-			if len(checkpoints) > 0 {
-				if len(laneCheckpointsValidated) >= 1 {
-					// Hitting a checkpoint is ultimate proof of route activity
-					routeActivitySatisfied = true
-					// If they hit a checkpoint, forgive the ward stay time (in case of inaccurate polygons)
-					wardTimeSatisfied = true
+				// Calculate route distance covered
+				if pt.Speed > 3.0 && prevPt != nil {
+					dist := utils.Haversine(prevPt.Lat, prevPt.Lng, pt.Lat, pt.Lng)
+					if isInsideWard {
+						routeDistanceCovered += dist
+					}
+				}
+
+				// --- ELIGIBILITY EVALUATION ---
+				wardTimeSatisfied := insideWardDuration >= 10*time.Minute
+				routeActivitySatisfied := false
+
+				if len(checkpoints) > 0 {
+					if len(laneCheckpointsValidated) >= 1 {
+						routeActivitySatisfied = true
+						wardTimeSatisfied = true
+					} else {
+						routeActivitySatisfied = routeDistanceCovered > 0
+					}
 				} else {
 					routeActivitySatisfied = routeDistanceCovered > 0
 				}
-			} else {
-				routeActivitySatisfied = routeDistanceCovered > 0
-			}
 
-			if tripCount == 0 {
-				// Phase 1 Eligibility Rules
-				if wardTimeSatisfied && routeActivitySatisfied {
-					eligibleForDump = true
-				}
-			} else {
-				// Phase 4 Eligibility Rules
-				if cooldownComplete && wardTimeSatisfied && routeActivitySatisfied {
-					eligibleForDump = true
-				}
-			}
-
-			// --- TRANSFER STATION SESSION TRACKING ---
-			// Check if inside any transfer station geofence
-			var enteredTS *TransferStationInfo
-			for _, ts := range transferStations {
-				if len(ts.PolygonPoints) > 0 {
-					if geofence.PointInPolygon(geofence.Point{Lat: pt.Lat, Lng: pt.Lng}, ts.PolygonPoints) {
-						enteredTS = &ts
-						break
+				if tripCount == 0 {
+					if wardTimeSatisfied && routeActivitySatisfied {
+						eligibleForDump = true
 					}
-				}
-			}
-
-			if !sessionActive && enteredTS != nil {
-				// Phase 2 Entry Validation: Session starts on entry
-				sessionActive = true
-				sessionMaxSpeed = pt.Speed
-				sessionTouchedDump = false
-				sessionMaxContinuousIgnitionOnTime = 0
-				sessionTSID = enteredTS.ID
-				tStart := pt.Time
-				sessionStartTime = &tStart
-				if pt.Ignition {
-					t := pt.Time
-					sessionIgnitionOnStartTime = &t
 				} else {
-					sessionIgnitionOnStartTime = nil
+					if cooldownComplete && wardTimeSatisfied && routeActivitySatisfied {
+						eligibleForDump = true
+					}
 				}
-			}
 
-			if sessionActive {
-				// We are in a session. Check if still in the same TS
-				stillInTS := enteredTS != nil && enteredTS.ID == sessionTSID
-
-				if stillInTS {
-					// Inside. Update stats
-					if pt.Speed > sessionMaxSpeed {
-						sessionMaxSpeed = pt.Speed
-					}
-					
-					// Update continuous ignition ON time
-					if pt.Ignition {
-						if sessionIgnitionOnStartTime == nil {
-							t := pt.Time
-							sessionIgnitionOnStartTime = &t
-						} else {
-							currentDuration := pt.Time.Sub(*sessionIgnitionOnStartTime)
-							if currentDuration > sessionMaxContinuousIgnitionOnTime {
-								sessionMaxContinuousIgnitionOnTime = currentDuration
-							}
-						}
-					} else {
-						// Ignition turned OFF: reset the count of 60 seconds and finalize current continuous block
-						if sessionIgnitionOnStartTime != nil {
-							stretchDuration := pt.Time.Sub(*sessionIgnitionOnStartTime)
-							if stretchDuration > sessionMaxContinuousIgnitionOnTime {
-								sessionMaxContinuousIgnitionOnTime = stretchDuration
-							}
-							sessionIgnitionOnStartTime = nil
-						}
-					}
-
-					// Check if touches dump zone boundary
-					for _, ts := range transferStations {
-						if ts.ID == sessionTSID {
-							distToDump := utils.Haversine(pt.Lat, pt.Lng, ts.DumpZoneLat, ts.DumpZoneLng) * 1000.0
-							if distToDump <= ts.DumpZoneRad {
-								sessionTouchedDump = true
-							}
+				// --- TRANSFER STATION SESSION TRACKING ---
+				var enteredTS *TransferStationInfo
+				for _, ts := range transferStations {
+					if len(ts.PolygonPoints) > 0 {
+						if geofence.PointInPolygon(geofence.Point{Lat: pt.Lat, Lng: pt.Lng}, ts.PolygonPoints) {
+							enteredTS = &ts
 							break
 						}
 					}
 				}
 
-				// Exit trigger: left TS geofence or end of day
-				if !stillInTS || isLastPoint {
-					sessionActive = false
-					
-					// Finalize continuous ignition ON duration if it was still active
-					if sessionIgnitionOnStartTime != nil {
-						stretchDuration := pt.Time.Sub(*sessionIgnitionOnStartTime)
-						if stretchDuration > sessionMaxContinuousIgnitionOnTime {
-							sessionMaxContinuousIgnitionOnTime = stretchDuration
-						}
-					}
-
-					minStayPassed := sessionMaxContinuousIgnitionOnTime >= 60*time.Second
-					speedValid := true // Temporarily removed 5 km/h limitation as per user request
-					dumpZoneValid := sessionTouchedDump
-
-					var sessionDuration time.Duration
-					if sessionStartTime != nil {
-						sessionDuration = pt.Time.Sub(*sessionStartTime)
-					}
-
-					if eligibleForDump && minStayPassed && speedValid && dumpZoneValid {
-						// VALID TRIP!
-						tripCount++
-
-						// Start Phase 3 Cooldown (20 minutes)
-						cooldownEnd := pt.Time.Add(20 * time.Minute)
-						cooldownUntil = &cooldownEnd
-
-						// Reset state for subsequent trip checks
-						eligibleForDump = false
-						insideWardDuration = 0
-						routeDistanceCovered = 0.0
+				if !sessionActive && enteredTS != nil {
+					sessionActive = true
+					sessionMaxSpeed = pt.Speed
+					sessionTouchedDump = false
+					sessionMaxContinuousIgnitionOnTime = 0
+					sessionTSID = enteredTS.ID
+					tStart := pt.Time
+					sessionStartTime = &tStart
+					if pt.Ignition {
+						t := pt.Time
+						sessionIgnitionOnStartTime = &t
 					} else {
-						// REJECTED TRIP
-
-						// Ignore pass-bys and GPS bounces
-						// If the vehicle didn't touch the dump zone AND stayed in the TS geofence for less than 2 minutes,
-						// it was a drive-by or GPS jitter. Do not count as a trip.
-						if !dumpZoneValid && sessionDuration < 2*time.Minute {
-							// Ignored
-						} else {
-							rejectedCount++
-							reasonStr := fmt.Sprintf("[%s] Rejected: ", pt.Time.Format("15:04"))
-						var rList []string
-						if !eligibleForDump {
-							rList = append(rList, "Not eligible (ward stay < 10m or no route activity)")
-						}
-						if !minStayPassed {
-							rList = append(rList, fmt.Sprintf("Ignition ON < 60s (was %ds)", int(sessionMaxContinuousIgnitionOnTime.Seconds())))
-						}
-						// Speed validation removed
-						if !dumpZoneValid {
-							rList = append(rList, "Didn't touch dump zone radius")
-						}
-						if len(rList) > 0 {
-							reasonStr += rList[0]
-							for i := 1; i < len(rList); i++ {
-								reasonStr += ", " + rList[i]
-							}
-						} else {
-							reasonStr += "Unknown reason"
-						}
-						rejectionReasons = append(rejectionReasons, reasonStr)
-						} // End of else block for ignored session
+						sessionIgnitionOnStartTime = nil
 					}
 				}
+
+				if sessionActive {
+					stillInTS := enteredTS != nil && enteredTS.ID == sessionTSID
+
+					if stillInTS {
+						if pt.Speed > sessionMaxSpeed {
+							sessionMaxSpeed = pt.Speed
+						}
+						
+						if pt.Ignition {
+							if sessionIgnitionOnStartTime == nil {
+								t := pt.Time
+								sessionIgnitionOnStartTime = &t
+							} else {
+								currentDuration := pt.Time.Sub(*sessionIgnitionOnStartTime)
+								if currentDuration > sessionMaxContinuousIgnitionOnTime {
+									sessionMaxContinuousIgnitionOnTime = currentDuration
+								}
+							}
+						} else {
+							if sessionIgnitionOnStartTime != nil {
+								stretchDuration := pt.Time.Sub(*sessionIgnitionOnStartTime)
+								if stretchDuration > sessionMaxContinuousIgnitionOnTime {
+									sessionMaxContinuousIgnitionOnTime = stretchDuration
+								}
+								sessionIgnitionOnStartTime = nil
+							}
+						}
+
+						for _, ts := range transferStations {
+							if ts.ID == sessionTSID {
+								distToDump := utils.Haversine(pt.Lat, pt.Lng, ts.DumpZoneLat, ts.DumpZoneLng) * 1000.0
+								if distToDump <= ts.DumpZoneRad {
+									sessionTouchedDump = true
+								}
+								break
+							}
+						}
+					}
+
+					if !stillInTS || isLastPoint {
+						sessionActive = false
+						
+						if sessionIgnitionOnStartTime != nil {
+							stretchDuration := pt.Time.Sub(*sessionIgnitionOnStartTime)
+							if stretchDuration > sessionMaxContinuousIgnitionOnTime {
+								sessionMaxContinuousIgnitionOnTime = stretchDuration
+							}
+						}
+
+						minStayPassed := sessionMaxContinuousIgnitionOnTime >= 60*time.Second
+						speedValid := true
+						dumpZoneValid := sessionTouchedDump
+
+						var sessionDuration time.Duration
+						if sessionStartTime != nil {
+							sessionDuration = pt.Time.Sub(*sessionStartTime)
+						}
+
+						if eligibleForDump && minStayPassed && speedValid && dumpZoneValid {
+							tripCount++
+							cooldownEnd := pt.Time.Add(20 * time.Minute)
+							cooldownUntil = &cooldownEnd
+							eligibleForDump = false
+							insideWardDuration = 0
+							routeDistanceCovered = 0.0
+						} else {
+							if !dumpZoneValid && sessionDuration < 2*time.Minute {
+								// Ignored
+							} else {
+								rejectedCount++
+								reasonStr := fmt.Sprintf("[%s] Rejected: ", pt.Time.Format("15:04"))
+								var rList []string
+								if !eligibleForDump {
+									rList = append(rList, "Not eligible (ward stay < 10m or no route activity)")
+								}
+								if !minStayPassed {
+									rList = append(rList, fmt.Sprintf("Ignition ON < 60s (was %ds)", int(sessionMaxContinuousIgnitionOnTime.Seconds())))
+								}
+								if !dumpZoneValid {
+									rList = append(rList, "Didn't touch dump zone radius")
+								}
+								if len(rList) > 0 {
+									reasonStr += rList[0]
+									for i := 1; i < len(rList); i++ {
+										reasonStr += ", " + rList[i]
+									}
+								} else {
+									reasonStr += "Unknown reason"
+								}
+								rejectionReasons = append(rejectionReasons, reasonStr)
+							}
+						}
+					}
+				}
+
+				currPt := pt
+				prevPt = &currPt
 			}
 
-			// Save previous point reference
-			currPt := pt
-			prevPt = &currPt
-		}
-
-		results = append(results, GTSTripReportRow{
-			VehicleID:        task.ID,
-			RegistrationNo:   task.RegistrationNo,
-			ZoneName:         task.ZoneName,
-			WardName:         task.WardName,
-			TripCount:        tripCount,
-			RejectedCount:    rejectedCount,
-			RejectionReasons: rejectionReasons,
-		})
+			results[idx] = GTSTripReportRow{
+				VehicleID:        task.ID,
+				RegistrationNo:   task.RegistrationNo,
+				ZoneName:         task.ZoneName,
+				WardName:         task.WardName,
+				TripCount:        tripCount,
+				RejectedCount:    rejectedCount,
+				RejectionReasons: rejectionReasons,
+			}
+		}(idx, task)
 	}
+	wg.Wait()
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
