@@ -1462,9 +1462,10 @@ export default function PlaybackPage() {
 
       map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
 
-      // 2. Draw dynamic covered route trail in vibrant solid orange
+      // 2. Draw dynamic covered route trail — color resolved later from assignedRouteData
+      // Initialise with a fallback; color will be updated once assignedRouteData is resolved below
       activeLineRef.current = L.polyline([matchedCoords[0], matchedCoords[0]], {
-        color: "#f97316", // Thick vibrant orange path showing dynamic progress
+        color: "#f97316", // Temporary fallback; replaced below when route color is known
         weight: 5.5,
         opacity: 0.95,
         lineCap: "round",
@@ -1666,11 +1667,20 @@ export default function PlaybackPage() {
           }
 
           const routeColor = assignedRouteData.color || "#3b82f6";
+
+          // Update the vehicle coverage trace to use the same color as the assigned route
+          // at full opacity so it stands out clearly against the faint route background.
+          if (activeLineRef.current) {
+            activeLineRef.current.setStyle({ color: routeColor, opacity: 0.95 });
+          }
+
+          // Draw planned route in the SAME color but at a much lighter opacity so it acts
+          // as a faint ghost/guide that doesn't compete visually with the vehicle path.
           assignedRouteLayerRef.current = L.geoJSON(parsedGeoJSON, {
             style: {
               color: routeColor,
               weight: 5,
-              opacity: 0.7,
+              opacity: 0.30, // Light ghost — same color as vehicle path but clearly behind it
               lineCap: "round",
               lineJoin: "round"
             },
