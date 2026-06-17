@@ -922,36 +922,7 @@ export default function PlaybackPage() {
                 noOfCommercials: isDB ? (rawLane.no_of_commercial ?? 0) : (rawLane.noOfCommercials ?? 0),
               };
 
-              // Draw highlighted lane segment
-              if (routePts.length >= 2) {
-                const startIdx = snapToRoute(L.latLng(lane.startLat, lane.startLng), routePts).index;
-                const endIdx = snapToRoute(L.latLng(lane.endLat, lane.endLng), routePts).index;
-                if (startIdx >= 0 && endIdx >= 0) {
-                  let segmentCoords: any[] = [];
-                  const startPt = L.latLng(lane.startLat, lane.startLng);
-                  const endPt = L.latLng(lane.endLat, lane.endLng);
-
-                  if (startIdx <= endIdx) {
-                    segmentCoords = [
-                      startPt,
-                      ...routePts.slice(startIdx, endIdx + 1),
-                      endPt,
-                    ];
-                  } else {
-                    segmentCoords = [
-                      startPt,
-                      ...routePts.slice(endIdx, startIdx + 1).reverse(),
-                      endPt,
-                    ];
-                  }
-
-                  L.polyline(segmentCoords, {
-                    color: "#3b82f6", // Blue for lanes
-                    weight: 6,
-                    opacity: 0.8,
-                  }).addTo(layer);
-                }
-              }
+              // Lane segment polylines intentionally not drawn — only start/end pin markers are shown.
 
               // Draw start pin (Green)
               L.marker([lane.startLat, lane.startLng], { 
