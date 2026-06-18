@@ -868,23 +868,27 @@ export default function PlaybackPage() {
         
         const routeColor = route.color || "#fba339";
         
-        // Render route line
-        const routeGeo = L.geoJSON(feature, {
-          style: {
-            color: routeColor,
-            weight: isSingleRouteSelected ? 6 : 4,
-            opacity: isSingleRouteSelected ? 0.95 : 0.65,
-          }
-        }).addTo(layer);
+        // When a vehicle is selected for playback, the route line is rendered by assignedRouteLayerRef
+        // inside loadRoute() at a lighter ghost opacity. Skip drawing it here to prevent a thick
+        // colored overlay competing with the vehicle's actual path trace.
+        if (!selectedImei) {
+          const routeGeo = L.geoJSON(feature, {
+            style: {
+              color: routeColor,
+              weight: isSingleRouteSelected ? 6 : 4,
+              opacity: isSingleRouteSelected ? 0.95 : 0.65,
+            }
+          }).addTo(layer);
 
-        routeGeo.bindPopup(`
-          <div style="font-family:Inter,sans-serif;font-size:12px;padding:4px;color:#1e293b;">
-            <b style="font-size:14px;color:${routeColor};">${route.route_name}</b><br/>
-            <span style="color:#64748b;font-weight:bold;">ID: ${route.identification}</span><br/>
-            <span style="color:#64748b;">Distance: ${route.distance} km</span><br/>
-            ${route.shift_name ? `<span style="color:#4f46e5;">Shift: ${route.shift_name}</span>` : ''}
-          </div>
-        `);
+          routeGeo.bindPopup(`
+            <div style="font-family:Inter,sans-serif;font-size:12px;padding:4px;color:#1e293b;">
+              <b style="font-size:14px;color:${routeColor};">${route.route_name}</b><br/>
+              <span style="color:#64748b;font-weight:bold;">ID: ${route.identification}</span><br/>
+              <span style="color:#64748b;">Distance: ${route.distance} km</span><br/>
+              ${route.shift_name ? `<span style="color:#4f46e5;">Shift: ${route.shift_name}</span>` : ''}
+            </div>
+          `);
+        }
 
         // If a specific route is selected, also draw its lanes and pin drop markers
         if (isSingleRouteSelected && route.lanes) {
