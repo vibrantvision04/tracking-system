@@ -154,6 +154,7 @@ interface Route {
   route_type_name: string; geometry_id?: number; ward_id?: number; ward_name: string;
   shift_id?: number; shift_name: string; lanes: any[]; is_active: boolean; geojson: string;
   color: string; updated_at: string;
+  is_sequential?: boolean; corridor_meters?: number; route_direction?: string; seq_lookahead?: number;
 }
 
 export default function RoutePage() {
@@ -171,6 +172,7 @@ export default function RoutePage() {
   const [form, setForm] = useState({
     name: "", identification: "", wardId: "", shiftId: "", routeTypeId: "1",
     distance: 0, color: "#fba339", geojson: "", lanes: [] as any[],
+    isSequential: false, corridorMeters: 50, routeDirection: "both", seqLookahead: 5
   });
 
   const [routeCoords, setRouteCoords] = useState<Coordinate[]>([]);
@@ -267,6 +269,7 @@ export default function RoutePage() {
       name: "", identification: "", wardId: wards[0]?.id ? String(wards[0].id) : "",
       shiftId: shifts[0]?.id ? String(shifts[0].id) : "", routeTypeId: "1", distance: 0,
       color: "#fba339", geojson: "", lanes: [],
+      isSequential: false, corridorMeters: 50, routeDirection: "both", seqLookahead: 5
     });
     setLanesJSONInput("");
     setRouteCoords([]); setIsFormOpen(true);
@@ -278,6 +281,10 @@ export default function RoutePage() {
       name: route.route_name, identification: route.identification, wardId: route.ward_id ? String(route.ward_id) : "",
       shiftId: route.shift_id ? String(route.shift_id) : "", routeTypeId: String(route.route_type_id),
       distance: route.distance, color: route.color || "#fba339", geojson: route.geojson || "", lanes: route.lanes || [],
+      isSequential: !!route.is_sequential,
+      corridorMeters: route.corridor_meters ?? 50,
+      routeDirection: route.route_direction || "both",
+      seqLookahead: route.seq_lookahead ?? 5
     });
     setLanesJSONInput(route.lanes ? JSON.stringify({ lanes: route.lanes }, null, 2) : "");
     let coords: Coordinate[] = [];
@@ -341,6 +348,7 @@ export default function RoutePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.identification) { toast.error("Route name and Identification are required."); return; }
+    if (form.isSequential && form.corridorMeters <= 0) { toast.error("Corridor width must be greater than 0."); return; }
     
     let finalGeoJSON = form.geojson;
     if (routeCoords.length > 0 && !finalGeoJSON) {
@@ -351,6 +359,10 @@ export default function RoutePage() {
       route_name: form.name, identification: form.identification, distance: Number(form.distance),
       route_type_id: Number(form.routeTypeId), ward_id: form.wardId ? Number(form.wardId) : null,
       shift_id: form.shiftId ? Number(form.shiftId) : null, geojson: finalGeoJSON, color: form.color, lanes: form.lanes,
+      is_sequential: form.isSequential,
+      corridor_meters: Number(form.corridorMeters),
+      route_direction: form.routeDirection,
+      seq_lookahead: Number(form.seqLookahead)
     };
 
     setSubmitting(true);
@@ -451,6 +463,61 @@ export default function RoutePage() {
                       </div>
                     </div>
 
+                    {/* Sequential Route Configuration */}
+                    <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl mb-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">Sequential Validation</h4>
+                          <p className="text-[10px] text-theme-text-dim mt-0.5">Enforce snapping in precise sequence along lane points.</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={form.isSequential}
+                            onChange={(e) => setForm(prev => ({ ...prev, isSequential: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-theme-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
+                      </div>
+
+                      {form.isSequential && (
+                        <div className="grid grid-cols-3 gap-4 pt-2 border-t border-amber-500/10 animate-fade-in">
+                          <div>
+                            <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5 block">Corridor (m)</label>
+                            <input
+                              type="number"
+                              min="0.1"
+                              value={form.corridorMeters}
+                              onChange={(e) => setForm(prev => ({ ...prev, corridorMeters: Number(e.target.value) }))}
+                              className="w-full px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text outline-none focus:border-amber-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5 block">Lookahead</label>
+                            <input
+                              type="number"
+                              value={form.seqLookahead}
+                              onChange={(e) => setForm(prev => ({ ...prev, seqLookahead: Number(e.target.value) }))}
+                              className="w-full px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text outline-none focus:border-amber-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5 block">Direction</label>
+                            <select
+                              value={form.routeDirection}
+                              onChange={(e) => setForm(prev => ({ ...prev, routeDirection: e.target.value }))}
+                              className="w-full px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text outline-none focus:border-amber-500"
+                            >
+                              <option value="both">Both</option>
+                              <option value="outbound">Outbound</option>
+                              <option value="return">Return</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Lanes JSON Input (Enabled only when route coords/geojson is present) */}
                     <div className="flex flex-col mb-4">
                       <label className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-1.5 block">
@@ -499,7 +566,14 @@ export default function RoutePage() {
                 {filteredRoutes.map((route, idx) => (
                   <tr key={route.id} className="hover:bg-theme-base/40 transition-colors group">
                     <td className="py-3 px-5 text-center text-theme-text-dim font-mono text-[11px]">{idx + 1}</td>
-                    <td className="py-3 px-5 font-semibold text-theme-text">{route.route_name}</td>
+                    <td className="py-3 px-5 font-semibold text-theme-text">
+                      {route.route_name}
+                      {route.is_sequential && (
+                        <span className="ml-2 px-1.5 py-0.5 text-[9px] bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded font-semibold uppercase tracking-wider">
+                          Seq
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3 px-5 text-theme-text-dim">{route.identification}</td>
                     <td className="py-3 px-5 font-mono font-semibold text-theme-accent">{route.distance}</td>
                     <td className="py-3 px-5 text-theme-text-dim">{route.ward_name || "-"}</td>

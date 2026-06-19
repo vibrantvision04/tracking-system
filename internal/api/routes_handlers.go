@@ -31,6 +31,10 @@ type RouteResponse struct {
 	GeoJSON        string          `json:"geojson"`
 	Color          string          `json:"color"`
 	UpdatedAt      time.Time       `json:"updated_at"`
+	IsSequential   bool            `json:"is_sequential"`
+	CorridorMeters float64         `json:"corridor_meters"`
+	RouteDirection string          `json:"route_direction"`
+	SeqLookahead   int             `json:"seq_lookahead"`
 }
 
 type CreateRouteRequest struct {
@@ -43,6 +47,10 @@ type CreateRouteRequest struct {
 	GeoJSON        string          `json:"geojson"`
 	Color          string          `json:"color"`
 	Lanes          json.RawMessage `json:"lanes"`
+	IsSequential   *bool           `json:"is_sequential"`
+	CorridorMeters *float64        `json:"corridor_meters"`
+	RouteDirection string          `json:"route_direction"`
+	SeqLookahead   *int            `json:"seq_lookahead"`
 }
 
 // GetRouteTypes returns all route types from the database.
@@ -301,7 +309,11 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 			COALESCE(s.shift_name, ''),
 			COALESCE(g.polygon::text, ''),
 			COALESCE(g.color, ''),
-			COALESCE(rt.name, 'D2D')
+			COALESCE(rt.name, 'D2D'),
+			COALESCE(r.is_sequential, false),
+			COALESCE(r.corridor_meters, 50.0),
+			COALESCE(r.route_direction, 'both'),
+			COALESCE(r.seq_lookahead, 5)
 		FROM routes r
 		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
 		LEFT JOIN regions w ON rw.ward_id = w.id
@@ -326,6 +338,7 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 			&r.ID, &r.RouteName, &r.Identification, &r.Distance, &r.RouteTypeID,
 			&r.GeometryID, &r.WardID, &r.ShiftID, &lanes, &r.IsActive, &r.UpdatedAt,
 			&r.WardName, &r.ShiftName, &r.GeoJSON, &r.Color, &r.RouteTypeName,
+			&r.IsSequential, &r.CorridorMeters, &r.RouteDirection, &r.SeqLookahead,
 		); err == nil {
 			if len(lanes) > 0 {
 				r.Lanes = json.RawMessage(lanes)
@@ -371,7 +384,11 @@ func (h *Handler) GetRouteByID(w http.ResponseWriter, r *http.Request) {
 			COALESCE(s.shift_name, ''),
 			COALESCE(g.polygon::text, ''),
 			COALESCE(g.color, ''),
-			COALESCE(rt.name, 'D2D')
+			COALESCE(rt.name, 'D2D'),
+			COALESCE(r.is_sequential, false),
+			COALESCE(r.corridor_meters, 50.0),
+			COALESCE(r.route_direction, 'both'),
+			COALESCE(r.seq_lookahead, 5)
 		FROM routes r
 		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards WHERE route_id = r.id LIMIT 1) rw ON true
 		LEFT JOIN regions w ON rw.ward_id = w.id
@@ -389,6 +406,7 @@ func (h *Handler) GetRouteByID(w http.ResponseWriter, r *http.Request) {
 		&route.ID, &route.RouteName, &route.Identification, &route.Distance, &route.RouteTypeID,
 		&route.GeometryID, &route.WardID, &route.ShiftID, &lanes, &route.IsActive, &updatedAt,
 		&route.WardName, &route.ShiftName, &route.GeoJSON, &color, &route.RouteTypeName,
+		&route.IsSequential, &route.CorridorMeters, &route.RouteDirection, &route.SeqLookahead,
 	)
 	if err != nil {
 		sendJSON(w, http.StatusNotFound, map[string]string{"error": "Route not found: " + err.Error()})
@@ -438,12 +456,29 @@ func (h *Handler) CreateRoute(w http.ResponseWriter, r *http.Request) {
 		lanesJSON = req.Lanes
 	}
 
+	isSeq := false
+	if req.IsSequential != nil {
+		isSeq = *req.IsSequential
+	}
+	corridor := 50.0
+	if req.CorridorMeters != nil {
+		corridor = *req.CorridorMeters
+	}
+	routeDir := "both"
+	if req.RouteDirection != "" {
+		routeDir = req.RouteDirection
+	}
+	lookahead := 5
+	if req.SeqLookahead != nil {
+		lookahead = *req.SeqLookahead
+	}
+
 	var routeID int
 	err := h.gpsRepo.Pool().QueryRow(ctx, `
-		INSERT INTO routes (route_name, identification, distance, route_type_id, geometry_id, shift_id, lanes, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true)
+		INSERT INTO routes (route_name, identification, distance, route_type_id, geometry_id, shift_id, lanes, is_active, is_sequential, corridor_meters, route_direction, seq_lookahead)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true, $8, $9, $10, $11)
 		RETURNING id
-	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON).Scan(&routeID)
+	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, isSeq, corridor, routeDir, lookahead).Scan(&routeID)
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create route: " + err.Error()})
@@ -528,14 +563,32 @@ func (h *Handler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 		lanesJSON = req.Lanes
 	}
 
+	isSeq := false
+	if req.IsSequential != nil {
+		isSeq = *req.IsSequential
+	}
+	corridor := 50.0
+	if req.CorridorMeters != nil {
+		corridor = *req.CorridorMeters
+	}
+	routeDir := "both"
+	if req.RouteDirection != "" {
+		routeDir = req.RouteDirection
+	}
+	lookahead := 5
+	if req.SeqLookahead != nil {
+		lookahead = *req.SeqLookahead
+	}
+
 	// 3. Update route details
 	_, err = h.gpsRepo.Pool().Exec(ctx, `
 		UPDATE routes 
 		SET route_name = $1, identification = $2, distance = $3, 
 		    route_type_id = $4, geometry_id = $5, 
-		    shift_id = $6, lanes = $7::jsonb
+		    shift_id = $6, lanes = $7::jsonb,
+		    is_sequential = $9, corridor_meters = $10, route_direction = $11, seq_lookahead = $12
 		WHERE id = $8
-	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, routeID)
+	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, routeID, isSeq, corridor, routeDir, lookahead)
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update route: " + err.Error()})

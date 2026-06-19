@@ -10,14 +10,18 @@ import (
 )
 
 type Route struct {
-	ID             int       `json:"id"`
-	RouteName      string    `json:"route_name"`
-	Identification string    `json:"identification"`
-	Distance       float64   `json:"distance"`
-	RouteTypeID    int       `json:"route_type_id"`
-	GeometryID     int       `json:"geometry_id"`
-	IsActive       bool      `json:"is_active"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID              int       `json:"id"`
+	RouteName       string    `json:"route_name"`
+	Identification  string    `json:"identification"`
+	Distance        float64   `json:"distance"`
+	RouteTypeID     int       `json:"route_type_id"`
+	GeometryID      int       `json:"geometry_id"`
+	IsActive        bool      `json:"is_active"`
+	CreatedAt       time.Time `json:"created_at"`
+	IsSequential    bool      `json:"is_sequential"`
+	CorridorMeters  float64   `json:"corridor_meters"`
+	RouteDirection  string    `json:"route_direction"`
+	SeqLookahead    int       `json:"seq_lookahead"`
 }
 
 type RouteCheckpoint struct {

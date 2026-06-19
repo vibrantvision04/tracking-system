@@ -112,6 +112,8 @@ function smoothGpsTrace(points: GpsDataPoint[]): GpsDataPoint[] {
 }
 
 import * as turf from "@turf/turf";
+import { RouteCheckpoint, haversineMeters, mapCheckpointsToRoadIndices, parseRouteGeoJSON, buildSequentialSnappedPlayback, buildSequentialSnappedPlaybackDetailed } from "@/lib/snapping";
+import { toast } from "react-toastify";
 
 function fetchMapMatchedRouteTurf(points: GpsDataPoint[], routeGeoJSON: any, toleranceMeters: number = 15): [number, number][] {
   if (points.length === 0) return [];
@@ -122,7 +124,7 @@ function fetchMapMatchedRouteTurf(points: GpsDataPoint[], routeGeoJSON: any, tol
   let routePts: [number, number][] = [];
   try {
     const geom = typeof routeGeoJSON === "string" ? JSON.parse(routeGeoJSON) : routeGeoJSON;
-    
+
     const extractCoords = (g: any) => {
       if (!g) return;
       if (g.type === "LineString") {
@@ -201,7 +203,7 @@ function fetchMapMatchedRouteTurf(points: GpsDataPoint[], routeGeoJSON: any, tol
 
       const dy = y2 - y1;
       const dx = (x2 - x1) * kx;
-      
+
       const py = y - y1;
       const px = (x - x1) * kx;
 
@@ -367,7 +369,7 @@ function formatDateTo12H(dateStr: string) {
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
-  
+
   let hours = d.getHours();
   const minutes = String(d.getMinutes()).padStart(2, '0');
   const seconds = String(d.getSeconds()).padStart(2, '0');
@@ -375,7 +377,7 @@ function formatDateTo12H(dateStr: string) {
   hours = hours % 12;
   hours = hours ? hours : 12;
   const hoursStr = String(hours).padStart(2, '0');
-  
+
   return `${day}-${month}-${year} ${hoursStr}:${minutes}:${seconds} ${ampm}`;
 }
 
@@ -489,7 +491,7 @@ export default function PlaybackPage() {
           } else {
             selectZoneForWard((veh as any).ward_id);
           }
-          
+
           const fallbackRoute = routesList.find(r => r.ward_id === (veh as any).ward_id);
           if (fallbackRoute) {
             setSelectedRouteId(String(fallbackRoute.id));
@@ -522,7 +524,7 @@ export default function PlaybackPage() {
           } else {
             selectZoneForWard((veh as any).ward_id);
           }
-          
+
           const fallbackRoute = routesList.find(r => r.ward_id === (veh as any).ward_id);
           if (fallbackRoute) {
             setSelectedRouteId(String(fallbackRoute.id));
@@ -535,10 +537,10 @@ export default function PlaybackPage() {
       });
   }, [vehicles, routesList, regionsList, date]);
 
-  // Visibility states
   const [showPlannedRoute, setShowPlannedRoute] = useState(true);
   const [showActualMovement, setShowActualMovement] = useState(true);
   const [showRawPlayback, setShowRawPlayback] = useState(true);
+  const [showRawGpsTrace, setShowRawGpsTrace] = useState(false);
   const [showRegionBoundary, setShowRegionBoundary] = useState(true);
   const [showStartEndPoint, setShowStartEndPoint] = useState(true);
   const [showStoppages, setShowStoppages] = useState(true);
@@ -565,11 +567,20 @@ export default function PlaybackPage() {
 
   // Playback States
   const [points, setPoints] = useState<GpsDataPoint[]>([]);
+  const [playbackSteps, setPlaybackSteps] = useState<{
+    lat: number;
+    lng: number;
+    time: string;
+    speed: number;
+    ignition: boolean | null;
+    gpsIndex: number;
+  }[]>([]);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [stoppages, setStoppages] = useState<StoppagePoint[]>([]);
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
 
+  const assignedRouteColorRef = useRef<string>("#f97316");
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const lineRef = useRef<any>(null);
@@ -588,9 +599,14 @@ export default function PlaybackPage() {
   const openDepotsLayerRef = useRef<any>(null);
 
   const matchedCoordsRef = useRef<[number, number][]>([]);
+  const roadCoordsRef = useRef<[number, number][]>([]);
+  const matchedRoadIndicesRef = useRef<number[]>([]);
+  const checkpointRoadIndicesRef = useRef<number[]>([]);
+  const checkpointsRef = useRef<any[]>([]);
   const activeLineRef = useRef<any>(null);
   const startMarkerRef = useRef<any>(null);
   const endMarkerRef = useRef<any>(null);
+  const rawTraceLineRef = useRef<any>(null);
 
   const pointsRef = useRef<GpsDataPoint[]>([]);
   const vehiclesRef = useRef<Vehicle[]>([]);
@@ -610,25 +626,32 @@ export default function PlaybackPage() {
 
   const jumpToKeyframe = useCallback((index: number) => {
     setPlaying(false);
-    setIdx(index);
-    const p = points[index];
-    if (p) {
+    const stepIdx = playbackSteps.findIndex(step => step.gpsIndex === index);
+    if (stepIdx !== -1) {
+      setIdx(stepIdx);
+      const step = playbackSteps[stepIdx];
       const map = mapRef.current;
-      const matched = matchedCoordsRef.current[index];
-      const targetLat = matched ? matched[0] : p.lat;
-      const targetLng = matched ? matched[1] : p.lng;
-      
       if (map) {
-        map.panTo([targetLat, targetLng]);
+        map.panTo([step.lat, step.lng]);
       }
       if (mkRef.current) {
         if (mkRef.current._icon) mkRef.current._icon.style.transition = 'none';
-        mkRef.current.setLatLng([targetLat, targetLng]);
+        mkRef.current.setLatLng([step.lat, step.lng]);
+
+        const originalPoint = pointsRef.current[index] || {};
+        const p: GpsDataPoint = {
+          ...originalPoint,
+          lat: step.lat,
+          lng: step.lng,
+          time: step.time,
+          speed: step.speed,
+          ignition: step.ignition,
+        };
         mkRef.current.setPopupContent(getPopupContent(p));
         mkRef.current.openPopup();
       }
     }
-  }, [points]);
+  }, [playbackSteps]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -647,7 +670,7 @@ export default function PlaybackPage() {
     const L = require("leaflet");
     let minDistance = Infinity;
     let closestIndex = 0;
-    
+
     for (let i = 0; i < matchedCoordsRef.current.length; i++) {
       const coord = matchedCoordsRef.current[i];
       const latlng = L.latLng(coord[0], coord[1]);
@@ -657,13 +680,13 @@ export default function PlaybackPage() {
         closestIndex = i;
       }
     }
-    
+
     const closestPoint = pointsRef.current[closestIndex];
     if (closestPoint) {
       const selectedVeh = vehiclesRef.current.find(v => v.gps_device?.imei === selectedImeiRef.current);
       const regNo = selectedVeh ? selectedVeh.registration_no : "Vehicle";
       const popupContent = getTracePopupContent(regNo, closestPoint);
-      
+
       L.popup()
         .setLatLng(clickLatLng)
         .setContent(popupContent)
@@ -675,7 +698,7 @@ export default function PlaybackPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    
+
     // 1. Raw Playback (Dashed gray line)
     if (lineRef.current) {
       if (showRawPlayback) {
@@ -741,11 +764,11 @@ export default function PlaybackPage() {
       }
     });
   }, [
-    showRawPlayback, 
-    showActualMovement, 
-    showStartEndPoint, 
-    showStoppages, 
-    showPlannedRoute, 
+    showRawPlayback,
+    showActualMovement,
+    showStartEndPoint,
+    showStoppages,
+    showPlannedRoute,
     showMajorStoppages,
     showMiniStoppages,
     showCoveredCheckpoints,
@@ -850,8 +873,8 @@ export default function PlaybackPage() {
     // Shift Filter (only apply when not filtered to a single vehicle)
     if (selectedShift && selectedShift !== "all" && !selectedImei) {
       filtered = filtered.filter(route => {
-        return route.shift_name === selectedShift || 
-               (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
+        return route.shift_name === selectedShift ||
+          (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
       });
     }
 
@@ -865,9 +888,9 @@ export default function PlaybackPage() {
         if (typeof feature === "string") {
           feature = JSON.parse(feature);
         }
-        
+
         const routeColor = route.color || "#fba339";
-        
+
         // When a vehicle is selected for playback, the route line is rendered by assignedRouteLayerRef
         // inside loadRoute() at a lighter ghost opacity. Skip drawing it here to prevent a thick
         // colored overlay competing with the vehicle's actual path trace.
@@ -915,7 +938,7 @@ export default function PlaybackPage() {
               const startLng = isDB ? (rawLane.start_point?.x ?? 0) : (rawLane.startLng ?? 0);
               const endLat = isDB ? (rawLane.end_point?.y ?? 0) : (rawLane.endLat ?? 0);
               const endLng = isDB ? (rawLane.end_point?.x ?? 0) : (rawLane.endLng ?? 0);
-              
+
               const lane = {
                 startLat,
                 startLng,
@@ -929,28 +952,28 @@ export default function PlaybackPage() {
               // Lane segment polylines intentionally not drawn — only start/end pin markers are shown.
 
               // Draw start pin (Green)
-              L.marker([lane.startLat, lane.startLng], { 
-                icon: createD2DPinIcon("start", lane.laneOrder) 
+              L.marker([lane.startLat, lane.startLng], {
+                icon: createD2DPinIcon("start", lane.laneOrder)
               })
-              .bindPopup(`
+                .bindPopup(`
                 <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
                   <b>Lane Set ${lane.laneOrder} - Start</b><br/>
                   <span style="color:#64748b;">Households: ${lane.noOfHouseholds || 0}</span>
                 </div>
               `)
-              .addTo(layer);
+                .addTo(layer);
 
               // Draw end pin (Red)
-              L.marker([lane.endLat, lane.endLng], { 
-                icon: createD2DPinIcon("end", lane.laneOrder) 
+              L.marker([lane.endLat, lane.endLng], {
+                icon: createD2DPinIcon("end", lane.laneOrder)
               })
-              .bindPopup(`
+                .bindPopup(`
                 <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
                   <b>Lane Set ${lane.laneOrder} - End</b><br/>
                   <span style="color:#64748b;">Commercials: ${lane.noOfCommercials || 0}</span>
                 </div>
               `)
-              .addTo(layer);
+                .addTo(layer);
             });
           }
         }
@@ -975,7 +998,7 @@ export default function PlaybackPage() {
         // ignore
       }
     }
-  }, [routesList, selectedZoneId, selectedWardId, selectedShift, selectedRouteId, regionsList, showPlannedRoute]);
+  }, [routesList, selectedZoneId, selectedWardId, selectedShift, selectedRouteId, regionsList, showPlannedRoute, selectedImei, vehicles]);
 
   const filteredRoutesDropdownList = (() => {
     if (!selectedWardId) {
@@ -986,8 +1009,8 @@ export default function PlaybackPage() {
     // Shift Filter
     if (selectedShift && selectedShift !== "all") {
       filtered = filtered.filter(route => {
-        return route.shift_name === selectedShift || 
-               (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
+        return route.shift_name === selectedShift ||
+          (route.shift_name && route.shift_name.toLowerCase().includes(selectedShift.toLowerCase().split(" ")[0]));
       });
     }
 
@@ -997,21 +1020,21 @@ export default function PlaybackPage() {
   // Load Initial Metadata
   useEffect(() => {
     api<{ data: Vehicle[] }>("/api/vehicles").then((r) => setVehicles(r.data || [])).catch(() => { });
-    api<{ data: any[] }>("/api/zones").then((res) => setZones(res.data || [])).catch(() => {});
+    api<{ data: any[] }>("/api/zones").then((res) => setZones(res.data || [])).catch(() => { });
     api<{ success: boolean; data: any[] }>("/api/regions").then((res) => {
       if (res.success) setRegionsList(res.data || []);
-    }).catch(() => {});
+    }).catch(() => { });
     api<{ success: boolean; data: any[] }>("/api/routes").then((res) => {
       if (res.success) setRoutesList(res.data || []);
-    }).catch(() => {});
+    }).catch(() => { });
     api<{ success: boolean; data: any[] }>("/api/shifts?group=VEHICLE_MOVEMENT").then((res) => {
       if (res.success) setShiftsList(res.data || []);
-    }).catch(() => {});
+    }).catch(() => { });
 
-    api<{ data: any[] }>("/api/parking-spots").then((res) => setParkingSpots(res.data || [])).catch(() => {});
-    api<{ data: any[] }>("/api/transfer-stations").then((res) => setTransferStations(res.data || [])).catch(() => {});
-    api<{ data: any[] }>("/api/fuel-stations").then((res) => setFuelStations(res.data || [])).catch(() => {});
-    api<{ data: any[] }>("/api/workshops").then((res) => setWorkshops(res.data || [])).catch(() => {});
+    api<{ data: any[] }>("/api/parking-spots").then((res) => setParkingSpots(res.data || [])).catch(() => { });
+    api<{ data: any[] }>("/api/transfer-stations").then((res) => setTransferStations(res.data || [])).catch(() => { });
+    api<{ data: any[] }>("/api/fuel-stations").then((res) => setFuelStations(res.data || [])).catch(() => { });
+    api<{ data: any[] }>("/api/workshops").then((res) => setWorkshops(res.data || [])).catch(() => { });
 
     if (typeof window !== "undefined") {
       try {
@@ -1095,7 +1118,7 @@ export default function PlaybackPage() {
     googleMapLayer.addTo(mapRef.current);
     boundaryLayerRef.current = L.layerGroup().addTo(mapRef.current);
     allRoutesLayerRef.current = L.layerGroup().addTo(mapRef.current);
-    
+
     parkingSpotsLayerRef.current = L.layerGroup().addTo(mapRef.current);
     transferStationsLayerRef.current = L.layerGroup().addTo(mapRef.current);
     fuelStationsLayerRef.current = L.layerGroup().addTo(mapRef.current);
@@ -1206,7 +1229,7 @@ export default function PlaybackPage() {
         if (!center || !center.geometry || !center.geometry.coordinates) return;
         const coords = center.geometry.coordinates;
         const latLng = [coords[1], coords[0]] as [number, number];
-        
+
         const color = item.color || defaultColor;
 
         // Draw Polygon Fencing Border
@@ -1268,13 +1291,31 @@ export default function PlaybackPage() {
     }
   }, [showOpenDepots]);
 
+  // Toggle visibility of raw GPS trace
+  useEffect(() => {
+    const map = mapRef.current;
+    const line = rawTraceLineRef.current;
+    if (!map || !line) return;
+    if (showRawGpsTrace) {
+      line.addTo(map);
+    } else {
+      map.removeLayer(line);
+    }
+  }, [showRawGpsTrace]);
+
   // Reusable helper to clear all playback state and layers from Leaflet map
   const clearPlaybackLayers = useCallback(() => {
     setPoints([]);
+    setPlaybackSteps([]);
+    assignedRouteColorRef.current = "#f97316";
     setIdx(0);
     setPlaying(false);
     setStoppages([]);
     setCheckpoints([]);
+    if (intervalRef.current) {
+      clearTimeout(intervalRef.current);
+      intervalRef.current = null;
+    }
 
     const map = mapRef.current;
     if (!map) return;
@@ -1300,6 +1341,11 @@ export default function PlaybackPage() {
       endMarkerRef.current = null;
     }
     matchedCoordsRef.current = [];
+    matchedRoadIndicesRef.current = [];
+    if (rawTraceLineRef.current) {
+      map.removeLayer(rawTraceLineRef.current);
+      rawTraceLineRef.current = null;
+    }
 
     if (stoppageMarkersRef.current) {
       stoppageMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
@@ -1352,6 +1398,11 @@ export default function PlaybackPage() {
         endMarkerRef.current = null;
       }
       matchedCoordsRef.current = [];
+      matchedRoadIndicesRef.current = [];
+      if (rawTraceLineRef.current) {
+        map.removeLayer(rawTraceLineRef.current);
+        rawTraceLineRef.current = null;
+      }
 
       if (stoppageMarkersRef.current) {
         stoppageMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
@@ -1372,7 +1423,7 @@ export default function PlaybackPage() {
       if (validPoints.length === 0) return;
 
       const baseCoords = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
-      
+
       // Fetch the assigned route for this vehicle today to snap against
       let routeCheckpoints: any[] = [];
       let assignedRouteData: any = null;
@@ -1380,37 +1431,197 @@ export default function PlaybackPage() {
       const targetRouteId = selectedRouteId || routeIdParam;
       if (targetRouteId) {
         try {
+          // Fetch route geometry directly — no dependency on coverage endpoint succeeding
+          const rRes = await api<any>(`/api/routes/${targetRouteId}/playback-geometry`);
+          if (rRes.success && rRes.data) {
+            assignedRouteData = rRes.data;
+            routeCheckpoints = rRes.data.checkpoints || [];
+          } else {
+            console.warn("[Playback] /playback-geometry returned non-success — falling back to raw GPS");
+            toast.warn("Route geometry unavailable — using standard map snapping.");
+          }
+        } catch (geoErr) {
+          console.warn("[Playback] Failed to fetch /playback-geometry:", geoErr);
+          toast.warn("Could not load route geometry — using standard map snapping.");
+        }
+
+        // Also fetch coverage details (for checkpoint visited state display)
+        try {
           const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
           if (vehicle) {
             const cov = await api<any>(`/api/vehicles/${vehicle.id}/route-coverage?date=${date}&route_id=${targetRouteId}`);
-            if (cov.success && cov.route_id) {
-              // Get Route details (geometry)
-              const rRes = await api<any>(`/api/routes/${cov.route_id}`);
-              if (rRes.success && rRes.data) {
-                assignedRouteData = rRes.data;
-              }
-
-              const cpRes = await api<any>(`/api/routes/${cov.route_id}/checkpoints`);
-              if (cpRes.success && cpRes.data) {
-                routeCheckpoints = cpRes.data;
-              }
-
-              if (cov.details) {
-                visitedCheckpointsList = cov.details;
-              }
+            if (cov.success && cov.details) {
+              visitedCheckpointsList = cov.details;
             }
           }
         } catch (err) {
-          console.error("Failed to load assigned route for snapping", err);
+          console.warn("[Playback] Failed to load coverage details", err);
         }
       }
 
-      const matchedCoords = fetchMapMatchedRouteTurf(
-        validPoints,
-        assignedRouteData ? assignedRouteData.geojson : null,
-        15
-      );
-      matchedCoordsRef.current = matchedCoords;
+      let matchedCoords: [number, number][];
+      if (assignedRouteData && assignedRouteData.geojson) {
+        const roadCoords = parseRouteGeoJSON(assignedRouteData.geojson || "");
+        roadCoordsRef.current = roadCoords;
+
+        // === DEBUG: paste this in browser console to diagnose ===
+        console.log("[Playback DEBUG] assignedRouteData:", {
+          route_id: assignedRouteData.route_id,
+          route_name: assignedRouteData.route_name,
+          geojson_length: (assignedRouteData.geojson || "").length,
+          geojson_preview: (assignedRouteData.geojson || "").slice(0, 120),
+          corridor_meters: assignedRouteData.corridor_meters,
+          route_direction: assignedRouteData.route_direction,
+          checkpoints_count: routeCheckpoints.length,
+        });
+        console.log("[Playback DEBUG] roadCoords extracted:", roadCoords.length, "points. First 3:", roadCoords.slice(0, 3));
+        console.log("[Playback DEBUG] validPoints:", validPoints.length, "GPS points. First 3:", validPoints.slice(0, 3).map(p => [p.lat, p.lng]));
+
+        let matchedRoadIndices: number[] = [];
+        if (roadCoords.length === 0) {
+          console.warn("[Playback] Route has geojson but roadCoords extracted as empty — falling back to raw GPS");
+          matchedCoords = validPoints.map(p => [p.lat, p.lng] as [number, number]);
+          matchedRoadIndices = validPoints.map(() => -1);
+          checkpointRoadIndicesRef.current = [];
+          checkpointsRef.current = [];
+        } else {
+          const snapResult = buildSequentialSnappedPlaybackDetailed(
+            validPoints,
+            roadCoords,
+            routeCheckpoints,
+            Math.max(assignedRouteData.corridor_meters || 50, 100),
+            (assignedRouteData.route_direction as 'outbound' | 'return' | 'both') || "both",
+            assignedRouteData.seq_lookahead || 5
+          );
+          matchedCoords = snapResult.coords;
+          matchedRoadIndices = snapResult.roadIndices;
+          checkpointRoadIndicesRef.current = snapResult.checkpointRoadIndices || [];
+          checkpointsRef.current = snapResult.normalisedCheckpoints || routeCheckpoints;
+          console.log("[Playback DEBUG] snapped output — first 5 coords:", matchedCoords.slice(0, 5));
+          const rawCount = matchedCoords.filter((c, i) => c[0] === validPoints[i]?.lat && c[1] === validPoints[i]?.lng).length;
+          console.log(`[Playback DEBUG] ${rawCount}/${matchedCoords.length} points are raw GPS (unsnapped — outside corridor or fallback)`);
+        }
+        matchedCoordsRef.current = matchedCoords;
+        matchedRoadIndicesRef.current = matchedRoadIndices;
+      } else {
+        console.warn("[Playback DEBUG] No geojson on route — rendering raw GPS. assignedRouteData:", assignedRouteData);
+        matchedCoords = validPoints.map(p => [p.lat, p.lng] as [number, number]);
+        matchedCoordsRef.current = matchedCoords;
+        matchedRoadIndicesRef.current = matchedCoords.map(() => -1);
+        checkpointRoadIndicesRef.current = [];
+        checkpointsRef.current = [];
+      }
+
+      // Pre-compute detailed steps for smooth animation along snapped roadCoords
+      const steps: {
+        lat: number;
+        lng: number;
+        time: string;
+        speed: number;
+        ignition: boolean | null;
+        gpsIndex: number;
+      }[] = [];
+
+      if (matchedCoords.length > 0) {
+        steps.push({
+          lat: matchedCoords[0][0],
+          lng: matchedCoords[0][1],
+          time: validPoints[0].time,
+          speed: validPoints[0].speed,
+          ignition: validPoints[0].ignition,
+          gpsIndex: 0,
+        });
+
+        const roadCoords = roadCoordsRef.current;
+        const roadIndices = matchedRoadIndicesRef.current || [];
+
+        // Pre-compute average spacing between consecutive road coords (sampled from first 50 pairs)
+        const sampleN = Math.min(roadCoords.length - 1, 50);
+        let totalSpacingM = 0;
+        for (let s = 0; s < sampleN; s++) {
+          totalSpacingM += haversineDistance(
+            roadCoords[s][0], roadCoords[s][1],
+            roadCoords[s + 1][0], roadCoords[s + 1][1]
+          ) * 1000;
+        }
+        const avgCoordSpacingM = sampleN > 0 ? totalSpacingM / sampleN : 10;
+
+        for (let i = 1; i < validPoints.length; i++) {
+          const prevIdx = roadIndices[i - 1] ?? -1;
+          const currIdx = roadIndices[i] ?? -1;
+          const pPrev = validPoints[i - 1];
+          const pCurr = validPoints[i];
+
+          const tPrev = new Date(pPrev.time).getTime();
+          const tCurr = new Date(pCurr.time).getTime();
+          const sPrev = pPrev.speed;
+          const sCurr = pCurr.speed;
+
+          let intermediateCoords: [number, number][] = [];
+
+          if (prevIdx !== -1 && currIdx !== -1 && roadCoords.length > 0) {
+            const gap = Math.abs(currIdx - prevIdx);
+            const p1 = roadCoords[prevIdx];
+            const p2 = roadCoords[currIdx];
+            const directDistM = haversineDistance(p1[0], p1[1], p2[0], p2[1]) * 1000;
+
+            const timeDiffSec = Math.abs(tCurr - tPrev) / 1000;
+            const MAX_SPEED_MPS = 10;
+            const maxAllowedGap = timeDiffSec > 0
+              ? Math.ceil(timeDiffSec * MAX_SPEED_MPS / avgCoordSpacingM) + 10
+              : 30;
+
+            const isSkippedDetour = gap > 10 && directDistM < 80;
+            const isPhysicallyImpossible = gap > maxAllowedGap;
+
+            if (!isSkippedDetour && !isPhysicallyImpossible) {
+              if (prevIdx <= currIdx) {
+                for (let j = prevIdx + 1; j <= currIdx; j++) {
+                  intermediateCoords.push(roadCoords[j]);
+                }
+              } else {
+                for (let j = prevIdx - 1; j >= currIdx; j--) {
+                  intermediateCoords.push(roadCoords[j]);
+                }
+              }
+            }
+          }
+
+          if (intermediateCoords.length > 0) {
+            const totalSteps = intermediateCoords.length;
+            intermediateCoords.forEach((coord, stepIdx) => {
+              const fraction = (stepIdx + 1) / (totalSteps + 1);
+              const interpTime = new Date(tPrev + (tCurr - tPrev) * fraction).toISOString();
+              const interpSpeed = sPrev + (sCurr - sPrev) * fraction;
+              steps.push({
+                lat: coord[0],
+                lng: coord[1],
+                time: interpTime,
+                speed: interpSpeed,
+                ignition: pCurr.ignition,
+                gpsIndex: i,
+              });
+            });
+          } else {
+            steps.push({
+              lat: matchedCoords[i][0],
+              lng: matchedCoords[i][1],
+              time: pCurr.time,
+              speed: pCurr.speed,
+              ignition: pCurr.ignition,
+              gpsIndex: i,
+            });
+          }
+        }
+      }
+
+      setPlaybackSteps(steps);
+
+      if (assignedRouteData && assignedRouteData.color) {
+        assignedRouteColorRef.current = assignedRouteData.color;
+      } else {
+        assignedRouteColorRef.current = "#f97316";
+      }
 
       // Create custom low-index background pane for the planned route to prevent overlapping redraw flickering
       if (!map.getPane("backgroundPathPane")) {
@@ -1420,10 +1631,10 @@ export default function PlaybackPage() {
       }
 
       // 1. Draw planned path as a faint background dashed polyline in the background pane
-      lineRef.current = L.polyline(matchedCoords, { 
-        color: "#cbd5e1", 
-        weight: 4, 
-        opacity: 0.65, 
+      lineRef.current = L.polyline(roadCoordsRef.current, {
+        color: "#cbd5e1",
+        weight: 4,
+        opacity: 0.65,
         dashArray: "4, 6",
         lineCap: "round",
         lineJoin: "round",
@@ -1433,6 +1644,20 @@ export default function PlaybackPage() {
       if (showRawPlayback) {
         lineRef.current.addTo(map);
         lineRef.current.bringToBack();
+      }
+
+      // Draw raw GPS trace as a dashed purple line
+      const rawCoords = validPoints.map(p => [p.lat, p.lng] as [number, number]);
+      rawTraceLineRef.current = L.polyline(rawCoords, {
+        color: "#c084fc", // Dashed purple line
+        weight: 3,
+        opacity: 0.85,
+        dashArray: "4, 6",
+        lineCap: "round",
+        lineJoin: "round"
+      });
+      if (showRawGpsTrace) {
+        rawTraceLineRef.current.addTo(map);
       }
 
       map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
@@ -1634,7 +1859,7 @@ export default function PlaybackPage() {
       if (assignedRouteData && assignedRouteData.geojson) {
         try {
           const parsedGeoJSON = JSON.parse(assignedRouteData.geojson);
-          
+
           if (!map.getPane("assignedRoutePane")) {
             map.createPane("assignedRoutePane");
             map.getPane("assignedRoutePane").style.zIndex = "340";
@@ -1664,7 +1889,7 @@ export default function PlaybackPage() {
           if (showPlannedRoute) {
             assignedRouteLayerRef.current.addTo(map);
           }
-          
+
           assignedRouteLayerRef.current.bindPopup(`
             <div style="font-family: sans-serif; font-size: 13px; color: #0f172a; padding: 2px;">
               <span style="font-weight: 700; color: ${routeColor};">Planned Route:</span> ${assignedRouteData.route_name}
@@ -1676,24 +1901,89 @@ export default function PlaybackPage() {
       }
 
       // 8. Draw Checkpoints on map
+      const checkedCheckpointsMap: Record<number, { visited: boolean; reason: string }> = {};
+      if (assignedRouteData && assignedRouteData.is_sequential) {
+        // Run outbound check (ascending sequence_order)
+        const outboundCheckpoints = [...routeCheckpoints].sort((a, b) => a.sequence_order - b.sequence_order);
+        let outBroken = false;
+        const outMap: Record<number, { visited: boolean; reason: string }> = {};
+        let outVisitedCount = 0;
+        outboundCheckpoints.forEach((cp) => {
+          const visitedDetail = visitedCheckpointsList.find(vd => vd.checkpoint_id === cp.id);
+          const originallyVisited = visitedDetail ? visitedDetail.visited : false;
+          if (outBroken) {
+            outMap[cp.id] = { visited: false, reason: "Not Sequential" };
+          } else if (!originallyVisited) {
+            outBroken = true;
+            outMap[cp.id] = { visited: false, reason: (visitedDetail && visitedDetail.reason) || "Missed" };
+          } else {
+            outVisitedCount++;
+            outMap[cp.id] = { visited: true, reason: (visitedDetail && visitedDetail.reason) || "" };
+          }
+        });
+
+        // Run return check (descending sequence_order)
+        const returnCheckpoints = [...routeCheckpoints].sort((a, b) => b.sequence_order - a.sequence_order);
+        let retBroken = false;
+        const retMap: Record<number, { visited: boolean; reason: string }> = {};
+        let retVisitedCount = 0;
+        returnCheckpoints.forEach((cp) => {
+          const visitedDetail = visitedCheckpointsList.find(vd => vd.checkpoint_id === cp.id);
+          const originallyVisited = visitedDetail ? visitedDetail.visited : false;
+          if (retBroken) {
+            retMap[cp.id] = { visited: false, reason: "Not Sequential" };
+          } else if (!originallyVisited) {
+            retBroken = true;
+            retMap[cp.id] = { visited: false, reason: (visitedDetail && visitedDetail.reason) || "Missed" };
+          } else {
+            retVisitedCount++;
+            retMap[cp.id] = { visited: true, reason: (visitedDetail && visitedDetail.reason) || "" };
+          }
+        });
+
+        // Determine best direction based on config or auto-detect if "both"
+        const dir = assignedRouteData.route_direction;
+        let useReturn = false;
+        if (dir === "return") {
+          useReturn = true;
+        } else if (dir === "outbound") {
+          useReturn = false;
+        } else {
+          // "both" -> auto detect based on visited count
+          useReturn = retVisitedCount > outVisitedCount;
+        }
+
+        const bestMap = useReturn ? retMap : outMap;
+        Object.assign(checkedCheckpointsMap, bestMap);
+      } else {
+        routeCheckpoints.forEach((cp) => {
+          const visitedDetail = visitedCheckpointsList.find(vd => vd.checkpoint_id === cp.id);
+          checkedCheckpointsMap[cp.id] = {
+            visited: visitedDetail ? visitedDetail.visited : false,
+            reason: (visitedDetail && visitedDetail.reason) || ""
+          };
+        });
+      }
+
       const checkpointMarkers: any[] = [];
       const markersMap: Record<number, any> = {};
       routeCheckpoints.forEach((cp, idx) => {
-        const visitedDetail = visitedCheckpointsList.find(vd => vd.checkpoint_id === cp.id);
-        const visited = visitedDetail ? visitedDetail.visited : false;
+        const cpStatus = checkedCheckpointsMap[cp.id] || { visited: false, reason: "" };
+        const visited = cpStatus.visited;
+        const reason = cpStatus.reason;
 
         const isLaneStart = cp.checkpoint_name.includes("_Lane") && cp.checkpoint_name.includes("_Start");
         const isLaneEnd = cp.checkpoint_name.includes("_Lane") && cp.checkpoint_name.includes("_End");
-        
+
         let cpIcon;
         if (isLaneStart || isLaneEnd) {
           const type = isLaneStart ? "start" : "end";
           const match = cp.checkpoint_name.match(/_Lane(\d+)_/);
           const laneNum = match ? match[1] : String(idx + 1);
-          
+
           const color = type === "start" ? (visited ? "#10b981" : "#22c55e") : (visited ? "#ef4444" : "#dc2626");
           const strokeColor = type === "start" ? "#15803d" : "#b91c1c";
-          
+
           cpIcon = L.divIcon({
             html: `
               <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 28px; height: 36px; opacity: ${visited ? 1.0 : 0.75};">
@@ -1748,7 +2038,6 @@ export default function PlaybackPage() {
         const marker = L.marker([cp.latitude, cp.longitude], { icon: cpIcon });
         (marker as any).isVisited = visited;
         markersMap[cp.id] = marker;
-        const reason = visitedDetail ? visitedDetail.reason : "";
 
         marker.bindPopup(`
           <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; padding: 2px; min-width: 150px;">
@@ -1771,7 +2060,7 @@ export default function PlaybackPage() {
             </div>
           </div>
         `);
-        
+
         // Also draw the checkpoint radius circle
         const circle = L.circle([cp.latitude, cp.longitude], {
           radius: cp.radius_meters || 100,
@@ -1795,11 +2084,11 @@ export default function PlaybackPage() {
       checkpointMarkersRef.current = checkpointMarkers;
       checkpointMarkersMapRef.current = markersMap;
       setCheckpoints(routeCheckpoints.map(cp => {
-        const visitedDetail = visitedCheckpointsList.find(vd => vd.checkpoint_id === cp.id);
+        const cpStatus = checkedCheckpointsMap[cp.id] || { visited: false, reason: "" };
         return {
           ...cp,
-          visited: visitedDetail ? visitedDetail.visited : false,
-          reason: visitedDetail ? visitedDetail.reason : ""
+          visited: cpStatus.visited,
+          reason: cpStatus.reason
         };
       }));
 
@@ -1815,10 +2104,12 @@ export default function PlaybackPage() {
 
   const handleStop = () => {
     setPlaying(false);
-    // Draw the full actual movement trail
-    if (matchedCoordsRef.current.length > 0 && activeLineRef.current) {
-      activeLineRef.current.setLatLngs(matchedCoordsRef.current);
-      activeLineRef.current.bringToFront();
+    if (intervalRef.current) {
+      clearTimeout(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (playbackSteps.length > 0) {
+      setIdx(playbackSteps.length - 1);
     }
   };
 
@@ -1837,17 +2128,16 @@ export default function PlaybackPage() {
   const updateActiveCoveredLine = useCallback((currentIndex: number) => {
     const L = require("leaflet");
     const map = mapRef.current;
-    if (!map || matchedCoordsRef.current.length === 0 || !points[currentIndex]) return;
+    if (!map || playbackSteps.length === 0 || !playbackSteps[currentIndex]) return;
 
-    // Slice matched road coords up to the current index directly (1-to-1 mapping)
-    const coveredCoords = matchedCoordsRef.current.slice(0, currentIndex + 1);
+    const coveredCoords = playbackSteps.slice(0, currentIndex + 1).map(step => [step.lat, step.lng] as [number, number]);
 
     if (activeLineRef.current) {
       activeLineRef.current.setLatLngs(coveredCoords);
       activeLineRef.current.bringToFront();
     } else {
       activeLineRef.current = L.polyline(coveredCoords, {
-        color: "#f97316", // Thick vibrant orange path showing dynamic progress
+        color: assignedRouteColorRef.current,
         weight: 5.5,
         opacity: 0.95,
         lineCap: "round",
@@ -1856,64 +2146,88 @@ export default function PlaybackPage() {
       activeLineRef.current.on('click', handleLineClick);
       activeLineRef.current.bringToFront();
     }
-  }, [points]);
+  }, [playbackSteps, handleLineClick]);
 
   // Handle Playback Intervals (Adjusted by Speed Multiplier)
   useEffect(() => {
-    if (!playing || idx >= points.length - 1 || !mapRef.current || !mkRef.current) return;
+    if (!playing || idx >= playbackSteps.length - 1 || !mapRef.current || !mkRef.current) return;
 
-    const intervalDuration = Math.max(10, 150 / speedMultiplier);
+    const baseInterval = (points.length * 150) / playbackSteps.length;
+    const intervalDuration = Math.max(8, baseInterval / speedMultiplier);
 
     if (mkRef.current && mkRef.current._icon) {
       mkRef.current._icon.style.transition = `transform ${intervalDuration}ms linear`;
     }
 
-    intervalRef.current = setInterval(() => {
+    const timer = setTimeout(() => {
       setIdx((prev) => {
         const next = prev + 1;
-        if (next >= points.length) {
+        if (next >= playbackSteps.length) {
           setPlaying(false);
+          if (intervalRef.current) {
+            clearTimeout(intervalRef.current);
+            intervalRef.current = null;
+          }
           if (mkRef.current && mkRef.current._icon) {
             mkRef.current._icon.style.transition = 'none';
           }
           return prev;
         }
-        const p = points[next];
-        const matched = matchedCoordsRef.current[next];
-        const targetLat = matched ? matched[0] : p.lat;
-        const targetLng = matched ? matched[1] : p.lng;
-        
-        mkRef.current.setLatLng([targetLat, targetLng]);
-        mkRef.current.setPopupContent(getPopupContent(p));
+        const step = playbackSteps[next];
+        if (mkRef.current) {
+          mkRef.current.setLatLng([step.lat, step.lng]);
+
+          const originalPoint = pointsRef.current[step.gpsIndex] || {};
+          const p: GpsDataPoint = {
+            ...originalPoint,
+            lat: step.lat,
+            lng: step.lng,
+            time: step.time,
+            speed: step.speed,
+            ignition: step.ignition,
+          };
+          mkRef.current.setPopupContent(getPopupContent(p));
+        }
         updateActiveCoveredLine(next);
         return next;
       });
     }, intervalDuration);
 
+    intervalRef.current = timer;
+
     return () => {
-      clearInterval(intervalRef.current);
+      clearTimeout(timer);
       if (mkRef.current && mkRef.current._icon) {
         mkRef.current._icon.style.transition = 'none';
       }
     };
-  }, [playing, points, speedMultiplier, idx, updateActiveCoveredLine]);
+  }, [playing, playbackSteps, points.length, speedMultiplier, idx, updateActiveCoveredLine]);
 
   // Scrub Scrubbed Point Sync
   useEffect(() => {
-    if (points[idx] && mkRef.current) {
-      if (!playing && mkRef.current._icon) {
+    if (playing) return;
+
+    if (playbackSteps[idx] && mkRef.current) {
+      if (mkRef.current._icon) {
         mkRef.current._icon.style.transition = 'none';
       }
-      const p = points[idx];
-      const matched = matchedCoordsRef.current[idx];
-      const targetLat = matched ? matched[0] : p.lat;
-      const targetLng = matched ? matched[1] : p.lng;
+      const step = playbackSteps[idx];
+      mkRef.current.setLatLng([step.lat, step.lng]);
 
-      mkRef.current.setLatLng([targetLat, targetLng]);
+      const originalPoint = pointsRef.current[step.gpsIndex] || {};
+      const p: GpsDataPoint = {
+        ...originalPoint,
+        lat: step.lat,
+        lng: step.lng,
+        time: step.time,
+        speed: step.speed,
+        ignition: step.ignition,
+      };
+
       mkRef.current.setPopupContent(getPopupContent(p));
       updateActiveCoveredLine(idx);
     }
-  }, [idx, points, updateActiveCoveredLine, playing]);
+  }, [idx, playbackSteps, updateActiveCoveredLine, playing]);
 
   // Filter Dropdowns Lists
   const filteredWards = selectedZoneId
@@ -1976,7 +2290,8 @@ export default function PlaybackPage() {
     }
   };
 
-  const p = points[idx];
+  const currentStep = playbackSteps[idx];
+  const p = currentStep ? (points[currentStep.gpsIndex] || points[0]) : points[0];
 
   // Helper format time
   const formatTimeStr = (t?: string) => {
@@ -1986,7 +2301,8 @@ export default function PlaybackPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white text-slate-800 font-sans">
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes stop-pulse {
           0% { transform: scale(0.95); opacity: 0.9; }
           50% { transform: scale(1.05); opacity: 1; }
@@ -2001,7 +2317,7 @@ export default function PlaybackPage() {
           animation: highlight-pulse-anim 1.5s ease-in-out;
         }
       `}} />
-      
+
       {/* Sub-header / Playback Title with Green Line */}
       <div className="bg-white px-6 py-2 border-b border-slate-200 shrink-0">
         <h2 className="text-base font-bold text-slate-700">Playback</h2>
@@ -2011,17 +2327,17 @@ export default function PlaybackPage() {
       {/* HORIZONTAL CONTROLS PANEL */}
       <section className="bg-[#f1f5f9] border-b border-slate-200 px-6 py-3.5 z-10 shrink-0 w-full flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3.5 w-full">
-          
+
           {/* Date Picker */}
           <div className="relative min-w-[130px]">
-            <input 
-              type="date" 
-              value={date} 
+            <input
+              type="date"
+              value={date}
               onChange={(e) => {
                 setDate(e.target.value);
                 setRouteIdParam(null);
               }}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium" 
+              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             />
           </div>
 
@@ -2111,20 +2427,24 @@ export default function PlaybackPage() {
               if (points.length === 0) {
                 loadRoute(true);
               } else {
-                setPlaying(!playing);
+                const nextPlaying = !playing;
+                setPlaying(nextPlaying);
+                if (!nextPlaying && intervalRef.current) {
+                  clearTimeout(intervalRef.current);
+                  intervalRef.current = null;
+                }
               }
             }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${
-              !selectedImei 
-                ? "bg-slate-300 cursor-not-allowed shadow-none" 
-                : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
-            }`}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${!selectedImei
+              ? "bg-slate-300 cursor-not-allowed shadow-none"
+              : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
+              }`}
             title={!selectedImei ? "Please select a vehicle first" : playing ? "Pause Playback" : "Start Playback"}
           >
             {playing ? (
-              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
             ) : (
-              <svg className="w-3.5 h-3.5 fill-current translate-x-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              <svg className="w-3.5 h-3.5 fill-current translate-x-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
             )}
           </button>
 
@@ -2133,11 +2453,10 @@ export default function PlaybackPage() {
             type="button"
             disabled={points.length === 0}
             onClick={handleStop}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${
-              points.length === 0 
-                ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none" 
-                : "bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-rose-500/20 cursor-pointer hover:shadow-lg"
-            }`}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${points.length === 0
+              ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+              : "bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-rose-500/20 cursor-pointer hover:shadow-lg"
+              }`}
             title="Show Full Route / Stop Playback"
           >
             <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
@@ -2162,39 +2481,42 @@ export default function PlaybackPage() {
         {/* Playback Progress timeline scrub slider - Always visible */}
         <div className="w-full flex items-center gap-3 mt-1">
           <span className="text-xs font-semibold font-mono text-slate-500 w-14 shrink-0 text-left">
-            {points.length > 0 ? formatTimeStr(p?.time) : "00:00:00"}
+            {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[idx]?.time) : "00:00:00"}
           </span>
-          <input 
-            type="range" 
-            min={0} 
-            max={points.length > 0 ? points.length - 1 : 100} 
-            value={points.length > 0 ? idx : 0}
-            disabled={points.length === 0}
-            onChange={(e) => { 
-              if (points.length > 0) {
-                setPlaying(false); 
-                setIdx(Number(e.target.value)); 
+          <input
+            type="range"
+            min={0}
+            max={playbackSteps.length > 0 ? playbackSteps.length - 1 : 100}
+            value={playbackSteps.length > 0 ? idx : 0}
+            disabled={playbackSteps.length === 0}
+            onChange={(e) => {
+              if (playbackSteps.length > 0) {
+                setPlaying(false);
+                if (intervalRef.current) {
+                  clearTimeout(intervalRef.current);
+                  intervalRef.current = null;
+                }
+                setIdx(Number(e.target.value));
               }
             }}
             className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-200 accent-sky-500 appearance-none outline-none"
           />
           <span className="text-xs font-semibold font-mono text-slate-500 w-14 shrink-0 text-right">
-            {points.length > 0 ? formatTimeStr(points[points.length - 1]?.time) : "00:00:00"}
+            {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[playbackSteps.length - 1]?.time) : "00:00:00"}
           </span>
         </div>
       </section>
 
       {/* Split map layout */}
       <div className="flex-1 relative flex flex-col md:flex-row overflow-hidden">
-        
+
         {/* Leaflet Map takes full size */}
         <div ref={box} className="flex-1 w-full h-full z-0 bg-theme-base" />
 
         {/* Custom Orange Map Indication Button matching screenshot */}
-        <div className={`absolute top-3 z-[1000] flex flex-col items-end transition-all duration-300 ${
-          stoppages.length > 0 ? 'right-[280px]' : 'right-4'
-        }`}>
-          <div 
+        <div className={`absolute top-3 z-[1000] flex flex-col items-end transition-all duration-300 ${stoppages.length > 0 ? 'right-[280px]' : 'right-4'
+          }`}>
+          <div
             onClick={() => setShowMapIndicationMenu(!showMapIndicationMenu)}
             className="bg-[#f59e0b] hover:bg-amber-600 text-white px-3 py-1.5 text-xs font-bold uppercase rounded shadow-md tracking-wider flex items-center gap-1 cursor-pointer transition select-none"
           >
@@ -2204,12 +2526,12 @@ export default function PlaybackPage() {
           {showMapIndicationMenu && (
             <div className="mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl p-3 w-64 flex flex-col gap-2 z-[1000]">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1.5">Map Layers</span>
-              
+
               <div className="flex flex-col gap-1">
                 <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                  <input 
-                    type="checkbox" 
-                    checked={showPlannedRoute} 
+                  <input
+                    type="checkbox"
+                    checked={showPlannedRoute}
                     onChange={(e) => setShowPlannedRoute(e.target.checked)}
                     className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                   />
@@ -2219,18 +2541,18 @@ export default function PlaybackPage() {
                 {showPlannedRoute && (
                   <div className="pl-5 flex flex-col gap-1.5 border-l border-slate-150 ml-1.5 mb-1 mt-0.5">
                     <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
-                      <input 
-                        type="checkbox" 
-                        checked={showCoveredCheckpoints} 
+                      <input
+                        type="checkbox"
+                        checked={showCoveredCheckpoints}
                         onChange={(e) => setShowCoveredCheckpoints(e.target.checked)}
                         className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
                       />
                       <span>Covered Lane Points (Hit)</span>
                     </label>
                     <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
-                      <input 
-                        type="checkbox" 
-                        checked={showUncoveredCheckpoints} 
+                      <input
+                        type="checkbox"
+                        checked={showUncoveredCheckpoints}
                         onChange={(e) => setShowUncoveredCheckpoints(e.target.checked)}
                         className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
                       />
@@ -2241,9 +2563,9 @@ export default function PlaybackPage() {
               </div>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showActualMovement} 
+                <input
+                  type="checkbox"
+                  checked={showActualMovement}
                   onChange={(e) => setShowActualMovement(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2251,9 +2573,9 @@ export default function PlaybackPage() {
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showRawPlayback} 
+                <input
+                  type="checkbox"
+                  checked={showRawPlayback}
                   onChange={(e) => setShowRawPlayback(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2261,9 +2583,19 @@ export default function PlaybackPage() {
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showRegionBoundary} 
+                <input
+                  type="checkbox"
+                  checked={showRawGpsTrace}
+                  onChange={(e) => setShowRawGpsTrace(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span className="text-purple-600 font-bold">Raw GPS Trace (Original)</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
+                <input
+                  type="checkbox"
+                  checked={showRegionBoundary}
                   onChange={(e) => setShowRegionBoundary(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2271,9 +2603,9 @@ export default function PlaybackPage() {
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showParking} 
+                <input
+                  type="checkbox"
+                  checked={showParking}
                   onChange={(e) => setShowParking(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2281,9 +2613,9 @@ export default function PlaybackPage() {
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showTransfer} 
+                <input
+                  type="checkbox"
+                  checked={showTransfer}
                   onChange={(e) => setShowTransfer(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2291,9 +2623,9 @@ export default function PlaybackPage() {
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showFuel} 
+                <input
+                  type="checkbox"
+                  checked={showFuel}
                   onChange={(e) => setShowFuel(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2301,9 +2633,9 @@ export default function PlaybackPage() {
               </label>
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showWorkshop} 
+                <input
+                  type="checkbox"
+                  checked={showWorkshop}
                   onChange={(e) => setShowWorkshop(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2313,9 +2645,9 @@ export default function PlaybackPage() {
 
 
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                <input 
-                  type="checkbox" 
-                  checked={showStartEndPoint} 
+                <input
+                  type="checkbox"
+                  checked={showStartEndPoint}
                   onChange={(e) => setShowStartEndPoint(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                 />
@@ -2324,9 +2656,9 @@ export default function PlaybackPage() {
 
               <div className="flex flex-col gap-1">
                 <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
-                  <input 
-                    type="checkbox" 
-                    checked={showStoppages} 
+                  <input
+                    type="checkbox"
+                    checked={showStoppages}
                     onChange={(e) => setShowStoppages(e.target.checked)}
                     className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                   />
@@ -2336,18 +2668,18 @@ export default function PlaybackPage() {
                 {showStoppages && (
                   <div className="pl-5 flex flex-col gap-1.5 border-l border-slate-150 ml-1.5 mt-0.5">
                     <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
-                      <input 
-                        type="checkbox" 
-                        checked={showMajorStoppages} 
+                      <input
+                        type="checkbox"
+                        checked={showMajorStoppages}
                         onChange={(e) => setShowMajorStoppages(e.target.checked)}
                         className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
                       />
                       <span>Major Stops (≥ 10 mins)</span>
                     </label>
                     <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none hover:text-slate-800">
-                      <input 
-                        type="checkbox" 
-                        checked={showMiniStoppages} 
+                      <input
+                        type="checkbox"
+                        checked={showMiniStoppages}
                         onChange={(e) => setShowMiniStoppages(e.target.checked)}
                         className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
                       />
@@ -2363,7 +2695,7 @@ export default function PlaybackPage() {
         {/* Floating checkpoints sidebar if checkpoints exist */}
         {checkpoints.length > 0 && (
           <div className={`absolute top-4 left-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl ${checkpointsCollapsed ? 'max-h-12 overflow-hidden pb-0' : 'max-h-[calc(100%-32px)]'} flex flex-col transition-all duration-300`}>
-            <h3 
+            <h3
               onClick={() => setCheckpointsCollapsed(!checkpointsCollapsed)}
               className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center justify-between shrink-0 border-b border-slate-100 pb-2 cursor-pointer select-none"
             >
@@ -2384,53 +2716,51 @@ export default function PlaybackPage() {
                   })
                   .sort((a, b) => a.sequence_order - b.sequence_order)
                   .map((cp, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      const map = mapRef.current;
-                      if (!map) return;
-                      map.panTo([cp.latitude, cp.longitude]);
-                      const marker = checkpointMarkersMapRef.current[cp.id];
-                      if (marker) {
-                        marker.openPopup();
-                        const el = marker.getElement();
-                        if (el) {
-                          const child = el.firstElementChild;
-                          if (child) {
-                            child.classList.add("highlight-pulse");
-                            setTimeout(() => child.classList.remove("highlight-pulse"), 1500);
+                    <button
+                      key={i}
+                      onClick={() => {
+                        const map = mapRef.current;
+                        if (!map) return;
+                        map.panTo([cp.latitude, cp.longitude]);
+                        const marker = checkpointMarkersMapRef.current[cp.id];
+                        if (marker) {
+                          marker.openPopup();
+                          const el = marker.getElement();
+                          if (el) {
+                            const child = el.firstElementChild;
+                            if (child) {
+                              child.classList.add("highlight-pulse");
+                              setTimeout(() => child.classList.remove("highlight-pulse"), 1500);
+                            }
                           }
                         }
-                      }
-                    }}
-                    className={`w-full text-left p-2.5 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${
-                      cp.visited 
-                        ? 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100 hover:border-emerald-200' 
+                      }}
+                      className={`w-full text-left p-2.5 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${cp.visited
+                        ? 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100 hover:border-emerald-200'
                         : 'bg-rose-50/30 hover:bg-rose-50/70 border-rose-100 hover:border-rose-200'
-                    }`}
-                  >
-                    <div className="space-y-0.5 max-w-[70%]">
-                      <span className={`font-extrabold block truncate ${cp.visited ? 'text-emerald-600' : 'text-rose-500'}`}>
-                        #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
-                      </span>
-                      <span className="text-[9px] text-slate-400 block font-normal">
-                        Radius: {cp.radius_meters || 100}m
-                      </span>
-                      {!cp.visited && cp.reason && (
-                        <span className="text-[9.5px] text-rose-600 font-semibold block mt-1.5 leading-tight italic bg-rose-50/70 border border-rose-100 px-1.5 py-0.5 rounded">
-                          ⚠️ {cp.reason}
+                        }`}
+                    >
+                      <div className="space-y-0.5 max-w-[70%]">
+                        <span className={`font-extrabold block truncate ${cp.visited ? 'text-emerald-600' : 'text-rose-500'}`}>
+                          #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
                         </span>
-                      )}
-                    </div>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 ${
-                      cp.visited 
-                        ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-200' 
+                        <span className="text-[9px] text-slate-400 block font-normal">
+                          Radius: {cp.radius_meters || 100}m
+                        </span>
+                        {!cp.visited && cp.reason && (
+                          <span className="text-[9.5px] text-rose-600 font-semibold block mt-1.5 leading-tight italic bg-rose-50/70 border border-rose-100 px-1.5 py-0.5 rounded">
+                            ⚠️ {cp.reason}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 ${cp.visited
+                        ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-200'
                         : 'bg-rose-100 text-rose-600 group-hover:bg-rose-200'
-                    }`}>
-                      {cp.visited ? 'HIT' : 'MISSED'}
-                    </span>
-                  </button>
-                ))}
+                        }`}>
+                        {cp.visited ? 'HIT' : 'MISSED'}
+                      </span>
+                    </button>
+                  ))}
               </div>
             )}
           </div>
@@ -2439,7 +2769,7 @@ export default function PlaybackPage() {
         {/* Floating stoppages sidebar if stoppages exist */}
         {stoppages.length > 0 && (
           <div className={`absolute top-4 right-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl ${stoppagesCollapsed ? 'max-h-12 overflow-hidden pb-0' : 'max-h-[calc(100%-32px)]'} flex flex-col transition-all duration-300`}>
-            <h3 
+            <h3
               onClick={() => setStoppagesCollapsed(!stoppagesCollapsed)}
               className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center justify-between shrink-0 border-b border-slate-100 pb-2 cursor-pointer select-none"
             >
@@ -2469,22 +2799,22 @@ export default function PlaybackPage() {
                     return true;
                   })
                   .map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => jumpToKeyframe(s.startIndex)}
-                    className="w-full text-left p-2.5 bg-slate-50 hover:bg-red-50 border border-slate-100 hover:border-red-200 rounded-xl text-xs transition flex items-center justify-between group active:scale-98"
-                  >
-                    <div className="space-y-0.5">
-                      <span className="font-extrabold text-red-500 block">Stoppage #{i + 1}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <button
+                      key={i}
+                      onClick={() => jumpToKeyframe(s.startIndex)}
+                      className="w-full text-left p-2.5 bg-slate-50 hover:bg-red-50 border border-slate-100 hover:border-red-200 rounded-xl text-xs transition flex items-center justify-between group active:scale-98"
+                    >
+                      <div className="space-y-0.5">
+                        <span className="font-extrabold text-red-500 block">Stoppage #{i + 1}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-black bg-red-100 text-red-600 group-hover:bg-red-200 px-2 py-0.5 rounded-lg transition duration-200">
+                        {formatStoppageDuration(s.durationSeconds)}
                       </span>
-                    </div>
-                    <span className="text-[10px] font-black bg-red-100 text-red-600 group-hover:bg-red-200 px-2 py-0.5 rounded-lg transition duration-200">
-                       {formatStoppageDuration(s.durationSeconds)}
-                    </span>
-                  </button>
-                ))}
+                    </button>
+                  ))}
               </div>
             )}
           </div>

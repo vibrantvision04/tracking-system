@@ -63,6 +63,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Get("/routes", h.GetRoutes)
 		r.Get("/routes/{id}", h.GetRouteByID)
 		r.Get("/routes/{id}/checkpoints", h.GetRouteCheckpoints)
+		r.Get("/routes/{id}/playback-geometry", h.GetRoutePlaybackGeometry)
 		r.Post("/routes", h.CreateRoute)
 		r.Put("/routes/{id}", h.UpdateRoute)
 		r.Delete("/routes/{id}", h.DeleteRoute)
