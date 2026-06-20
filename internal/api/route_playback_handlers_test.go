@@ -96,21 +96,21 @@ func seedTestRoute(t *testing.T, pool *pgxpool.Pool, polygon *string, color stri
 	return routeID
 }
 
-// seedCheckpoint inserts a checkpoint for the given route and registers cleanup.
+// seedCheckpoint inserts a lane point for the given route and registers cleanup.
 func seedCheckpoint(t *testing.T, pool *pgxpool.Pool, routeID int) {
 	t.Helper()
 	ctx := context.Background()
 	var cpID int
 	err := pool.QueryRow(ctx, `
-		INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
-		VALUES ($1, 'CP1', 26.9, 75.8, 30.0, 1)
+		INSERT INTO route_lane_points (route_id, latitude, longitude, sequence_number)
+		VALUES ($1, 26.9, 75.8, 1)
 		RETURNING id
 	`, routeID).Scan(&cpID)
 	if err != nil {
 		t.Fatalf("seedCheckpoint: %v", err)
 	}
 	t.Cleanup(func() {
-		pool.Exec(context.Background(), `DELETE FROM route_checkpoints WHERE id = $1`, cpID)
+		pool.Exec(context.Background(), `DELETE FROM route_lane_points WHERE id = $1`, cpID)
 	})
 }
 

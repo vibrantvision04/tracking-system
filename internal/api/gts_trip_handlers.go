@@ -227,10 +227,10 @@ func (h *Handler) GetGTSTripReport(w http.ResponseWriter, r *http.Request) {
 	checkpointsMap := make(map[int][]RouteCheckpointInfo)
 	if len(routeIDs) > 0 {
 		cpQuery := `
-			SELECT route_id, id, latitude, longitude, radius_meters, sequence_order
-			FROM route_checkpoints
+			SELECT route_id, id, latitude, longitude, 10.0 as radius_meters, sequence_number
+			FROM route_lane_points
 			WHERE route_id = ANY($1)
-			ORDER BY route_id, sequence_order ASC
+			ORDER BY route_id, sequence_number ASC
 		`
 		cpRows, err := db.Query(ctx, cpQuery, routeIDs)
 		if err == nil {

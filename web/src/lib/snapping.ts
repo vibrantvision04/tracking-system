@@ -19,6 +19,16 @@ export interface RouteCheckpoint {
   sequence_order: number;
 }
 
+export interface RouteLanePoint {
+  id: number;
+  route_id: number;
+  sequence_number: number;
+  latitude: number;
+  longitude: number;
+  status: "pending" | "achieved" | "missed";
+  color: "gray" | "green" | "red";
+}
+
 export interface PlaybackGeometryData {
   route_id: number;
   route_name: string;
@@ -29,6 +39,7 @@ export interface PlaybackGeometryData {
   geojson: string;
   color: string;
   checkpoints: RouteCheckpoint[];
+  lane_points: RouteLanePoint[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,7 +288,6 @@ export function buildSequentialSnappedPlaybackDetailed(
   const coords: [number, number][] = [];
   const roadIndices: number[] = [];
 
-  // Fallback to raw GPS points if no road geometry
   if (roadCoords.length === 0) {
     return {
       coords: gpsPoints.map((p) => [p.lat, p.lng] as [number, number]),
@@ -287,99 +297,24 @@ export function buildSequentialSnappedPlaybackDetailed(
     };
   }
 
-  // If no checkpoints, run in "geometry-only" mode:
-  // snap each GPS point to the nearest road coordinate within the corridor.
-  if (checkpoints.length === 0) {
-    gpsPoints.forEach((p) => {
-      if (!isFinite(p.lat) || !isFinite(p.lng)) {
-        coords.push([p.lat, p.lng]);
-        roadIndices.push(-1);
-        return;
-      }
-      let bestDist = Infinity;
-      let bestIdx = -1;
-      for (let i = 0; i < roadCoords.length; i++) {
-        const d = haversineMeters(p.lat, p.lng, roadCoords[i][0], roadCoords[i][1]);
-        if (d < bestDist) { bestDist = d; bestIdx = i; }
-      }
-      if (bestIdx !== -1 && bestDist <= corridorMeters) {
-        coords.push([roadCoords[bestIdx][0], roadCoords[bestIdx][1]]);
-        roadIndices.push(bestIdx);
-      } else {
-        coords.push([p.lat, p.lng]);
-        roadIndices.push(-1);
-      }
-    });
-    return { coords, roadIndices, checkpointRoadIndices: [], normalisedCheckpoints: [] };
-  }
-
-  // 1. Normalise checkpoints for direction (always validate in ascending index order)
-  const normalisedCheckpoints =
-    routeDirection === "return" ? [...checkpoints].reverse() : checkpoints;
-
-  // 2. Map checkpoints to nearest roadCoords indices via monotonic forward-search
-  const checkpointRoadIndices = mapCheckpointsToRoadIndices(
-    normalisedCheckpoints,
-    roadCoords
-  );
-
-  let lastValidatedCpIdx = -1;
-  let isSequenceInvalid = false;
-  const lastCpIdx = normalisedCheckpoints.length - 1;
-  let lastMatchedRoadIdx = 0;
+  let hasEntered = false;
+  let lastMatchedIdx = 0;
+  const LOOKAHEAD_WINDOW = 40; // tighter window to prevent jumps to parallel lanes/opposite direction segments
 
   for (let idx = 0; idx < gpsPoints.length; idx++) {
     const p = gpsPoints[idx];
 
-    // 5.4 — isFinite guard: skip distance calculations for non-finite coordinates
     if (!isFinite(p.lat) || !isFinite(p.lng)) {
       coords.push([p.lat, p.lng]);
       roadIndices.push(-1);
       continue;
     }
 
-    // Evaluate against next expected checkpoint first (to allow entry validation)
-    if (!isSequenceInvalid) {
-      const nextExpected = lastValidatedCpIdx + 1;
+    let bestDist = Infinity;
+    let bestIdx = -1;
 
-      if (nextExpected < normalisedCheckpoints.length) {
-        const nextCp = normalisedCheckpoints[nextExpected];
-        const distToNext = haversineMeters(
-          p.lat,
-          p.lng,
-          nextCp.latitude,
-          nextCp.longitude
-        );
-        const radius = Math.max(nextCp.radius_meters || 30, 30);
-
-        if (distToNext <= radius) {
-          // Valid in-order hit
-          lastValidatedCpIdx++;
-        } else if (lastValidatedCpIdx >= 0) {
-          // Scan lookahead window for out-of-order hits
-          // ONLY scan lookahead if we have already entered the route (lastValidatedCpIdx >= 0)
-          const scanEnd = Math.min(nextExpected + seqLookahead, lastCpIdx);
-          for (let cIdx = nextExpected + 1; cIdx <= scanEnd; cIdx++) {
-            const cp = normalisedCheckpoints[cIdx];
-            const dist = haversineMeters(p.lat, p.lng, cp.latitude, cp.longitude);
-            const cpRadius = Math.max(cp.radius_meters || 30, 30);
-            if (dist <= cpRadius) {
-              // Out-of-order hit detected — sequence violation
-              isSequenceInvalid = true;
-              console.warn(
-                `[Snapping Engine] Sequence violation! Skipped checkpoint index ${nextExpected} and hit index ${cIdx}. Playback trail invalidated.`
-              );
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    // Case A: Sequence is invalid -> Snap globally if within corridor, else raw GPS
-    if (isSequenceInvalid) {
-      let bestIdx = -1;
-      let bestDist = Infinity;
+    if (!hasEntered) {
+      // Global search for entry point
       for (let i = 0; i < roadCoords.length; i++) {
         const d = haversineMeters(p.lat, p.lng, roadCoords[i][0], roadCoords[i][1]);
         if (d < bestDist) {
@@ -387,63 +322,63 @@ export function buildSequentialSnappedPlaybackDetailed(
           bestIdx = i;
         }
       }
+
       if (bestIdx !== -1 && bestDist <= corridorMeters) {
+        hasEntered = true;
+        lastMatchedIdx = bestIdx;
         coords.push([roadCoords[bestIdx][0], roadCoords[bestIdx][1]]);
         roadIndices.push(bestIdx);
       } else {
         coords.push([p.lat, p.lng]);
         roadIndices.push(-1);
       }
-      continue;
-    }
+    } else {
+      // Bidirectional windowed search to support both outbound and return movements
+      const searchStart = Math.max(0, lastMatchedIdx - LOOKAHEAD_WINDOW);
+      const searchEnd = Math.min(lastMatchedIdx + LOOKAHEAD_WINDOW, roadCoords.length - 1);
+      for (let i = searchStart; i <= searchEnd; i++) {
+        const d = haversineMeters(p.lat, p.lng, roadCoords[i][0], roadCoords[i][1]);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
+      }
 
-    // Case B: Not entered the route yet (lastValidatedCpIdx === -1) -> Keep raw GPS (no snapping before entry point)
-    if (lastValidatedCpIdx === -1) {
-      coords.push([p.lat, p.lng]);
-      roadIndices.push(-1);
-      continue;
-    }
+      if (bestIdx !== -1 && bestDist <= corridorMeters) {
+        lastMatchedIdx = bestIdx;
+        coords.push([roadCoords[bestIdx][0], roadCoords[bestIdx][1]]);
+        roadIndices.push(bestIdx);
+      } else {
+        // Secondary search: if local window fails, search the entire route
+        // to allow re-entry anywhere on the route after long detours or gaps.
+        let secondaryBestDist = Infinity;
+        let secondaryBestIdx = -1;
+        for (let i = 0; i < roadCoords.length; i++) {
+          const d = haversineMeters(p.lat, p.lng, roadCoords[i][0], roadCoords[i][1]);
+          if (d < secondaryBestDist) {
+            secondaryBestDist = d;
+            secondaryBestIdx = i;
+          }
+        }
 
-    // Case C: Exited the route (lastValidatedCpIdx === lastCpIdx) -> Keep raw GPS (no snapping after exit point)
-    if (lastValidatedCpIdx === lastCpIdx) {
-      coords.push([p.lat, p.lng]);
-      roadIndices.push(-1);
-      continue;
-    }
-
-    // Case D: On the route (lastValidatedCpIdx >= 0 and < lastCpIdx) -> Snap strictly to active segment and ensure sequential progression
-    const startRoadIdx = checkpointRoadIndices[lastValidatedCpIdx];
-    const endRoadIdx = checkpointRoadIndices[lastValidatedCpIdx + 1];
-
-    // Ensure search starts at or after the last matched index to maintain sequence order
-    lastMatchedRoadIdx = Math.max(lastMatchedRoadIdx, startRoadIdx);
-
-    let activeRoadIdx = -1;
-    let activeDist = Infinity;
-
-    for (let rIdx = lastMatchedRoadIdx; rIdx <= endRoadIdx; rIdx++) {
-      const roadPt = roadCoords[rIdx];
-      const dist = haversineMeters(p.lat, p.lng, roadPt[0], roadPt[1]);
-      if (dist < activeDist) {
-        activeDist = dist;
-        activeRoadIdx = rIdx;
+        if (secondaryBestIdx !== -1 && secondaryBestDist <= corridorMeters) {
+          lastMatchedIdx = secondaryBestIdx;
+          coords.push([roadCoords[secondaryBestIdx][0], roadCoords[secondaryBestIdx][1]]);
+          roadIndices.push(secondaryBestIdx);
+        } else {
+          coords.push([p.lat, p.lng]);
+          roadIndices.push(-1);
+        }
       }
     }
-
-    // Fallback in case range is small or activeRoadIdx is not found
-    if (activeRoadIdx === -1) {
-      activeRoadIdx = lastMatchedRoadIdx;
-    }
-
-    coords.push([roadCoords[activeRoadIdx][0], roadCoords[activeRoadIdx][1]]);
-    roadIndices.push(activeRoadIdx);
-    lastMatchedRoadIdx = activeRoadIdx;
   }
 
-  console.log(
-    `[Sequential Snapping Engine] Snapped ${gpsPoints.length} GPS points. finalPolylinePointCount: ${coords.length}, corridorMeters: ${corridorMeters}, sequenceInvalid: ${isSequenceInvalid}`
-  );
-  return { coords, roadIndices, checkpointRoadIndices, normalisedCheckpoints };
+  return {
+    coords,
+    roadIndices,
+    checkpointRoadIndices: [],
+    normalisedCheckpoints: checkpoints
+  };
 }
 
 export function buildSequentialSnappedPlayback(

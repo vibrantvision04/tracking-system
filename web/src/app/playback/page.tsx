@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { api } from "@/lib/api";
+import { api, post } from "@/lib/api";
 import type { Vehicle, GpsDataPoint } from "@/lib/types";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import { populateOpenDepotLayer } from "@/components/OpenDepotMapLayer";
@@ -412,6 +412,10 @@ export default function PlaybackPage() {
   const [zones, setZones] = useState<any[]>([]);
   const [regionsList, setRegionsList] = useState<any[]>([]);
 
+  const [aiRouteCorrectionActive, setAiRouteCorrectionActive] = useState<boolean>(false);
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const lastLoadedRouteIdRef = useRef<string | null>(null);
+
   // Filtering States
   const [selectedZoneId, setSelectedZoneId] = useState<string>("");
   const [selectedWardId, setSelectedWardId] = useState<string>("");
@@ -419,7 +423,14 @@ export default function PlaybackPage() {
   const [selectedImei, setSelectedImei] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(4);
+  const [aggressiveSnapping, setAggressiveSnapping] = useState<boolean>(false);
   const [routeIdParam, setRouteIdParam] = useState<string | null>(null);
+
+  // Snapping Diagnostics States
+  const [totalGpsPoints, setTotalGpsPoints] = useState<number>(0);
+  const [snappedPointsCount, setSnappedPointsCount] = useState<number>(0);
+  const [rawPointsCount, setRawPointsCount] = useState<number>(0);
+  const [activeCorridor, setActiveCorridor] = useState<string>("N/A");
 
   const [routesList, setRoutesList] = useState<any[]>([]);
   const [shiftsList, setShiftsList] = useState<any[]>([]);
@@ -830,24 +841,7 @@ export default function PlaybackPage() {
       return { snapped: bestPoint, index: bestIndex };
     };
 
-    const createD2DPinIcon = (type: "start" | "end", number: string | number) => {
-      const color = type === "start" ? "#22c55e" : "#ef4444";
-      const strokeColor = type === "start" ? "#15803d" : "#b91c1c";
-      return L.divIcon({
-        className: `lane-${type}-flag-pin`,
-        html: `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 22px; height: 28px;">
-            <svg width="22" height="28" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.5));">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>
-              <circle cx="12" cy="12" r="7.5" fill="white"/>
-              <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="8.5" fill="${strokeColor}">${number}</text>
-            </svg>
-          </div>
-        `,
-        iconSize: [22, 28],
-        iconAnchor: [11, 28],
-      });
-    };
+
 
     const selectedVeh = selectedImei ? vehicles.find(v => v.gps_device?.imei === selectedImei) : null;
     let filtered: any[] = [];
@@ -913,70 +907,7 @@ export default function PlaybackPage() {
           `);
         }
 
-        // If a specific route is selected, also draw its lanes and pin drop markers
-        if (isSingleRouteSelected && route.lanes) {
-          let parsedLanes = route.lanes;
-          if (typeof parsedLanes === "string") {
-            try {
-              parsedLanes = JSON.parse(parsedLanes);
-            } catch (e) {
-              parsedLanes = [];
-            }
-          }
-          if (Array.isArray(parsedLanes)) {
-            // Get route coordinates for snapping/drawing lane segments
-            let routePts: any[] = [];
-            if (feature.geometry && feature.geometry.type === "LineString") {
-              routePts = feature.geometry.coordinates.map((c: any) => L.latLng(c[1], c[0]));
-            } else if (feature.type === "LineString") {
-              routePts = feature.coordinates.map((c: any) => L.latLng(c[1], c[0]));
-            }
 
-            parsedLanes.forEach((rawLane: any) => {
-              const isDB = rawLane.start_point !== undefined;
-              const startLat = isDB ? (rawLane.start_point?.y ?? 0) : (rawLane.startLat ?? 0);
-              const startLng = isDB ? (rawLane.start_point?.x ?? 0) : (rawLane.startLng ?? 0);
-              const endLat = isDB ? (rawLane.end_point?.y ?? 0) : (rawLane.endLat ?? 0);
-              const endLng = isDB ? (rawLane.end_point?.x ?? 0) : (rawLane.endLng ?? 0);
-
-              const lane = {
-                startLat,
-                startLng,
-                endLat,
-                endLng,
-                laneOrder: isDB ? (rawLane.lane_order ?? 1) : (rawLane.laneOrder ?? 1),
-                noOfHouseholds: isDB ? (rawLane.no_of_households ?? 0) : (rawLane.noOfHouseholds ?? 0),
-                noOfCommercials: isDB ? (rawLane.no_of_commercial ?? 0) : (rawLane.noOfCommercials ?? 0),
-              };
-
-              // Lane segment polylines intentionally not drawn — only start/end pin markers are shown.
-
-              // Draw start pin (Green)
-              L.marker([lane.startLat, lane.startLng], {
-                icon: createD2DPinIcon("start", lane.laneOrder)
-              })
-                .bindPopup(`
-                <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
-                  <b>Lane Set ${lane.laneOrder} - Start</b><br/>
-                  <span style="color:#64748b;">Households: ${lane.noOfHouseholds || 0}</span>
-                </div>
-              `)
-                .addTo(layer);
-
-              // Draw end pin (Red)
-              L.marker([lane.endLat, lane.endLng], {
-                icon: createD2DPinIcon("end", lane.laneOrder)
-              })
-                .bindPopup(`
-                <div style="font-family:Inter,sans-serif;font-size:12px;color:#1e293b;padding:4px;">
-                  <b>Lane Set ${lane.laneOrder} - End</b><br/>
-                  <span style="color:#64748b;">Commercials: ${lane.noOfCommercials || 0}</span>
-                </div>
-              `)
-                .addTo(layer);
-            });
-          }
-        }
       } catch (err) {
         console.error("Failed to render route on Playback Map:", err);
       }
@@ -1100,7 +1031,7 @@ export default function PlaybackPage() {
     if (typeof window === "undefined" || !box.current || mapRef.current) return;
     const L = require("leaflet");
 
-    mapRef.current = L.map(box.current, { zoomControl: false }).setView([26.9124, 75.7873], 13);
+    mapRef.current = L.map(box.current, { zoomControl: false, preferCanvas: true }).setView([26.9124, 75.7873], 13);
     L.control.zoom({ position: "bottomright" }).addTo(mapRef.current);
 
     const googleMapLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
@@ -1131,8 +1062,72 @@ export default function PlaybackPage() {
       "Dark Map": darkLayer
     }, {}, { position: 'bottomleft' }).addTo(mapRef.current);
 
+    const handleZoomEnd = () => {
+      const map = mapRef.current;
+      if (!map) return;
+      const zoom = map.getZoom();
+      if (checkpointMarkersRef.current && checkpointMarkersRef.current.length > 0) {
+        checkpointMarkersRef.current.forEach((marker: any) => {
+          const visited = marker.isVisited;
+          const sequenceOrder = marker.sequenceOrder;
+          const color = visited ? '#10b981' : '#ef4444';
+          
+          let newIcon;
+          if (zoom >= 16) {
+            newIcon = L.divIcon({
+              html: `
+                <div style="
+                  width: 24px;
+                  height: 24px;
+                  background: #ffffff;
+                  border: 3px solid ${color};
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                ">
+                  <span style="
+                    color: ${color};
+                    font-family: 'Inter', sans-serif;
+                    font-size: 10px;
+                    font-weight: 800;
+                  ">
+                    ${sequenceOrder}
+                  </span>
+                </div>
+              `,
+              className: "",
+              iconSize: [24, 24],
+              iconAnchor: [12, 12],
+            });
+          } else {
+            newIcon = L.divIcon({
+              html: `
+                <div style="
+                  width: 8px;
+                  height: 8px;
+                  background: ${color};
+                  border: 1.5px solid #ffffff;
+                  border-radius: 50%;
+                  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+                "></div>
+              `,
+              className: "",
+              iconSize: [8, 8],
+              iconAnchor: [4, 4],
+            });
+          }
+          marker.setIcon(newIcon);
+        });
+      }
+    };
+
+    mapRef.current.on("zoomend", handleZoomEnd);
+
     return () => {
       if (mapRef.current) {
+        mapRef.current.off("zoomend", handleZoomEnd);
         mapRef.current.remove();
         mapRef.current = null;
         allRoutesLayerRef.current = null;
@@ -1312,6 +1307,10 @@ export default function PlaybackPage() {
     setPlaying(false);
     setStoppages([]);
     setCheckpoints([]);
+    setTotalGpsPoints(0);
+    setSnappedPointsCount(0);
+    setRawPointsCount(0);
+    setActiveCorridor("N/A");
     if (intervalRef.current) {
       clearTimeout(intervalRef.current);
       intervalRef.current = null;
@@ -1435,7 +1434,17 @@ export default function PlaybackPage() {
           const rRes = await api<any>(`/api/routes/${targetRouteId}/playback-geometry`);
           if (rRes.success && rRes.data) {
             assignedRouteData = rRes.data;
-            routeCheckpoints = rRes.data.checkpoints || [];
+            if (rRes.data.lane_points && rRes.data.lane_points.length > 0) {
+              routeCheckpoints = rRes.data.lane_points.map((lp: any) => ({
+                id: lp.id,
+                route_id: lp.route_id,
+                checkpoint_name: `Point #${lp.sequence_number}`,
+                latitude: lp.latitude,
+                longitude: lp.longitude,
+                radius_meters: 10.0,
+                sequence_order: lp.sequence_number,
+              }));
+            }
           } else {
             console.warn("[Playback] /playback-geometry returned non-success — falling back to raw GPS");
             toast.warn("Route geometry unavailable — using standard map snapping.");
@@ -1449,9 +1458,13 @@ export default function PlaybackPage() {
         try {
           const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
           if (vehicle) {
-            const cov = await api<any>(`/api/vehicles/${vehicle.id}/route-coverage?date=${date}&route_id=${targetRouteId}`);
+            const cov = await api<any>(`/api/vehicles/${vehicle.id}/lane-point-coverage?date=${date}&route_id=${targetRouteId}`);
             if (cov.success && cov.details) {
-              visitedCheckpointsList = cov.details;
+              visitedCheckpointsList = cov.details.map((d: any) => ({
+                checkpoint_id: d.lane_point_id,
+                visited: d.status === "achieved",
+                reason: d.status === "missed" ? "Missed" : (d.status === "pending" ? "Pending" : ""),
+              }));
             }
           }
         } catch (err) {
@@ -1459,57 +1472,223 @@ export default function PlaybackPage() {
         }
       }
 
-      let matchedCoords: [number, number][];
-      if (assignedRouteData && assignedRouteData.geojson) {
-        const roadCoords = parseRouteGeoJSON(assignedRouteData.geojson || "");
-        roadCoordsRef.current = roadCoords;
+      let matchedCoords: [number, number][] = [];
+      let defaultAggressive = false;
+      let matchedRoadIndices: number[] = [];
+      let averageConfidence: number | null = null;
+      let loadedViaAI = false;
+      const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
+      let useAI = aiRouteCorrectionActive;
+      let reconstructedPoints: any[] = [];
+      if (targetRouteId && targetRouteId !== lastLoadedRouteIdRef.current) {
+        lastLoadedRouteIdRef.current = targetRouteId;
+        if (assignedRouteData) {
+          const defaultAi = false; // Always default to false as requested
+          setAiRouteCorrectionActive(defaultAi);
+          useAI = defaultAi;
 
-        // === DEBUG: paste this in browser console to diagnose ===
-        console.log("[Playback DEBUG] assignedRouteData:", {
-          route_id: assignedRouteData.route_id,
-          route_name: assignedRouteData.route_name,
-          geojson_length: (assignedRouteData.geojson || "").length,
-          geojson_preview: (assignedRouteData.geojson || "").slice(0, 120),
-          corridor_meters: assignedRouteData.corridor_meters,
-          route_direction: assignedRouteData.route_direction,
-          checkpoints_count: routeCheckpoints.length,
-        });
-        console.log("[Playback DEBUG] roadCoords extracted:", roadCoords.length, "points. First 3:", roadCoords.slice(0, 3));
-        console.log("[Playback DEBUG] validPoints:", validPoints.length, "GPS points. First 3:", validPoints.slice(0, 3).map(p => [p.lat, p.lng]));
+          const defaultAgg = assignedRouteData.aggressive_snapping === true;
+          setAggressiveSnapping(defaultAgg);
+          defaultAggressive = defaultAgg;
+        } else {
+          setAiRouteCorrectionActive(false);
+          useAI = false;
+          setAggressiveSnapping(false);
+          defaultAggressive = false;
+        }
+      }
 
-        let matchedRoadIndices: number[] = [];
-        if (roadCoords.length === 0) {
-          console.warn("[Playback] Route has geojson but roadCoords extracted as empty — falling back to raw GPS");
+      if (useAI && vehicle && targetRouteId) {
+        try {
+          const reconRes = await post<any>(`/api/vehicles/${vehicle.id}/reconstruct-route?date=${date}&route_id=${targetRouteId}`, {});
+          if (reconRes.success && reconRes.data) {
+            const reconData = reconRes.data;
+            averageConfidence = reconData.average_confidence;
+            reconstructedPoints = reconData.reconstructed_path || [];
+
+            const rawRoadCoords =
+              assignedRouteData && assignedRouteData.geojson
+                ? parseRouteGeoJSON(assignedRouteData.geojson)
+                : (assignedRouteData && assignedRouteData.lane_points && assignedRouteData.lane_points.length > 0
+                    ? assignedRouteData.lane_points.map((lp: any) => [lp.latitude, lp.longitude] as [number, number])
+                    : []);
+
+            let roadCoords: [number, number][] = [];
+            if (rawRoadCoords.length >= 2) {
+              roadCoords.push(rawRoadCoords[0]);
+              for (let i = 0; i < rawRoadCoords.length - 1; i++) {
+                const p1 = rawRoadCoords[i];
+                const p2 = rawRoadCoords[i + 1];
+                const dist = haversineDistance(p1[0], p1[1], p2[0], p2[1]) * 1000;
+                if (dist > 10.0) {
+                  const stepsCount = Math.ceil(dist / 10.0);
+                  for (let s = 1; s < stepsCount; s++) {
+                    const fraction = s / stepsCount;
+                    const lat = p1[0] + (p2[0] - p1[0]) * fraction;
+                    const lng = p1[1] + (p2[1] - p1[1]) * fraction;
+                    roadCoords.push([lat, lng]);
+                  }
+                }
+                roadCoords.push(p2);
+              }
+            } else {
+              roadCoords = rawRoadCoords;
+            }
+            roadCoordsRef.current = roadCoords;
+
+            // Map reconstructed points to roadCoords indices. Use route_index from backend when available
+            matchedRoadIndices = reconstructedPoints.map((p: any) => {
+              if (typeof p.route_index === 'number') {
+                return p.route_index;
+              }
+              if (roadCoords.length === 0) return -1;
+              let closestIdx = -1;
+              let closestDist = Infinity;
+              for (let i = 0; i < roadCoords.length; i++) {
+                const rc = roadCoords[i];
+                const d = haversineDistance(p.lat, p.lng, rc[0], rc[1]);
+                if (d < closestDist) {
+                  closestDist = d;
+                  closestIdx = i;
+                }
+              }
+              return closestIdx;
+            });
+
+            matchedCoords = reconstructedPoints.map((p: any) => [p.lat, p.lng] as [number, number]);
+            checkpointRoadIndicesRef.current = [];
+            checkpointsRef.current = routeCheckpoints;
+            loadedViaAI = true;
+            console.log("[Playback DEBUG] AI reconstruction matched trail loaded successfully. Confidence:", averageConfidence);
+          }
+        } catch (err) {
+          console.warn("[Playback] Failed to load AI reconstruction - falling back to standard snapping:", err);
+          toast.warn("AI Route Correction failed — falling back to standard snapping.");
+        }
+      }
+
+      setAiConfidence(averageConfidence);
+
+      if (!loadedViaAI) {
+        if (assignedRouteData && (assignedRouteData.geojson || (assignedRouteData.lane_points && assignedRouteData.lane_points.length > 0))) {
+          defaultAggressive = assignedRouteData.aggressive_snapping === true;
+          const rawRoadCoords =
+            assignedRouteData.geojson
+              ? parseRouteGeoJSON(assignedRouteData.geojson)
+              : (assignedRouteData.lane_points && assignedRouteData.lane_points.length > 0
+                  ? assignedRouteData.lane_points.map((lp: any) => [lp.latitude, lp.longitude] as [number, number])
+                  : []);
+
+          let roadCoords: [number, number][] = [];
+          if (rawRoadCoords.length >= 2) {
+            roadCoords.push(rawRoadCoords[0]);
+            for (let i = 0; i < rawRoadCoords.length - 1; i++) {
+              const p1 = rawRoadCoords[i];
+              const p2 = rawRoadCoords[i + 1];
+              const dist = haversineDistance(p1[0], p1[1], p2[0], p2[1]) * 1000;
+              if (dist > 10.0) {
+                const stepsCount = Math.ceil(dist / 10.0);
+                for (let s = 1; s < stepsCount; s++) {
+                  const fraction = s / stepsCount;
+                  const lat = p1[0] + (p2[0] - p1[0]) * fraction;
+                  const lng = p1[1] + (p2[1] - p1[1]) * fraction;
+                  roadCoords.push([lat, lng]);
+                }
+              }
+              roadCoords.push(p2);
+            }
+          } else {
+            roadCoords = rawRoadCoords;
+          }
+          roadCoordsRef.current = roadCoords;
+
+          if (roadCoords.length === 0) {
+            console.warn("[Playback] Route has geojson but roadCoords extracted as empty — falling back to raw GPS");
+            matchedCoords = validPoints.map(p => [p.lat, p.lng] as [number, number]);
+            matchedRoadIndices = validPoints.map(() => -1);
+            checkpointRoadIndicesRef.current = [];
+            checkpointsRef.current = [];
+          } else {
+            if (aggressiveSnapping) {
+              const snapResult = buildSequentialSnappedPlaybackDetailed(
+                validPoints,
+                roadCoords,
+                routeCheckpoints,
+                35.0,
+                (assignedRouteData.route_direction as 'outbound' | 'return' | 'both') || "both",
+                assignedRouteData.seq_lookahead || 5
+              );
+              matchedCoords = snapResult.coords;
+              matchedRoadIndices = snapResult.roadIndices;
+              checkpointRoadIndicesRef.current = snapResult.checkpointRoadIndices || [];
+              checkpointsRef.current = snapResult.normalisedCheckpoints || routeCheckpoints;
+            } else {
+              // Default Mode: Turf.js light correction is active
+              const tolerance = 13.0;
+              const geojsonObj = assignedRouteData.geojson || {
+                type: "LineString",
+                coordinates: rawRoadCoords.map((c: any) => [c[1], c[0]]) // GeoJSON is [lng, lat]
+              };
+              matchedCoords = fetchMapMatchedRouteTurf(
+                validPoints,
+                geojsonObj,
+                tolerance
+              );
+              let lastRoadIdx = 0;
+              matchedRoadIndices = matchedCoords.map((coord, idx) => {
+                const raw = validPoints[idx];
+                if (coord[0] === raw.lat && coord[1] === raw.lng) {
+                  return -1;
+                }
+                if (roadCoords.length === 0) return -1;
+                let closestIdx = -1;
+                let closestDist = Infinity;
+                for (let i = lastRoadIdx; i < roadCoords.length; i++) {
+                  const rc = roadCoords[i];
+                  const d = haversineDistance(coord[0], coord[1], rc[0], rc[1]);
+                  if (d < closestDist) {
+                    closestDist = d;
+                    closestIdx = i;
+                  }
+                }
+                if (closestIdx !== -1) {
+                  lastRoadIdx = closestIdx;
+                }
+                return closestIdx;
+              });
+              checkpointRoadIndicesRef.current = [];
+              checkpointsRef.current = routeCheckpoints;
+            }
+          }
+        } else {
+          console.warn("[Playback DEBUG] No geojson on route — rendering raw GPS. assignedRouteData:", assignedRouteData);
           matchedCoords = validPoints.map(p => [p.lat, p.lng] as [number, number]);
-          matchedRoadIndices = validPoints.map(() => -1);
+          matchedCoordsRef.current = matchedCoords;
+          matchedRoadIndicesRef.current = matchedCoords.map(() => -1);
           checkpointRoadIndicesRef.current = [];
           checkpointsRef.current = [];
-        } else {
-          const snapResult = buildSequentialSnappedPlaybackDetailed(
-            validPoints,
-            roadCoords,
-            routeCheckpoints,
-            Math.max(assignedRouteData.corridor_meters || 50, 100),
-            (assignedRouteData.route_direction as 'outbound' | 'return' | 'both') || "both",
-            assignedRouteData.seq_lookahead || 5
-          );
-          matchedCoords = snapResult.coords;
-          matchedRoadIndices = snapResult.roadIndices;
-          checkpointRoadIndicesRef.current = snapResult.checkpointRoadIndices || [];
-          checkpointsRef.current = snapResult.normalisedCheckpoints || routeCheckpoints;
-          console.log("[Playback DEBUG] snapped output — first 5 coords:", matchedCoords.slice(0, 5));
-          const rawCount = matchedCoords.filter((c, i) => c[0] === validPoints[i]?.lat && c[1] === validPoints[i]?.lng).length;
-          console.log(`[Playback DEBUG] ${rawCount}/${matchedCoords.length} points are raw GPS (unsnapped — outside corridor or fallback)`);
         }
-        matchedCoordsRef.current = matchedCoords;
-        matchedRoadIndicesRef.current = matchedRoadIndices;
+      }
+      matchedCoordsRef.current = matchedCoords;
+      matchedRoadIndicesRef.current = matchedRoadIndices;
+
+      const pointsToUse = loadedViaAI ? reconstructedPoints : validPoints;
+      const roadIndices = matchedRoadIndices;
+
+      const total = pointsToUse.length;
+      const snapped = roadIndices.filter(idx => idx !== -1).length;
+      const raw = total - snapped;
+      setTotalGpsPoints(total);
+      setSnappedPointsCount(snapped);
+      setRawPointsCount(raw);
+      if (loadedViaAI) {
+        setActiveCorridor("N/A");
       } else {
-        console.warn("[Playback DEBUG] No geojson on route — rendering raw GPS. assignedRouteData:", assignedRouteData);
-        matchedCoords = validPoints.map(p => [p.lat, p.lng] as [number, number]);
-        matchedCoordsRef.current = matchedCoords;
-        matchedRoadIndicesRef.current = matchedCoords.map(() => -1);
-        checkpointRoadIndicesRef.current = [];
-        checkpointsRef.current = [];
+        setActiveCorridor(`${aggressiveSnapping ? 35.0 : 13.0} m`);
+      }
+
+      if (loadedViaAI) {
+        setPoints(reconstructedPoints);
       }
 
       // Pre-compute detailed steps for smooth animation along snapped roadCoords
@@ -1526,17 +1705,16 @@ export default function PlaybackPage() {
         steps.push({
           lat: matchedCoords[0][0],
           lng: matchedCoords[0][1],
-          time: validPoints[0].time,
-          speed: validPoints[0].speed,
-          ignition: validPoints[0].ignition,
+          time: pointsToUse[0].time,
+          speed: pointsToUse[0].speed,
+          ignition: pointsToUse[0].ignition,
           gpsIndex: 0,
         });
 
         const roadCoords = roadCoordsRef.current;
-        const roadIndices = matchedRoadIndicesRef.current || [];
 
         // Pre-compute average spacing between consecutive road coords (sampled from first 50 pairs)
-        const sampleN = Math.min(roadCoords.length - 1, 50);
+        const sampleN = Math.min(roadCoords.length - 1, 10);
         let totalSpacingM = 0;
         for (let s = 0; s < sampleN; s++) {
           totalSpacingM += haversineDistance(
@@ -1546,11 +1724,11 @@ export default function PlaybackPage() {
         }
         const avgCoordSpacingM = sampleN > 0 ? totalSpacingM / sampleN : 10;
 
-        for (let i = 1; i < validPoints.length; i++) {
+        for (let i = 1; i < pointsToUse.length; i++) {
           const prevIdx = roadIndices[i - 1] ?? -1;
           const currIdx = roadIndices[i] ?? -1;
-          const pPrev = validPoints[i - 1];
-          const pCurr = validPoints[i];
+          const pPrev = pointsToUse[i - 1];
+          const pCurr = pointsToUse[i];
 
           const tPrev = new Date(pPrev.time).getTime();
           const tCurr = new Date(pCurr.time).getTime();
@@ -1563,25 +1741,30 @@ export default function PlaybackPage() {
             const gap = Math.abs(currIdx - prevIdx);
             const p1 = roadCoords[prevIdx];
             const p2 = roadCoords[currIdx];
-            const directDistM = haversineDistance(p1[0], p1[1], p2[0], p2[1]) * 1000;
+            if (p1 && p2) {
+              const directDistM = haversineDistance(p1[0], p1[1], p2[0], p2[1]) * 1000;
 
-            const timeDiffSec = Math.abs(tCurr - tPrev) / 1000;
-            const MAX_SPEED_MPS = 10;
-            const maxAllowedGap = timeDiffSec > 0
-              ? Math.ceil(timeDiffSec * MAX_SPEED_MPS / avgCoordSpacingM) + 10
-              : 30;
+              const timeDiffSec = Math.abs(tCurr - tPrev) / 1000;
+              const MAX_SPEED_MPS = 10;
+              const maxAllowedGap = timeDiffSec > 0
+                ? Math.ceil(timeDiffSec * MAX_SPEED_MPS / avgCoordSpacingM) + 10
+                : 30;
 
-            const isSkippedDetour = gap > 10 && directDistM < 80;
-            const isPhysicallyImpossible = gap > maxAllowedGap;
+              const isPhysicallyImpossible = gap > maxAllowedGap;
 
-            if (!isSkippedDetour && !isPhysicallyImpossible) {
-              if (prevIdx <= currIdx) {
-                for (let j = prevIdx + 1; j <= currIdx; j++) {
-                  intermediateCoords.push(roadCoords[j]);
-                }
-              } else {
-                for (let j = prevIdx - 1; j >= currIdx; j--) {
-                  intermediateCoords.push(roadCoords[j]);
+              if (!isPhysicallyImpossible || useAI) {
+                if (prevIdx <= currIdx) {
+                  for (let j = prevIdx + 1; j <= currIdx; j++) {
+                    if (roadCoords[j]) {
+                      intermediateCoords.push(roadCoords[j]);
+                    }
+                  }
+                } else {
+                  for (let j = prevIdx - 1; j >= currIdx; j--) {
+                    if (roadCoords[j]) {
+                      intermediateCoords.push(roadCoords[j]);
+                    }
+                  }
                 }
               }
             }
@@ -1602,7 +1785,7 @@ export default function PlaybackPage() {
                 gpsIndex: i,
               });
             });
-          } else {
+          } else if (matchedCoords[i]) {
             steps.push({
               lat: matchedCoords[i][0],
               lng: matchedCoords[i][1],
@@ -1660,12 +1843,16 @@ export default function PlaybackPage() {
         rawTraceLineRef.current.addTo(map);
       }
 
-      map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
+      if (roadCoordsRef.current && roadCoordsRef.current.length > 0) {
+        map.fitBounds(lineRef.current.getBounds(), { padding: [50, 50] });
+      } else if (rawCoords.length > 0) {
+        map.fitBounds(rawTraceLineRef.current.getBounds(), { padding: [50, 50] });
+      }
 
       // 2. Draw dynamic covered route trail — color resolved later from assignedRouteData
       // Initialise with a fallback; color will be updated once assignedRouteData is resolved below
       activeLineRef.current = L.polyline([matchedCoords[0], matchedCoords[0]], {
-        color: "#f97316", // Temporary fallback; replaced below when route color is known
+        color: useAI ? "#0d9488" : "#f97316", // Temporary fallback; replaced below when route color is known
         weight: 5.5,
         opacity: 0.95,
         lineCap: "round",
@@ -1765,11 +1952,11 @@ export default function PlaybackPage() {
       });
       const startPos = matchedCoords.length > 0 ? matchedCoords[0] : baseCoords[0];
       mkRef.current = L.marker(startPos, { icon: vehicleIcon })
-        .bindPopup(getPopupContent(validPoints[0]))
+        .bindPopup(getPopupContent(pointsToUse[0]))
         .addTo(map);
 
       // 6. Detect and draw stoppages using color/gradient & centered duration in minutes
-      const detectedStoppages = detectStoppages(validPoints);
+      const detectedStoppages = detectStoppages(pointsToUse);
       setStoppages(detectedStoppages);
 
       detectedStoppages.forEach((s, i) => {
@@ -1871,7 +2058,7 @@ export default function PlaybackPage() {
           // Update the vehicle coverage trace to use the same color as the assigned route
           // at full opacity so it stands out clearly against the faint route background.
           if (activeLineRef.current) {
-            activeLineRef.current.setStyle({ color: routeColor, opacity: 0.95 });
+            activeLineRef.current.setStyle({ color: useAI ? "#0d9488" : routeColor, opacity: 0.95 });
           }
 
           // Draw planned route in the SAME color but at a much lighter opacity so it acts
@@ -1883,6 +2070,9 @@ export default function PlaybackPage() {
               opacity: 0.30, // Light ghost — same color as vehicle path but clearly behind it
               lineCap: "round",
               lineJoin: "round"
+            },
+            pointToLayer: function (feature: any, latlng: any) {
+              return L.circleMarker(latlng, { radius: 0, opacity: 0, fillOpacity: 0 });
             },
             pane: "assignedRoutePane"
           });
@@ -1965,6 +2155,7 @@ export default function PlaybackPage() {
         });
       }
 
+      const currentZoom = map.getZoom();
       const checkpointMarkers: any[] = [];
       const markersMap: Record<number, any> = {};
       routeCheckpoints.forEach((cp, idx) => {
@@ -1972,71 +2163,58 @@ export default function PlaybackPage() {
         const visited = cpStatus.visited;
         const reason = cpStatus.reason;
 
-        const isLaneStart = cp.checkpoint_name.includes("_Lane") && cp.checkpoint_name.includes("_Start");
-        const isLaneEnd = cp.checkpoint_name.includes("_Lane") && cp.checkpoint_name.includes("_End");
-
+        const color = visited ? '#10b981' : '#ef4444';
+        
         let cpIcon;
-        if (isLaneStart || isLaneEnd) {
-          const type = isLaneStart ? "start" : "end";
-          const match = cp.checkpoint_name.match(/_Lane(\d+)_/);
-          const laneNum = match ? match[1] : String(idx + 1);
-
-          const color = type === "start" ? (visited ? "#10b981" : "#22c55e") : (visited ? "#ef4444" : "#dc2626");
-          const strokeColor = type === "start" ? "#15803d" : "#b91c1c";
-
+        if (currentZoom >= 16) {
           cpIcon = L.divIcon({
             html: `
-              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 28px; height: 36px; opacity: ${visited ? 1.0 : 0.75};">
-                <svg width="28" height="36" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.4));">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>
-                  <circle cx="12" cy="12" r="7.5" fill="white"/>
-                  <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-family="'Inter', sans-serif" font-weight="900" font-size="8.5" fill="${strokeColor}">${laneNum}</text>
-                </svg>
+              <div style="
+                width: 24px;
+                height: 24px;
+                background: #ffffff;
+                border: 3px solid ${color};
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              ">
+                <span style="
+                  color: ${color};
+                  font-family: 'Inter', sans-serif;
+                  font-size: 10px;
+                  font-weight: 800;
+                ">
+                  ${cp.sequence_order}
+                </span>
               </div>
             `,
             className: "",
-            iconSize: [28, 36],
-            iconAnchor: [14, 36],
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
           });
         } else {
           cpIcon = L.divIcon({
             html: `
               <div style="
-                width: 28px;
-                height: 28px;
-                background: ${visited ? 'rgba(16, 185, 129, 0.22)' : 'rgba(239, 68, 68, 0.22)'};
-                border: 2px solid ${visited ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
+                width: 8px;
+                height: 8px;
+                background: ${color};
+                border: 1.5px solid #ffffff;
                 border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.15);
-              ">
-                <div style="
-                  width: 18px;
-                  height: 18px;
-                  background: ${visited ? '#10b981' : '#ef4444'};
-                  border-radius: 50%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  color: #ffffff;
-                  font-family: 'Inter', sans-serif;
-                  font-size: 9px;
-                  font-weight: 800;
-                ">
-                  ${idx + 1}
-                </div>
-              </div>
+                box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+              "></div>
             `,
             className: "",
-            iconSize: [28, 28],
-            iconAnchor: [14, 14],
+            iconSize: [8, 8],
+            iconAnchor: [4, 4],
           });
         }
 
         const marker = L.marker([cp.latitude, cp.longitude], { icon: cpIcon });
         (marker as any).isVisited = visited;
+        (marker as any).sequenceOrder = cp.sequence_order;
         markersMap[cp.id] = marker;
 
         marker.bindPopup(`
@@ -2061,25 +2239,12 @@ export default function PlaybackPage() {
           </div>
         `);
 
-        // Also draw the checkpoint radius circle
-        const circle = L.circle([cp.latitude, cp.longitude], {
-          radius: cp.radius_meters || 100,
-          color: visited ? '#10b981' : '#ef4444',
-          weight: 1,
-          fillColor: visited ? '#10b981' : '#ef4444',
-          fillOpacity: 0.05,
-          interactive: false
-        });
-        (circle as any).isVisited = visited;
-
         const shouldShowCP = showPlannedRoute && (visited ? showCoveredCheckpoints : showUncoveredCheckpoints);
         if (shouldShowCP) {
           marker.addTo(map);
-          circle.addTo(map);
         }
 
         checkpointMarkers.push(marker);
-        checkpointMarkers.push(circle);
       });
       checkpointMarkersRef.current = checkpointMarkers;
       checkpointMarkersMapRef.current = markersMap;
@@ -2095,12 +2260,135 @@ export default function PlaybackPage() {
     } catch (err) {
       console.error("Playback load error:", err);
     }
-  }, [selectedImei, date, routeIdParam, selectedRouteId, vehicles]);
+  }, [selectedImei, date, routeIdParam, selectedRouteId, vehicles, aiRouteCorrectionActive, aggressiveSnapping]);
 
-  // Clear old route when vehicle or date changes (playback loads only on Play button click)
+  const recalculatePlaybackSteps = useCallback((isAggressive: boolean) => {
+    const validPoints = points;
+    const roadCoords = roadCoordsRef.current || [];
+    const roadIndices = matchedRoadIndicesRef.current || [];
+    const matchedCoords = matchedCoordsRef.current || [];
+
+    if (validPoints.length === 0 || matchedCoords.length === 0) return;
+
+    // Pre-compute detailed steps for smooth animation along snapped roadCoords
+    const steps: {
+      lat: number;
+      lng: number;
+      time: string;
+      speed: number;
+      ignition: boolean | null;
+      gpsIndex: number;
+    }[] = [];
+
+    steps.push({
+      lat: matchedCoords[0][0],
+      lng: matchedCoords[0][1],
+      time: validPoints[0].time,
+      speed: validPoints[0].speed,
+      ignition: validPoints[0].ignition,
+      gpsIndex: 0,
+    });
+
+    const sampleN = Math.min(roadCoords.length - 1, 50);
+    let totalSpacingM = 0;
+    for (let s = 0; s < sampleN; s++) {
+      totalSpacingM += haversineDistance(
+        roadCoords[s][0], roadCoords[s][1],
+        roadCoords[s + 1][0], roadCoords[s + 1][1]
+      ) * 1000;
+    }
+    const avgCoordSpacingM = sampleN > 0 ? totalSpacingM / sampleN : 10;
+
+    for (let i = 1; i < validPoints.length; i++) {
+      const prevIdx = roadIndices[i - 1] ?? -1;
+      const currIdx = roadIndices[i] ?? -1;
+      const pPrev = validPoints[i - 1];
+      const pCurr = validPoints[i];
+
+      const tPrev = new Date(pPrev.time).getTime();
+      const tCurr = new Date(pCurr.time).getTime();
+      const sPrev = pPrev.speed;
+      const sCurr = pCurr.speed;
+
+      let intermediateCoords: [number, number][] = [];
+
+      if (prevIdx !== -1 && currIdx !== -1 && roadCoords.length > 0) {
+        const gap = Math.abs(currIdx - prevIdx);
+        const p1 = roadCoords[prevIdx];
+        const p2 = roadCoords[currIdx];
+        if (p1 && p2) {
+          const directDistM = haversineDistance(p1[0], p1[1], p2[0], p2[1]) * 1000;
+
+          const timeDiffSec = Math.abs(tCurr - tPrev) / 1000;
+          const MAX_SPEED_MPS = 10;
+          const maxAllowedGap = timeDiffSec > 0
+            ? Math.ceil(timeDiffSec * MAX_SPEED_MPS / avgCoordSpacingM) + 10
+            : 30;
+
+          const isPhysicallyImpossible = gap > maxAllowedGap;
+
+          if (!isPhysicallyImpossible || aiRouteCorrectionActive) {
+            if (prevIdx <= currIdx) {
+              for (let j = prevIdx + 1; j <= currIdx; j++) {
+                if (roadCoords[j]) {
+                  intermediateCoords.push(roadCoords[j]);
+                }
+              }
+            } else {
+              for (let j = prevIdx - 1; j >= currIdx; j--) {
+                if (roadCoords[j]) {
+                  intermediateCoords.push(roadCoords[j]);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (intermediateCoords.length > 0) {
+        const totalSteps = intermediateCoords.length;
+        intermediateCoords.forEach((coord, stepIdx) => {
+          const fraction = (stepIdx + 1) / (totalSteps + 1);
+          const interpTime = new Date(tPrev + (tCurr - tPrev) * fraction).toISOString();
+          const interpSpeed = sPrev + (sCurr - sPrev) * fraction;
+          steps.push({
+            lat: coord[0],
+            lng: coord[1],
+            time: interpTime,
+            speed: interpSpeed,
+            ignition: pCurr.ignition,
+            gpsIndex: i,
+          });
+        });
+      } else if (matchedCoords[i]) {
+        steps.push({
+          lat: matchedCoords[i][0],
+          lng: matchedCoords[i][1],
+          time: pCurr.time,
+          speed: pCurr.speed,
+          ignition: pCurr.ignition,
+          gpsIndex: i,
+        });
+      }
+    }
+
+    setPlaybackSteps(steps);
+    setIdx(0);
+    setPlaying(false);
+    if (intervalRef.current) {
+      clearTimeout(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, [points]);
+
+  // Automatically load route playback and checkpoints whenever vehicle, date, or route changes
   useEffect(() => {
-    clearPlaybackLayers();
-  }, [selectedImei, date, clearPlaybackLayers]);
+    if (selectedImei && date) {
+      loadRoute(false);
+    } else {
+      clearPlaybackLayers();
+    }
+  }, [selectedImei, date, selectedRouteId, loadRoute, clearPlaybackLayers, aiRouteCorrectionActive]);
 
   const handleStop = () => {
     setPlaying(false);
@@ -2137,7 +2425,7 @@ export default function PlaybackPage() {
       activeLineRef.current.bringToFront();
     } else {
       activeLineRef.current = L.polyline(coveredCoords, {
-        color: assignedRouteColorRef.current,
+        color: aiRouteCorrectionActive ? "#0d9488" : assignedRouteColorRef.current,
         weight: 5.5,
         opacity: 0.95,
         lineCap: "round",
@@ -2146,13 +2434,13 @@ export default function PlaybackPage() {
       activeLineRef.current.on('click', handleLineClick);
       activeLineRef.current.bringToFront();
     }
-  }, [playbackSteps, handleLineClick]);
+  }, [playbackSteps, handleLineClick, aiRouteCorrectionActive]);
 
   // Handle Playback Intervals (Adjusted by Speed Multiplier)
   useEffect(() => {
     if (!playing || idx >= playbackSteps.length - 1 || !mapRef.current || !mkRef.current) return;
 
-    const baseInterval = (points.length * 150) / playbackSteps.length;
+    const baseInterval = (points.length * 50) / playbackSteps.length;
     const intervalDuration = Math.max(8, baseInterval / speedMultiplier);
 
     if (mkRef.current && mkRef.current._icon) {
@@ -2402,6 +2690,20 @@ export default function PlaybackPage() {
             />
           </div>
 
+          {/* Select Route */}
+          <div className="min-w-[170px]">
+            <SearchableSelect
+              value={selectedRouteId}
+              onChange={(val) => {
+                setSelectedRouteId(val);
+                setRouteIdParam(null);
+              }}
+              options={routeOptions}
+              placeholder="Select Route"
+              className="w-full"
+            />
+          </div>
+
           {/* Speed Selector */}
           <div className="min-w-[80px]">
             <select
@@ -2417,6 +2719,44 @@ export default function PlaybackPage() {
               <option value={32}>32X</option>
               <option value={64}>64X</option>
             </select>
+          </div>
+
+          {/* Aggressive Snapping Toggle */}
+          <div className="flex items-center gap-1.5 shrink-0 px-2 border-l border-slate-200">
+            <input
+              id="aggressive-snapping-toggle"
+              type="checkbox"
+              checked={aggressiveSnapping}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setAggressiveSnapping(checked);
+                loadRoute(false);
+              }}
+              className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+            />
+            <label htmlFor="aggressive-snapping-toggle" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+              Aggressive
+            </label>
+          </div>
+
+          {/* AI Route Reconstruction Toggle */}
+          <div className="flex items-center gap-1.5 shrink-0 px-2 border-l border-slate-200">
+            <input
+              id="ai-route-correction-toggle"
+              type="checkbox"
+              checked={aiRouteCorrectionActive}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setAiRouteCorrectionActive(checked);
+                if (checked) {
+                  setShowRawGpsTrace(true);
+                }
+              }}
+              className="w-4 h-4 text-violet-600 border-slate-300 rounded focus:ring-violet-500 cursor-pointer"
+            />
+            <label htmlFor="ai-route-correction-toggle" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+              AI Correction
+            </label>
           </div>
 
           {/* Playback Controls Row */}
@@ -2512,6 +2852,69 @@ export default function PlaybackPage() {
 
         {/* Leaflet Map takes full size */}
         <div ref={box} className="flex-1 w-full h-full z-0 bg-theme-base" />
+
+        {/* Floating AI Confidence Badge */}
+        {aiConfidence !== null && (
+          <div className="absolute bottom-16 left-4 z-[1000] bg-violet-600/90 backdrop-blur text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-2xl border border-violet-400/30 flex items-center gap-2 select-none pointer-events-none animate-fade-in">
+            <span className="text-base animate-pulse">🧠</span>
+            <div className="flex flex-col">
+              <span className="text-[9px] uppercase tracking-wider text-violet-200 font-bold">Viterbi Alignment</span>
+              <span className="text-sm font-black font-mono">AI Confidence: {Math.round(aiConfidence)}%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Floating Snapping Diagnostics Overlay */}
+        {selectedImei && (
+          <div className="absolute top-3 left-4 z-[1000] bg-slate-900/90 backdrop-blur-md text-white p-3.5 rounded-xl text-xs shadow-2xl border border-slate-700/50 flex flex-col gap-2 w-60 select-none animate-fade-in font-sans">
+            <div className="flex items-center justify-between border-b border-slate-700/40 pb-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">⚙️</span>
+                <span className="font-bold text-slate-200 uppercase tracking-wider text-[9px]">Snapping Diagnostics</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                aiRouteCorrectionActive
+                  ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                  : aggressiveSnapping
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+              }`}>
+                {aiRouteCorrectionActive ? "AI Mode" : aggressiveSnapping ? "Aggressive" : "Default Mode"}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1 text-slate-300 font-mono text-[11px]">
+              <div className="flex justify-between">
+                <span>Active Mode:</span>
+                <span className="font-bold text-white">
+                  {aiRouteCorrectionActive ? "AI Mode" : aggressiveSnapping ? "Aggressive" : "Default"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Corridor:</span>
+                <span className="font-bold text-white">
+                  {activeCorridor}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-800 pt-1.5 mt-0.5">
+                <span>Total GPS Points:</span>
+                <span className="font-bold text-white">{totalGpsPoints}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Snapped Points:</span>
+                <span className="font-bold text-emerald-400">
+                  {snappedPointsCount}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Raw Points:</span>
+                <span className="font-bold text-rose-400">
+                  {rawPointsCount}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Custom Orange Map Indication Button matching screenshot */}
         <div className={`absolute top-3 z-[1000] flex flex-col items-end transition-all duration-300 ${stoppages.length > 0 ? 'right-[280px]' : 'right-4'

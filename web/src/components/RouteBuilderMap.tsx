@@ -2,183 +2,12 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-
-interface UILane {
-	laneOrder: number;
-	totalDistance: number;
-	noOfHouseholds: number;
-	noOfCommercials: number;
-	doubleLane: string; // "Yes" | "No"
-	startLat: number;
-	startLng: number;
-	endLat: number;
-	endLng: number;
-	id?: number;
-	name?: string;
-	route_id?: number | null;
-	is_active?: boolean;
-	created_by?: number;
-	updated_by?: number;
-	deleted_at?: string | null;
-	created_at?: string;
-	updated_at?: string;
-	lane_start_time?: string | null;
-	time_in_completion?: string | null;
-}
-
-interface DBLane {
-	id?: number;
-	name?: string;
-	total_distance: number;
-	start_point: { x: number; y: number };
-	end_point: { x: number; y: number };
-	lane_order: number;
-	is_double_lane: boolean;
-	no_of_households: number;
-	no_of_commercial: number | null;
-	route_id?: number | null;
-	is_active?: boolean;
-	created_by?: number;
-	updated_by?: number;
-	deleted_at?: string | null;
-	created_at?: string;
-	updated_at?: string;
-	lane_start_time?: string | null;
-	time_in_completion?: string | null;
-}
-
-function snapToRoute(latlng: L.LatLng, coords: L.LatLng[]): { snapped: L.LatLng; index: number } {
-	if (coords.length === 0) return { snapped: latlng, index: -1 };
-	if (coords.length === 1) return { snapped: coords[0], index: 0 };
-
-	let minDistance = Infinity;
-	let bestPoint = coords[0];
-	let bestIndex = 0;
-
-	for (let i = 0; i < coords.length - 1; i++) {
-		const p1 = coords[i];
-		const p2 = coords[i + 1];
-
-		const x = latlng.lng;
-		const y = latlng.lat;
-		const x1 = p1.lng;
-		const y1 = p1.lat;
-		const x2 = p2.lng;
-		const y2 = p2.lat;
-
-		const dx = x2 - x1;
-		const dy = y2 - y1;
-
-		let t = 0;
-		if (dx !== 0 || dy !== 0) {
-			t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
-			t = Math.max(0, Math.min(1, t)); // Clamp to segment
-		}
-
-		const snapped = L.latLng(y1 + t * dy, x1 + t * dx);
-		const d = latlng.distanceTo(snapped);
-
-		if (d < minDistance) {
-			minDistance = d;
-			bestPoint = snapped;
-			bestIndex = i;
-		}
-	}
-
-	return { snapped: bestPoint, index: bestIndex };
-}
-
-function toUILane(l: any, routeCoords?: { lat: number; lng: number }[]): UILane {
-	if (!l) {
-		return {
-			laneOrder: 1,
-			totalDistance: 0,
-			noOfHouseholds: 0,
-			noOfCommercials: 0,
-			doubleLane: "No",
-			startLat: 0,
-			startLng: 0,
-			endLat: 0,
-			endLng: 0
-		};
-	}
-	
-	let startLat = typeof l.startLat === "number" ? l.startLat : (l.start_point?.y ?? 0);
-	let startLng = typeof l.startLng === "number" ? l.startLng : (l.start_point?.x ?? 0);
-	let endLat = typeof l.endLat === "number" ? l.endLat : (l.end_point?.y ?? 0);
-	let endLng = typeof l.endLng === "number" ? l.endLng : (l.end_point?.x ?? 0);
-
-	if (routeCoords && routeCoords.length > 0) {
-		const leafletRoute = routeCoords.map((c) => L.latLng(c.lat, c.lng));
-		
-		const snapStart = snapToRoute(L.latLng(startLat, startLng), leafletRoute);
-		startLat = snapStart.snapped.lat;
-		startLng = snapStart.snapped.lng;
-
-		const snapEnd = snapToRoute(L.latLng(endLat, endLng), leafletRoute);
-		endLat = snapEnd.snapped.lat;
-		endLng = snapEnd.snapped.lng;
-	}
-
-	return {
-		laneOrder: l.lane_order ?? l.laneOrder ?? 1,
-		totalDistance: l.total_distance ?? l.totalDistance ?? 0,
-		noOfHouseholds: l.no_of_households ?? l.noOfHouseholds ?? 0,
-		noOfCommercials: l.no_of_commercial ?? l.noOfCommercials ?? 0,
-		doubleLane: l.is_double_lane !== undefined ? (l.is_double_lane ? "Yes" : "No") : (l.doubleLane ?? "No"),
-		startLat,
-		startLng,
-		endLat,
-		endLng,
-		id: l.id,
-		name: l.name,
-		route_id: l.route_id,
-		is_active: l.is_active ?? true,
-		created_by: l.created_by,
-		updated_by: l.updated_by,
-		deleted_at: l.deleted_at,
-		created_at: l.created_at,
-		updated_at: l.updated_at,
-		lane_start_time: l.lane_start_time,
-		time_in_completion: l.time_in_completion
-	};
-}
-
-function toDBLane(l: UILane): DBLane {
-	return {
-		id: l.id,
-		name: l.name ?? `lane_440_${l.laneOrder}`,
-		total_distance: l.totalDistance,
-		start_point: {
-			x: l.startLng,
-			y: l.startLat
-		},
-		end_point: {
-			x: l.endLng,
-			y: l.endLat
-		},
-		lane_order: l.laneOrder,
-		is_double_lane: l.doubleLane === "Yes",
-		no_of_households: l.noOfHouseholds,
-		no_of_commercial: l.noOfCommercials || null,
-		route_id: l.route_id ?? null,
-		created_by: l.created_by ?? 1,
-		updated_by: l.updated_by ?? 1,
-		deleted_at: l.deleted_at ?? null,
-		is_active: l.is_active ?? true,
-		created_at: l.created_at,
-		updated_at: l.updated_at,
-		lane_start_time: l.lane_start_time ?? null,
-		time_in_completion: l.time_in_completion ?? null
-	};
-}
+import * as turf from "@turf/turf";
 
 interface Props {
 	routeCoords: { lat: number; lng: number }[];
 	setRouteCoords: React.Dispatch<React.SetStateAction<{ lat: number; lng: number }[]>>;
 	borderColor: string;
-	lanes: DBLane[];
-	setLanes: (lanes: DBLane[]) => void;
 	distance: number;
 	setDistance: (dist: number) => void;
 	geojsonText: string;
@@ -189,8 +18,6 @@ export default function RouteBuilderMap({
 	routeCoords,
 	setRouteCoords,
 	borderColor,
-	lanes,
-	setLanes,
 	distance,
 	setDistance,
 	geojsonText,
@@ -200,60 +27,14 @@ export default function RouteBuilderMap({
 	const mapRef = useRef<L.Map | null>(null);
 	const routePolylineRef = useRef<L.Polyline | null>(null);
 	const routeMarkersRef = useRef<L.Marker[]>([]);
-	const lanePolylinesRef = useRef<L.Polyline[]>([]);
-	const laneMarkersRef = useRef<L.Marker[]>([]);
-	const currentPlacingMarkersRef = useRef<L.Marker[]>([]);
 	const vertexMarkersRef = useRef<L.Marker[]>([]);
 	const hasFitBoundsRef = useRef(false);
-	const lanesRef = useRef<UILane[]>([]);
-	useEffect(() => {
-		lanesRef.current = lanes.map((l) => toUILane(l, routeCoords));
-	}, [lanes, routeCoords]);
 
 	const [isDrawing, setIsDrawing] = useState(false);
-	const [isEditingLanes, setIsEditingLanes] = useState(false);
-	const [activeOverlay, setActiveOverlay] = useState(false);
 	const [showConfirmClear, setShowConfirmClear] = useState(false);
 
 	// Overlay checkbox layers
 	const [showRoute, setShowRoute] = useState(true);
-	const [showStartPoint, setShowStartPoint] = useState(true);
-	const [showEndPoint, setShowEndPoint] = useState(true);
-	const [showCollectionPoint, setShowCollectionPoint] = useState(true);
-
-	// Checkpoint placement state
-	const [laneStartPoint, setLaneStartPoint] = useState<{ lat: number; lng: number; index: number } | null>(null);
-	const [laneEndPoint, setLaneEndPoint] = useState<{ lat: number; lng: number; index: number } | null>(null);
-	const [showLaneForm, setShowLaneForm] = useState(false);
-	const [laneForm, setLaneForm] = useState({
-		laneOrder: 1,
-		totalDistance: 0,
-		noOfHouseholds: 0,
-		noOfCommercials: 0,
-		doubleLane: "No",
-	});
-
-	const uiLanesList = lanes.map((l) => toUILane(l, routeCoords));
-
-	// Helper to create beautiful map pin drop point icons with numbers
-	const createPinIcon = (type: "start" | "end", number: string | number) => {
-		const color = type === "start" ? "#22c55e" : "#ef4444";
-		const strokeColor = type === "start" ? "#15803d" : "#b91c1c";
-		return L.divIcon({
-			className: `lane-${type}-flag-pin`,
-			html: `
-				<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 28px; height: 36px;">
-					<svg width="28" height="36" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.5));">
-						<path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>
-						<circle cx="12" cy="12" r="7.5" fill="white"/>
-						<text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="8.5" fill="${strokeColor}">${number}</text>
-					</svg>
-				</div>
-			`,
-			iconSize: [28, 36],
-			iconAnchor: [14, 36],
-		});
-	};
 
 
 	// Calculate distance along polyline route
@@ -335,16 +116,7 @@ export default function RouteBuilderMap({
 		};
 	}, []);
 
-	// Global hook to delete a lane from Leaflet popups
-	useEffect(() => {
-		(window as any).deleteLane = (laneOrder: number) => {
-			const updated = lanesRef.current.filter((l) => l.laneOrder !== laneOrder);
-			setLanes(updated.map(toDBLane));
-		};
-		return () => {
-			delete (window as any).deleteLane;
-		};
-	}, [setLanes]);
+
 
 	// Global hook to delete a route point from vertex marker popups
 	useEffect(() => {
@@ -407,59 +179,13 @@ export default function RouteBuilderMap({
 				});
 				return;
 			}
-
-			if (activeOverlay) {
-				if (routeCoords.length < 2) {
-					alert("Please draw the route path first before setting lane points.");
-					return;
-				}
-
-				const leafletRoute = routeCoords.map((pt) => L.latLng(pt.lat, pt.lng));
-				const snapResult = snapToRoute(e.latlng, leafletRoute);
-
-				// Snap within 100 meters (magnetic behavior)
-				const snapDist = e.latlng.distanceTo(snapResult.snapped);
-				const isMagnetic = snapDist <= 100;
-
-				const targetPt = isMagnetic ? snapResult.snapped : e.latlng;
-				const targetIdx = snapResult.index;
-
-				if (!laneStartPoint) {
-					setLaneStartPoint({
-						lat: targetPt.lat,
-						lng: targetPt.lng,
-						index: targetIdx,
-					});
-				} else if (!laneEndPoint) {
-					const dist = calculatePathDistance(
-						laneStartPoint.index,
-						L.latLng(laneStartPoint.lat, laneStartPoint.lng),
-						targetIdx,
-						L.latLng(targetPt.lat, targetPt.lng),
-						leafletRoute
-					);
-
-					setLaneEndPoint({
-						lat: targetPt.lat,
-						lng: targetPt.lng,
-						index: targetIdx,
-					});
-
-					setLaneForm((prev) => ({
-						...prev,
-						laneOrder: uiLanesList.length + 1,
-						totalDistance: dist,
-					}));
-					setShowLaneForm(true);
-				}
-			}
 		};
 
 		m.on("click", onClick);
 		return () => {
 			m.off("click", onClick);
 		};
-	}, [isDrawing, activeOverlay, routeCoords, laneStartPoint, laneEndPoint, uiLanesList.length]);
+	}, [isDrawing, routeCoords]);
 
 	// Render route polyline and start/end markers
 	useEffect(() => {
@@ -542,29 +268,48 @@ export default function RouteBuilderMap({
 		vertexMarkersRef.current.forEach((mk) => mk.remove());
 		vertexMarkersRef.current = [];
 
-		// Hide vertex handles unless we are actively drawing/editing the route
-		if (!isDrawing || routeCoords.length === 0) return;
+		// Show vertex handles always so lane points are visible, but only make them draggable when drawing
+		if (routeCoords.length === 0) return;
 
 		routeCoords.forEach((coord, idx) => {
 			const vertexIcon = L.divIcon({
 				className: "route-vertex-handle",
-				html: `<div style="width: 12px; height: 12px; background: white; border: 2.5px solid #fba339; border-radius: 50%; box-shadow: 0 0 5px rgba(0,0,0,0.6); cursor: grab;"></div>`,
-				iconSize: [12, 12],
-				iconAnchor: [6, 6],
+				html: `
+					<div style="
+						width: 20px;
+						height: 20px;
+						background: white;
+						border: 2px solid #fba339;
+						border-radius: 50%;
+						box-shadow: 0 0 5px rgba(0,0,0,0.6);
+						cursor: ${isDrawing ? 'grab' : 'pointer'};
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						font-family: 'Inter', sans-serif;
+						font-size: 10px;
+						font-weight: 800;
+						color: #1e293b;
+					">
+						${idx + 1}
+					</div>
+				`,
+				iconSize: [20, 20],
+				iconAnchor: [10, 10],
 			});
 
 			const marker = L.marker([coord.lat, coord.lng], {
 				icon: vertexIcon,
-				draggable: true,
+				draggable: isDrawing,
 			})
-			.bindTooltip(`Drag to bend. Click to delete Point #${idx + 1}`, {
+			.bindTooltip(isDrawing ? `Drag to bend. Click to delete Point #${idx + 1}` : `Point #${idx + 1}`, {
 				direction: "top",
 				permanent: false,
 			})
 			.bindPopup(`
 				<div style="font-family: inherit; font-size: 11px; text-align: center; min-width: 90px; padding: 2px;">
-					<strong style="display: block; margin-bottom: 6px; color: #0f172a;">Point #${idx + 1}</strong>
-					<button 
+					<strong style="display: block; margin-bottom: 6px; color: #0f172a;">Lane Point #${idx + 1}</strong>
+					${isDrawing ? `<button 
 						type="button" 
 						onclick="event.stopPropagation(); event.preventDefault(); window.deletePoint(${idx})" 
 						style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer; width: 100%; text-align: center;"
@@ -572,7 +317,7 @@ export default function RouteBuilderMap({
 						onmouseout="this.style.background='#ef4444'"
 					>
 						🗑️ Delete Point
-					</button>
+					</button>` : ''}
 				</div>
 			`, { closeButton: false })
 			.addTo(m);
@@ -624,199 +369,6 @@ export default function RouteBuilderMap({
 		};
 	}, [routeCoords, isDrawing]);
 
-	// Render snapping preview dot when mouse hovers over route in lane placement mode
-	useEffect(() => {
-		const m = mapRef.current;
-		if (!m || !activeOverlay || routeCoords.length < 2) return;
-
-		const previewIcon = L.divIcon({
-			className: "snapping-preview-dot",
-			html: `<div style="width: 12px; height: 12px; background: #6366f1; border: 2.5px solid white; border-radius: 50%; box-shadow: 0 0 6px #6366f1; animation: pulse 1.2s infinite;"></div>`,
-			iconSize: [12, 12],
-			iconAnchor: [6, 6],
-		});
-
-		let previewMarker: L.Marker | null = null;
-
-		const onMouseMove = (e: L.LeafletMouseEvent) => {
-			const leafletRoute = routeCoords.map((pt) => L.latLng(pt.lat, pt.lng));
-			const snapResult = snapToRoute(e.latlng, leafletRoute);
-
-			if (!previewMarker) {
-				previewMarker = L.marker(snapResult.snapped, { icon: previewIcon }).addTo(m);
-			} else {
-				previewMarker.setLatLng(snapResult.snapped);
-			}
-		};
-
-		m.on("mousemove", onMouseMove);
-
-		return () => {
-			m.off("mousemove", onMouseMove);
-			if (previewMarker) {
-				previewMarker.remove();
-			}
-		};
-	}, [activeOverlay, routeCoords]);
-
-	// Render lane highlights and start/end SVG pin markers
-	useEffect(() => {
-		const m = mapRef.current;
-		if (!m) return;
-
-		// Clear previous lane polylines
-		lanePolylinesRef.current.forEach((pl) => pl.remove());
-		lanePolylinesRef.current = [];
-
-		// Clear previous lane markers
-		laneMarkersRef.current.forEach((mk) => mk.remove());
-		laneMarkersRef.current = [];
-
-		if (routeCoords.length < 2) return;
-
-		// Render lane segments
-		uiLanesList.forEach((lane) => {
-			const leafletRoute = routeCoords.map((c) => L.latLng(c.lat, c.lng));
-			const startIdx = snapToRoute(L.latLng(lane.startLat, lane.startLng), leafletRoute).index;
-			const endIdx = snapToRoute(L.latLng(lane.endLat, lane.endLng), leafletRoute).index;
-
-			if (startIdx >= 0 && endIdx >= 0) {
-				let segmentCoords: L.LatLng[] = [];
-				const startPt = L.latLng(lane.startLat, lane.startLng);
-				const endPt = L.latLng(lane.endLat, lane.endLng);
-
-				if (startIdx <= endIdx) {
-					segmentCoords = [
-						startPt,
-						...routeCoords.slice(startIdx, endIdx + 1).map((c) => L.latLng(c.lat, c.lng)),
-						endPt,
-					];
-				} else {
-					segmentCoords = [
-						startPt,
-						...routeCoords.slice(endIdx, startIdx + 1).reverse().map((c) => L.latLng(c.lat, c.lng)),
-						endPt,
-					];
-				}
-
-				// Deduplicate consecutive coordinates
-				const cleanCoords: L.LatLng[] = [];
-				segmentCoords.forEach((pt) => {
-					if (cleanCoords.length === 0) {
-						cleanCoords.push(pt);
-					} else {
-						const prev = cleanCoords[cleanCoords.length - 1];
-						if (prev.lat !== pt.lat || prev.lng !== pt.lng) {
-							cleanCoords.push(pt);
-						}
-					}
-				});
-
-				// Draw lane segment highlighted
-				const lanePoly = L.polyline(cleanCoords, {
-					color: "#3b82f6", // Blue for lanes
-					weight: 7,
-					opacity: 0.8,
-				}).addTo(m);
-
-				lanePoly.bindTooltip(`Lane ${lane.laneOrder}: ${lane.totalDistance}m`, {
-					permanent: false,
-					direction: "top",
-				});
-
-				lanePolylinesRef.current.push(lanePoly);
-			}
-
-			// Draw Green start pin drop marker
-			if (showStartPoint) {
-				const popupContentStart = `
-					<div style="font-family: inherit; font-size: 12px; color: #1e293b; min-width: 140px;">
-						<strong style="color: #0f172a; display: block; margin-bottom: 4px;">Lane Set ${lane.laneOrder} - Start</strong>
-						<span style="color: #64748b;">Households: ${lane.noOfHouseholds}</span>
-						<button 
-							type="button"
-							id="delete-lane-start-${lane.laneOrder}"
-							onclick="event.stopPropagation(); event.preventDefault(); const btn = document.getElementById('delete-lane-start-${lane.laneOrder}'); if(btn.innerText.includes('Delete')) { btn.innerText = '⚠️ Confirm?'; btn.style.background = '#dc2626'; } else { window.deleteLane(${lane.laneOrder}); }" 
-							style="margin-top: 8px; width: 100%; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; transition: background 0.2s;"
-							onmouseover="if(this.innerText.includes('Delete')) this.style.background='#dc2626'"
-							onmouseout="if(this.innerText.includes('Delete')) this.style.background='#ef4444'"
-						>
-							🗑️ Delete Lane
-						</button>
-					</div>
-				`;
-				const startMk = L.marker([lane.startLat, lane.startLng], { 
-					icon: createPinIcon("start", lane.laneOrder) 
-				})
-				.bindPopup(popupContentStart)
-				.addTo(m);
-				laneMarkersRef.current.push(startMk);
-			}
-
-			// Draw Red end pin drop marker
-			if (showEndPoint) {
-				const popupContentEnd = `
-					<div style="font-family: inherit; font-size: 12px; color: #1e293b; min-width: 140px;">
-						<strong style="color: #0f172a; display: block; margin-bottom: 4px;">Lane Set ${lane.laneOrder} - End</strong>
-						<span style="color: #64748b;">Commercials: ${lane.noOfCommercials}</span>
-						<button 
-							type="button"
-							id="delete-lane-end-${lane.laneOrder}"
-							onclick="event.stopPropagation(); event.preventDefault(); const btn = document.getElementById('delete-lane-end-${lane.laneOrder}'); if(btn.innerText.includes('Delete')) { btn.innerText = '⚠️ Confirm?'; btn.style.background = '#dc2626'; } else { window.deleteLane(${lane.laneOrder}); }" 
-							style="margin-top: 8px; width: 100%; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; transition: background 0.2s;"
-							onmouseover="if(this.innerText.includes('Delete')) this.style.background='#dc2626'"
-							onmouseout="if(this.innerText.includes('Delete')) this.style.background='#ef4444'"
-						>
-							🗑️ Delete Lane
-						</button>
-					</div>
-				`;
-				const endMk = L.marker([lane.endLat, lane.endLng], { 
-					icon: createPinIcon("end", lane.laneOrder) 
-				})
-				.bindPopup(popupContentEnd)
-				.addTo(m);
-				laneMarkersRef.current.push(endMk);
-			}
-		});
-
-		return () => {
-			lanePolylinesRef.current.forEach((pl) => pl.remove());
-			lanePolylinesRef.current = [];
-			laneMarkersRef.current.forEach((mk) => mk.remove());
-			laneMarkersRef.current = [];
-		};
-	}, [lanes, uiLanesList, showStartPoint, showEndPoint, routeCoords]);
-
-	// Render current active placing checkpoint markers
-	useEffect(() => {
-		const m = mapRef.current;
-		if (!m) return;
-
-		// Clear previous placing markers
-		currentPlacingMarkersRef.current.forEach((mk) => mk.remove());
-		currentPlacingMarkersRef.current = [];
-
-		if (laneStartPoint) {
-			const currentGreenMk = L.marker([laneStartPoint.lat, laneStartPoint.lng], { 
-				icon: createPinIcon("start", uiLanesList.length + 1) 
-			}).addTo(m);
-			currentPlacingMarkersRef.current.push(currentGreenMk);
-		}
-
-		if (laneEndPoint) {
-			const currentRedMk = L.marker([laneEndPoint.lat, laneEndPoint.lng], { 
-				icon: createPinIcon("end", uiLanesList.length + 1) 
-			}).addTo(m);
-			currentPlacingMarkersRef.current.push(currentRedMk);
-		}
-
-		return () => {
-			currentPlacingMarkersRef.current.forEach((mk) => mk.remove());
-			currentPlacingMarkersRef.current = [];
-		};
-	}, [laneStartPoint, laneEndPoint, uiLanesList.length]);
-
 	// Parse custom input JSON coordinates
 	useEffect(() => {
 		if (!geojsonText) {
@@ -849,41 +401,6 @@ export default function RouteBuilderMap({
 		}
 	}, [geojsonText]);
 
-	const saveLaneInfo = () => {
-		if (!laneStartPoint || !laneEndPoint) return;
-
-		const newLane: UILane = {
-			laneOrder: Number(laneForm.laneOrder),
-			totalDistance: parseFloat(Number(laneForm.totalDistance).toFixed(2)),
-			noOfHouseholds: Number(laneForm.noOfHouseholds),
-			noOfCommercials: Number(laneForm.noOfCommercials),
-			doubleLane: laneForm.doubleLane,
-			startLat: laneStartPoint.lat,
-			startLng: laneStartPoint.lng,
-			endLat: laneEndPoint.lat,
-			endLng: laneEndPoint.lng,
-		};
-
-		setLanes([...uiLanesList, newLane].map(toDBLane));
-
-		// Clear states
-		setLaneStartPoint(null);
-		setLaneEndPoint(null);
-		setShowLaneForm(false);
-	};
-
-	const cancelLaneInfo = () => {
-		setLaneStartPoint(null);
-		setLaneEndPoint(null);
-		setShowLaneForm(false);
-	};
-
-	const resetLanePoints = () => {
-		setLaneStartPoint(null);
-		setLaneEndPoint(null);
-		setShowLaneForm(false);
-		setLanes([]);
-	};
 
 	return (
 		<div className="relative w-full h-full rounded-xl overflow-hidden border border-theme-border bg-black/10">
@@ -896,7 +413,6 @@ export default function RouteBuilderMap({
 					onClick={(e) => {
 						e.stopPropagation();
 						setIsDrawing(!isDrawing);
-						setActiveOverlay(false);
 					}}
 					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs whitespace-nowrap ${
 						isDrawing ? "bg-theme-accent border border-indigo-400" : "bg-theme-surface/80 hover:bg-slate-100 border border-theme-border"
@@ -950,12 +466,7 @@ export default function RouteBuilderMap({
 									setRouteCoords([]);
 									setDistance(0);
 									setGeojsonText("");
-									setLanes([]);
-									setLaneStartPoint(null);
-									setLaneEndPoint(null);
-									setShowLaneForm(false);
 									setIsDrawing(false);
-									setActiveOverlay(false);
 									setShowConfirmClear(false);
 								}
 							}}
@@ -986,27 +497,6 @@ export default function RouteBuilderMap({
 						)}
 					</div>
 				)}
-
-				<button
-					type="button"
-					onClick={(e) => {
-						e.stopPropagation();
-						if (routeCoords.length < 2) {
-							alert("Please draw the route path first before configuring lanes.");
-							return;
-						}
-						setActiveOverlay(!activeOverlay);
-						setIsDrawing(false);
-					}}
-					disabled={routeCoords.length < 2}
-					className={`p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs whitespace-nowrap ${
-						activeOverlay ? "bg-blue-100 border border-blue-400" : "bg-theme-surface/80 hover:bg-slate-200 border border-theme-border"
-					} ${routeCoords.length < 2 ? "opacity-40 cursor-not-allowed" : ""}`}
-					title={routeCoords.length < 2 ? "Draw route path first to enable lane checkpoints" : "Configure lane checkpoints snapped to route line"}
-				>
-					<span>🗺️</span>
-					<span>{activeOverlay ? "Active: Route by Lane" : "Route by Lane"}</span>
-				</button>
 			</div>
 
 			{/* Right Checkbox Layer Overlay */}
@@ -1021,49 +511,19 @@ export default function RouteBuilderMap({
 					/>
 					<span>Route</span>
 				</label>
-				<label className="flex items-center gap-2 cursor-pointer hover:text-theme-text">
-					<input
-						type="checkbox"
-						checked={showStartPoint}
-						onChange={(e) => setShowStartPoint(e.target.checked)}
-						className="rounded text-indigo-500 bg-theme-surface border-theme-border focus:ring-0"
-					/>
-					<span>Start Point</span>
-				</label>
-				<label className="flex items-center gap-2 cursor-pointer hover:text-theme-text">
-					<input
-						type="checkbox"
-						checked={showEndPoint}
-						onChange={(e) => setShowEndPoint(e.target.checked)}
-						className="rounded text-indigo-500 bg-theme-surface border-theme-border focus:ring-0"
-					/>
-					<span>End Point</span>
-				</label>
-				<label className="flex items-center gap-2 cursor-pointer hover:text-theme-text">
-					<input
-						type="checkbox"
-						checked={showCollectionPoint}
-						onChange={(e) => setShowCollectionPoint(e.target.checked)}
-						className="rounded text-indigo-500 bg-theme-surface border-theme-border focus:ring-0"
-					/>
-					<span>Collection Point</span>
-				</label>
 			</div>
 
 			{/* Custom Instruction Bar at bottom */}
-			{(isDrawing || activeOverlay) && (
+			{isDrawing && (
 				<div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 bg-theme-surface/90 border border-theme-border px-4 py-2 rounded-full text-xs text-theme-text font-medium shadow-2xl backdrop-blur-md flex items-center gap-3">
 					<div className="w-2 h-2 rounded-full bg-theme-surface-hover0 animate-ping" />
 					<span>
-						{isDrawing
-							? "DRAW MODE: Click on the map to add route coordinates."
-							: "LANE MODE: Click route to place Start Point (Green), then End Point (Red)."}
+						DRAW MODE: Click on the map to add route coordinates.
 					</span>
 					<button
 						type="button"
 						onClick={() => {
 							setIsDrawing(false);
-							setActiveOverlay(false);
 						}}
 						className="px-2 py-0.5 bg-theme-surface/10 hover:bg-theme-surface/20 rounded font-bold transition-colors"
 					>
@@ -1073,98 +533,7 @@ export default function RouteBuilderMap({
 			)}
 
 			{/* Full Screen / Large Lane Modal Prompt */}
-			{showLaneForm && (
-				<div className="absolute inset-0 bg-black/75 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-					<div className="bg-theme-surface border border-theme-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden">
-						<div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600" />
-						<h3 className="text-base font-bold text-theme-text mb-4 flex items-center gap-2">
-							<span>🛣️</span> Add Lane Info
-						</h3>
-
-						<div className="space-y-4">
-							<div>
-								<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
-									Lane Order
-								</label>
-								<input
-									type="number"
-									value={laneForm.laneOrder}
-									onChange={(e) => setLaneForm({ ...laneForm, laneOrder: parseInt(e.target.value) || 1 })}
-									className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
-								/>
-							</div>
-
-							<div>
-								<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
-									Total Distance (meters)
-								</label>
-								<input
-									type="number"
-									value={laneForm.totalDistance}
-									onChange={(e) => setLaneForm({ ...laneForm, totalDistance: parseFloat(e.target.value) || 0 })}
-									className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
-								/>
-							</div>
-
-							<div className="grid grid-cols-2 gap-3">
-								<div>
-									<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
-										Households
-									</label>
-									<input
-										type="number"
-										value={laneForm.noOfHouseholds}
-										onChange={(e) => setLaneForm({ ...laneForm, noOfHouseholds: parseInt(e.target.value) || 0 })}
-										className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
-									/>
-								</div>
-								<div>
-									<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
-										Commercials
-									</label>
-									<input
-										type="number"
-										value={laneForm.noOfCommercials}
-										onChange={(e) => setLaneForm({ ...laneForm, noOfCommercials: parseInt(e.target.value) || 0 })}
-										className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
-									/>
-								</div>
-							</div>
-
-							<div>
-								<label className="block text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">
-									Double Lane
-								</label>
-								<select
-									value={laneForm.doubleLane}
-									onChange={(e) => setLaneForm({ ...laneForm, doubleLane: e.target.value })}
-									className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm text-theme-text focus:outline-none focus:border-emerald-500"
-								>
-									<option value="No">No</option>
-									<option value="Yes">Yes</option>
-								</select>
-							</div>
-						</div>
-
-						<div className="flex justify-end gap-3 mt-6">
-							<button
-								type="button"
-								onClick={cancelLaneInfo}
-								className="px-4 py-2 bg-theme-surface/[.06] hover:bg-theme-surface rounded-lg text-xs font-medium text-theme-text transition-colors"
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								onClick={saveLaneInfo}
-								className="px-4 py-2 bg-theme-accent text-white shadow-lg transition-colors"
-							>
-								Save Lane
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
+	
 		</div>
 	);
 }

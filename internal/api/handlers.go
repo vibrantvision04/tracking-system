@@ -43,6 +43,7 @@ type Handler struct {
 	rdb                          *redis.Client
 	routeRepo                    *repository.RouteRepository
 	routeEngine                  *service.RouteEngine
+	aiReconService               *service.AIReconstructionService
 	zoneVehiclesCache            map[string][]map[string]interface{}
 	cacheMutex                   sync.RWMutex
 	alertsMutex                  sync.Mutex
@@ -82,6 +83,12 @@ func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepo
 	}()
 	return h
 }
+
+// SetAIReconstructionService registers the AI reconstruction engine.
+func (h *Handler) SetAIReconstructionService(svc *service.AIReconstructionService) {
+	h.aiReconService = svc
+}
+
 
 // SetUltimateReportEngine wires the Ultimate Reports module into the handler.
 // Called from main.go after constructing the Handler — keeps existing NewHandler signature unchanged.

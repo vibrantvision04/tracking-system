@@ -135,6 +135,10 @@ func main() {
 	urSvc := ultimatereport.NewUltimateReportService(urRepo)
 	urEngine := ultimatereport.NewExcelEngine(cfg.ReportTemplatePath)
 	handler.SetUltimateReportEngine(urSvc, urEngine, cfg.ReportTemplatePath)
+
+	// AI Route Reconstruction engine
+	aiSvc := service.NewAIReconstructionService(routeRepo)
+	handler.SetAIReconstructionService(aiSvc)
 	// Register the Ultimate Daily Report in the pluggable registry
 	ultimateReportDef := &ultimatereport.ReportDefinition{
 		ID:           "ultimate-daily",

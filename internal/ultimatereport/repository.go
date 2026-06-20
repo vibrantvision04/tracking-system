@@ -113,35 +113,16 @@ func (r *UltimateReportRepository) GetMovementData(ctx context.Context, date tim
 }
 
 // GetCoveragePercent returns a map of vehicle_reg_no → coverage percentage (0–100)
-// for the given date, calculated from route_coverage_logs + route_checkpoints.
+// for the given date, calculated from vehicle_lane_point_coverage.
 func (r *UltimateReportRepository) GetCoveragePercent(ctx context.Context, date time.Time) (map[string]float64, error) {
 	dateStr := date.Format("2006-01-02")
 	query := `
-		WITH assignments AS (
-			SELECT DISTINCT ON (va.vehicle_id)
-				va.vehicle_id,
-				va.route_id,
-				v.registration_no,
-				(SELECT COUNT(*) FROM route_checkpoints WHERE route_id = va.route_id) AS total_cps
-			FROM vehicle_route_assignments va
-			JOIN vehicles v ON va.vehicle_id = v.id
-			WHERE va.is_active = true
-			ORDER BY va.vehicle_id, va.assigned_date DESC, va.id DESC
-		),
-		hits AS (
-			SELECT l.vehicle_id, COUNT(DISTINCT l.checkpoint_id) AS hit_count
-			FROM route_coverage_logs l
-			WHERE l.report_date = $1
-			GROUP BY l.vehicle_id
-		)
 		SELECT
-			a.registration_no,
-			CASE WHEN a.total_cps > 0
-				THEN ROUND((COALESCE(h.hit_count, 0)::float / a.total_cps) * 100)
-				ELSE 0
-			END AS coverage_pct
-		FROM assignments a
-		LEFT JOIN hits h ON a.vehicle_id = h.vehicle_id
+			v.registration_no,
+			COALESCE(c.coverage_percent, 0.0) AS coverage_pct
+		FROM vehicle_lane_point_coverage c
+		JOIN vehicles v ON c.vehicle_id = v.id
+		WHERE c.report_date = $1
 	`
 	rows, err := r.pool.Query(ctx, query, dateStr)
 	if err != nil {

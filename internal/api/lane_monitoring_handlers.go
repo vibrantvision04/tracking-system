@@ -1,10 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"gps-tracking-system/internal/utils"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -63,7 +63,7 @@ func (h *Handler) GetLaneMonitoringReport(w http.ResponseWriter, r *http.Request
 		`, routeID).Scan(&vehicleID)
 	}
 
-	// 2. Fetch all checkpoints for the route
+	// 2. Fetch all lane points for the route
 	type DBCheckpoint struct {
 		ID             int
 		CheckpointName string
@@ -71,86 +71,47 @@ func (h *Handler) GetLaneMonitoringReport(w http.ResponseWriter, r *http.Request
 	}
 
 	cpRows, err := db.Query(ctx, `
-		SELECT id, checkpoint_name, sequence_order
-		FROM route_checkpoints
+		SELECT id, 'Point #' || sequence_number::text, sequence_number
+		FROM route_lane_points
 		WHERE route_id = $1
-		ORDER BY sequence_order ASC
+		ORDER BY sequence_number ASC
 	`, routeID)
 
 	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch route checkpoints: " + err.Error()})
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch route lane points: " + err.Error()})
 		return
 	}
 	defer cpRows.Close()
 
 	var checkpoints []DBCheckpoint
-	seenNames := make(map[string]bool)
 	for cpRows.Next() {
 		var cp DBCheckpoint
 		if err := cpRows.Scan(&cp.ID, &cp.CheckpointName, &cp.SequenceOrder); err == nil {
-			if !seenNames[cp.CheckpointName] {
-				seenNames[cp.CheckpointName] = true
-				checkpoints = append(checkpoints, cp)
-			}
+			checkpoints = append(checkpoints, cp)
 		}
 	}
 
-	// 3. Fetch hit logs if vehicle is assigned
+	// 3. Fetch hit details from vehicle_lane_point_coverage
 	hitTimes := make(map[int]time.Time)
 	if vehicleID > 0 && len(checkpoints) > 0 {
-		logRows, err := db.Query(ctx, `
-			SELECT checkpoint_id, hit_time
-			FROM route_coverage_logs
+		var detailsJSON []byte
+		err := db.QueryRow(ctx, `
+			SELECT details
+			FROM vehicle_lane_point_coverage
 			WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3
-		`, vehicleID, routeID, dateFilter)
+		`, vehicleID, routeID, dateFilter).Scan(&detailsJSON)
 
-		if err == nil {
-			defer logRows.Close()
-			for logRows.Next() {
-				var cpID int
-				var hitTime time.Time
-				if err := logRows.Scan(&cpID, &hitTime); err == nil {
-					hitTimes[cpID] = hitTime
-				}
+		if err == nil && len(detailsJSON) > 0 {
+			type Detail struct {
+				LanePointID int        `json:"lane_point_id"`
+				Status      string     `json:"status"`
+				HitTime     *time.Time `json:"hit_time"`
 			}
-		}
-	}
-
-	// 4. Group checkpoints into lanes
-	// Structure to hold start/end checkpoints for a lane
-	type LaneTemp struct {
-		LaneOrder  int
-		StartCPID  int
-		EndCPID    int
-		HasStart   bool
-		HasEnd     bool
-	}
-
-	lanesMap := make(map[int]*LaneTemp)
-	hasLanePattern := false
-
-	for _, cp := range checkpoints {
-		// Try to parse name containing _Lane<Num>_Start or _Lane<Num>_End
-		if idx := strings.Index(cp.CheckpointName, "_Lane"); idx != -1 {
-			rem := cp.CheckpointName[idx+5:] // Skip "_Lane"
-			parts := strings.Split(rem, "_")
-			if len(parts) >= 1 {
-				laneOrder, err := strconv.Atoi(parts[0])
-				if err == nil {
-					hasLanePattern = true
-					if _, exists := lanesMap[laneOrder]; !exists {
-						lanesMap[laneOrder] = &LaneTemp{LaneOrder: laneOrder}
-					}
-					isEnd := false
-					if len(parts) >= 2 && strings.ToLower(parts[1]) == "end" {
-						isEnd = true
-					}
-					if isEnd {
-						lanesMap[laneOrder].EndCPID = cp.ID
-						lanesMap[laneOrder].HasEnd = true
-					} else {
-						lanesMap[laneOrder].StartCPID = cp.ID
-						lanesMap[laneOrder].HasStart = true
+			var details []Detail
+			if err := json.Unmarshal(detailsJSON, &details); err == nil {
+				for _, d := range details {
+					if d.Status == "achieved" && d.HitTime != nil {
+						hitTimes[d.LanePointID] = *d.HitTime
 					}
 				}
 			}
@@ -159,46 +120,16 @@ func (h *Handler) GetLaneMonitoringReport(w http.ResponseWriter, r *http.Request
 
 	var reportData []LaneReportRow
 
-	if hasLanePattern && len(lanesMap) > 0 {
-		// Sort lane keys
-		maxLane := 0
-		for k := range lanesMap {
-			if k > maxLane {
-				maxLane = k
-			}
+	// List each lane point as a separate row
+	for _, cp := range checkpoints {
+		row := LaneReportRow{
+			LaneName: cp.CheckpointName,
 		}
-
-		for l := 1; l <= maxLane; l++ {
-			lt, exists := lanesMap[l]
-			if !exists {
-				continue
-			}
-			row := LaneReportRow{
-				LaneName: strconv.Itoa(lt.LaneOrder),
-			}
-			if lt.HasStart {
-				if t, ok := hitTimes[lt.StartCPID]; ok {
-					row.StartTime = &t
-				}
-			}
-			if lt.HasEnd {
-				if t, ok := hitTimes[lt.EndCPID]; ok {
-					row.EndTime = &t
-				}
-			}
-			reportData = append(reportData, row)
+		if t, ok := hitTimes[cp.ID]; ok {
+			row.StartTime = &t
+			row.EndTime = &t // For single point, start and end are the same
 		}
-	} else {
-		// Fallback: list each checkpoint as a separate row
-		for _, cp := range checkpoints {
-			row := LaneReportRow{
-				LaneName: cp.CheckpointName,
-			}
-			if t, ok := hitTimes[cp.ID]; ok {
-				row.StartTime = &t
-			}
-			reportData = append(reportData, row)
-		}
+		reportData = append(reportData, row)
 	}
 
 	if reportData == nil {

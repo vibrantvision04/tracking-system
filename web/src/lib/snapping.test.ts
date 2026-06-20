@@ -363,3 +363,44 @@ describe('Property 12: Jaipur bounding box numeric stability', () => {
     );
   });
 });
+
+describe('Detour Recovery', () => {
+  it('snaps back to route after a long detour exceeding lookahead window', () => {
+    // 250 road points spaced by approx 10 meters (0.0001 degrees)
+    const roadCoords: [number, number][] = Array.from({ length: 250 }, (_, i) => [26.9, 75.8 + i * 0.0001]);
+    
+    // GPS points:
+    // 0..4: on route (indices 0..4)
+    // 5..9: detour far away (lat 28.0, lng 78.0)
+    // 10: returns to route at index 180 (far beyond LOOKAHEAD_WINDOW = 150)
+    const gpsPoints = [
+      makeGps(26.9, 75.8),
+      makeGps(26.9, 75.8001),
+      makeGps(26.9, 75.8002),
+      makeGps(26.9, 75.8003),
+      makeGps(26.9, 75.8004),
+      
+      makeGps(28.0, 78.0),
+      makeGps(28.0, 78.0),
+      makeGps(28.0, 78.0),
+      makeGps(28.0, 78.0),
+      makeGps(28.0, 78.0),
+      
+      makeGps(26.9, 75.8180), // Index 180 on roadCoords
+    ];
+    
+    const result = buildSequentialSnappedPlayback(gpsPoints as any, roadCoords, [], 50, 'outbound', 5);
+    
+    // The first 5 should be snapped
+    expect(result[0]).toEqual(roadCoords[0]);
+    expect(result[4]).toEqual(roadCoords[4]);
+    
+    // The detour points (5..9) should be unsnapped (raw GPS)
+    expect(result[5]).toEqual([28.0, 78.0]);
+    expect(result[9]).toEqual([28.0, 78.0]);
+    
+    // The re-entry point (10) should be snapped to index 180 on roadCoords
+    expect(result[10]).toEqual(roadCoords[180]);
+  });
+});
+

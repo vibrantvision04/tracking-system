@@ -172,8 +172,11 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		// New Route Coverage endpoints
 		r.Post("/routes/{id}/checkpoints", h.AddRouteCheckpoint)
 		r.Get("/routes/{id}/checkpoints", h.GetRouteCheckpoints)
+		r.Get("/routes/{id}/lane-points", h.GetRouteLanePoints)
 		r.Post("/vehicles/{id}/assign-route", h.AssignRouteToVehicle)
 		r.Get("/vehicles/{id}/route-coverage", h.GetVehicleRouteCoverage)
+		r.Get("/vehicles/{id}/lane-point-coverage", h.GetVehicleLanePointCoverage)
+		r.Post("/vehicles/{id}/reconstruct-route", h.GetVehicleReconstruction)
 		r.Get("/vehicle-route-assignments", h.GetVehicleRouteAssignments)
 		r.Delete("/vehicle-route-assignments/{id}", h.DeleteVehicleRouteAssignment)
 

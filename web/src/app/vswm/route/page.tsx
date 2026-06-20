@@ -80,74 +80,6 @@ function parseGeoJSONText(text: string): Coordinate[] | null {
   return null;
 }
 
-function parseLanesJSON(text: string): any[] | null {
-  if (!text || !text.trim()) return [];
-  try {
-    let cleaned = text.trim();
-    
-    // If it starts with "lanes" or similar fragment, wrap in curly braces to make it valid JSON object
-    if (/^\s*"?lanes"?\s*:/i.test(cleaned)) {
-      if (!cleaned.startsWith("{")) {
-        cleaned = "{" + cleaned;
-      }
-      if (!cleaned.endsWith("}")) {
-        cleaned = cleaned + "}";
-      }
-    }
-
-    // Remove trailing commas inside arrays and objects
-    cleaned = cleaned.replace(/,\s*([\]}])/g, "$1");
-    
-    // Also remove any trailing comma at the end of the string
-    cleaned = cleaned.replace(/,\s*$/, "");
-
-    let parsed = JSON.parse(cleaned);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      if (Array.isArray(parsed.lanes)) {
-        parsed = parsed.lanes;
-      } else {
-        return null;
-      }
-    }
-    if (!Array.isArray(parsed)) return null;
-
-    return parsed.map((l: any, idx: number) => {
-      const isDB = l.start_point !== undefined;
-      const startLng = isDB ? (l.start_point?.x ?? 0) : (l.startLng ?? 0);
-      const startLat = isDB ? (l.start_point?.y ?? 0) : (l.startLat ?? 0);
-      const endLng = isDB ? (l.end_point?.x ?? 0) : (l.endLng ?? 0);
-      const endLat = isDB ? (l.end_point?.y ?? 0) : (l.endLat ?? 0);
-
-      const laneOrder = isDB ? (l.lane_order ?? (idx + 1)) : (l.laneOrder ?? (idx + 1));
-      const totalDistance = isDB ? (l.total_distance ?? 0) : (l.totalDistance ?? 0);
-      const noOfHouseholds = isDB ? (l.no_of_households ?? 0) : (l.noOfHouseholds ?? 0);
-      const noOfCommercial = isDB ? (l.no_of_commercial ?? null) : (l.noOfCommercials ?? null);
-
-      return {
-        id: l.id,
-        name: l.name ?? `lane_440_${laneOrder}`,
-        total_distance: Number(totalDistance),
-        start_point: { x: Number(startLng), y: Number(startLat) },
-        end_point: { x: Number(endLng), y: Number(endLat) },
-        lane_order: Number(laneOrder),
-        is_double_lane: l.is_double_lane ?? (l.doubleLane === "Yes"),
-        no_of_households: Number(noOfHouseholds),
-        no_of_commercial: noOfCommercial !== null ? Number(noOfCommercial) : null,
-        route_id: l.route_id ?? null,
-        created_by: l.created_by ?? 1,
-        updated_by: l.updated_by ?? 1,
-        deleted_at: l.deleted_at ?? null,
-        is_active: l.is_active ?? true,
-        created_at: l.created_at,
-        updated_at: l.updated_at,
-        lane_start_time: l.lane_start_time ?? null,
-        time_in_completion: l.time_in_completion ?? null
-      };
-    });
-  } catch (e) {
-    return null;
-  }
-}
 
 interface Route {
   id: number; route_name: string; identification: string; distance: number; route_type_id: number;
@@ -155,6 +87,11 @@ interface Route {
   shift_id?: number; shift_name: string; lanes: any[]; is_active: boolean; geojson: string;
   color: string; updated_at: string;
   is_sequential?: boolean; corridor_meters?: number; route_direction?: string; seq_lookahead?: number;
+  aggressive_snapping?: boolean;
+  ai_reconstruction_enabled?: boolean;
+  ai_coverage_recovery_enabled?: boolean;
+  ai_playback_correction_enabled?: boolean;
+  gps_quality_mode?: string;
 }
 
 export default function RoutePage() {
@@ -171,8 +108,13 @@ export default function RoutePage() {
 
   const [form, setForm] = useState({
     name: "", identification: "", wardId: "", shiftId: "", routeTypeId: "1",
-    distance: 0, color: "#fba339", geojson: "", lanes: [] as any[],
-    isSequential: false, corridorMeters: 50, routeDirection: "both", seqLookahead: 5
+    distance: 0, color: "#fba339", geojson: "",
+    isSequential: false, corridorMeters: 50, routeDirection: "both", seqLookahead: 5,
+    aggressiveSnapping: false,
+    aiReconstruction: false,
+    aiCoverageRecovery: false,
+    aiPlaybackCorrection: false,
+    gpsQualityMode: "normal"
   });
 
   const [routeCoords, setRouteCoords] = useState<Coordinate[]>([]);
@@ -220,41 +162,7 @@ export default function RoutePage() {
     });
   }, [routeCoords]);
 
-  const [lanesJSONInput, setLanesJSONInput] = useState("");
 
-  const handleLanesJSONChange = (text: string) => {
-    setLanesJSONInput(text);
-    const parsed = parseLanesJSON(text);
-    if (parsed !== null) {
-      setForm(prev => ({ ...prev, lanes: parsed }));
-    }
-  };
-
-  // Synchronize map-edited lanes to the lanes JSON input field
-  useEffect(() => {
-    try {
-      const parsedCurrent = parseLanesJSON(lanesJSONInput);
-      const match = parsedCurrent &&
-                    parsedCurrent.length === form.lanes.length &&
-                    parsedCurrent.every((l, idx) => {
-                      const mapLane = form.lanes[idx];
-                      return mapLane &&
-                             l.lane_order === mapLane.lane_order &&
-                             l.total_distance === mapLane.total_distance &&
-                             l.no_of_households === mapLane.no_of_households &&
-                             l.no_of_commercial === mapLane.no_of_commercial &&
-                             l.start_point?.x === mapLane.start_point?.x &&
-                             l.start_point?.y === mapLane.start_point?.y &&
-                             l.end_point?.x === mapLane.end_point?.x &&
-                             l.end_point?.y === mapLane.end_point?.y;
-                    });
-      if (!match) {
-        setLanesJSONInput(JSON.stringify({ lanes: form.lanes }, null, 2));
-      }
-    } catch (e) {
-      setLanesJSONInput(JSON.stringify({ lanes: form.lanes }, null, 2));
-    }
-  }, [form.lanes]);
 
   const filteredRoutes = routes.filter(r => {
     const term = searchFilter.toLowerCase();
@@ -268,10 +176,14 @@ export default function RoutePage() {
     setForm({
       name: "", identification: "", wardId: wards[0]?.id ? String(wards[0].id) : "",
       shiftId: shifts[0]?.id ? String(shifts[0].id) : "", routeTypeId: "1", distance: 0,
-      color: "#fba339", geojson: "", lanes: [],
-      isSequential: false, corridorMeters: 50, routeDirection: "both", seqLookahead: 5
+      color: "#fba339", geojson: "",
+      isSequential: false, corridorMeters: 50, routeDirection: "both", seqLookahead: 5,
+      aggressiveSnapping: false,
+      aiReconstruction: false,
+      aiCoverageRecovery: false,
+      aiPlaybackCorrection: false,
+      gpsQualityMode: "normal"
     });
-    setLanesJSONInput("");
     setRouteCoords([]); setIsFormOpen(true);
   };
 
@@ -280,13 +192,17 @@ export default function RoutePage() {
     setForm({
       name: route.route_name, identification: route.identification, wardId: route.ward_id ? String(route.ward_id) : "",
       shiftId: route.shift_id ? String(route.shift_id) : "", routeTypeId: String(route.route_type_id),
-      distance: route.distance, color: route.color || "#fba339", geojson: route.geojson || "", lanes: route.lanes || [],
+      distance: route.distance, color: route.color || "#fba339", geojson: route.geojson || "",
       isSequential: !!route.is_sequential,
       corridorMeters: route.corridor_meters ?? 50,
       routeDirection: route.route_direction || "both",
-      seqLookahead: route.seq_lookahead ?? 5
+      seqLookahead: route.seq_lookahead ?? 5,
+      aggressiveSnapping: !!route.aggressive_snapping,
+      aiReconstruction: !!route.ai_reconstruction_enabled,
+      aiCoverageRecovery: !!route.ai_coverage_recovery_enabled,
+      aiPlaybackCorrection: !!route.ai_playback_correction_enabled,
+      gpsQualityMode: route.gps_quality_mode || "normal"
     });
-    setLanesJSONInput(route.lanes ? JSON.stringify({ lanes: route.lanes }, null, 2) : "");
     let coords: Coordinate[] = [];
     if (route.geojson) {
       try {
@@ -358,11 +274,16 @@ export default function RoutePage() {
     const payload = {
       route_name: form.name, identification: form.identification, distance: Number(form.distance),
       route_type_id: Number(form.routeTypeId), ward_id: form.wardId ? Number(form.wardId) : null,
-      shift_id: form.shiftId ? Number(form.shiftId) : null, geojson: finalGeoJSON, color: form.color, lanes: form.lanes,
+      shift_id: form.shiftId ? Number(form.shiftId) : null, geojson: finalGeoJSON, color: form.color, lanes: [],
       is_sequential: form.isSequential,
       corridor_meters: Number(form.corridorMeters),
       route_direction: form.routeDirection,
-      seq_lookahead: Number(form.seqLookahead)
+      seq_lookahead: Number(form.seqLookahead),
+      aggressive_snapping: form.aggressiveSnapping,
+      ai_reconstruction_enabled: form.aiReconstruction,
+      ai_coverage_recovery_enabled: form.aiCoverageRecovery,
+      ai_playback_correction_enabled: form.aiPlaybackCorrection,
+      gps_quality_mode: form.gpsQualityMode
     };
 
     setSubmitting(true);
@@ -518,24 +439,93 @@ export default function RoutePage() {
                       )}
                     </div>
 
-                    {/* Lanes JSON Input (Enabled only when route coords/geojson is present) */}
-                    <div className="flex flex-col mb-4">
-                      <label className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-1.5 block">
-                        Lanes JSON {routeCoords.length === 0 && <span className="text-rose-500/80 font-normal lowercase">(disabled until route is drawn/pasted)</span>}
-                      </label>
-                      <textarea
-                        rows={6}
-                        disabled={routeCoords.length === 0}
-                        value={lanesJSONInput}
-                        onChange={(e) => handleLanesJSONChange(e.target.value)}
-                        placeholder={routeCoords.length === 0 ? "Draw or paste route first to enable lanes JSON input." : '{\n  "lanes": [\n    {\n      "lane_order": 1,\n      "start_point": {"x": 75.909, "y": 26.894},\n      "end_point": {"x": 75.909, "y": 26.893},\n      "total_distance": 246.62,\n      "no_of_households": 100\n    }\n  ]\n}'}
-                        className={`w-full p-2.5 bg-theme-surface border rounded-xl text-xs text-theme-text font-mono outline-none transition custom-scrollbar ${
-                          routeCoords.length === 0 
-                            ? "opacity-50 cursor-not-allowed border-theme-border" 
-                            : "focus:border-emerald-500 border-theme-border"
-                        }`}
-                      />
+                    {/* Aggressive Snapping Configuration */}
+                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl mb-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Aggressive Snapping</h4>
+                          <p className="text-[10px] text-theme-text-dim mt-0.5">Snap strictly to route geometry and interpolate intermediate coordinates.</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={form.aggressiveSnapping}
+                            onChange={(e) => setForm(prev => ({ ...prev, aggressiveSnapping: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-theme-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </label>
+                      </div>
                     </div>
+
+                    {/* AI Reconstruction Configuration */}
+                    <div className="p-4 bg-violet-500/5 border border-violet-500/10 rounded-xl mb-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold text-violet-500 uppercase tracking-wider">AI Route Reconstruction</h4>
+                          <p className="text-[10px] text-theme-text-dim mt-0.5">Use Hidden Markov Model (HMM) Viterbi matching for route alignment.</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={form.aiReconstruction}
+                            onChange={(e) => setForm(prev => ({ ...prev, aiReconstruction: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-theme-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-500"></div>
+                        </label>
+                      </div>
+
+                      {form.aiReconstruction && (
+                        <div className="space-y-4 pt-3 border-t border-violet-500/10 animate-fade-in">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h5 className="text-[11px] font-bold text-theme-text uppercase tracking-wider">AI Coverage Recovery</h5>
+                              <p className="text-[9px] text-theme-text-dim mt-0.5">Recover vehicle lane point coverage gaps using reconstructed trace.</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={form.aiCoverageRecovery}
+                                onChange={(e) => setForm(prev => ({ ...prev, aiCoverageRecovery: e.target.checked }))}
+                                className="sr-only peer"
+                              />
+                              <div className="w-9 h-5 bg-theme-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500"></div>
+                            </label>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h5 className="text-[11px] font-bold text-theme-text uppercase tracking-wider">AI Playback Correction</h5>
+                              <p className="text-[9px] text-theme-text-dim mt-0.5">Correct GPS drift and gap transitions in playback view by default.</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={form.aiPlaybackCorrection}
+                                onChange={(e) => setForm(prev => ({ ...prev, aiPlaybackCorrection: e.target.checked }))}
+                                className="sr-only peer"
+                              />
+                              <div className="w-9 h-5 bg-theme-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500"></div>
+                            </label>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5 block">GPS Quality Mode</label>
+                            <select
+                              value={form.gpsQualityMode}
+                              onChange={(e) => setForm(prev => ({ ...prev, gpsQualityMode: e.target.value }))}
+                              className="w-full px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text outline-none focus:border-violet-500"
+                            >
+                              <option value="normal">Normal (GPS variance: 20m)</option>
+                              <option value="poor">Poor (GPS variance: 50m)</option>
+                              <option value="extremely_poor">Extremely Poor (GPS variance: 100m)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                   <div className="flex gap-3 pt-4 border-t border-theme-border">
                     <Button type="submit" variant="accent" loading={submitting}>Submit</Button>
@@ -544,7 +534,7 @@ export default function RoutePage() {
                 </div>
 
                 <div className="lg:col-span-7 h-[500px] lg:h-auto border border-theme-border rounded-xl overflow-hidden shadow-inner bg-theme-surface">
-                  <RouteBuilderMap routeCoords={routeCoords} setRouteCoords={setRouteCoords} borderColor={form.color} lanes={form.lanes} setLanes={newLanes => setForm(prev => ({ ...prev, lanes: newLanes }))} distance={form.distance} setDistance={dist => setForm(prev => ({ ...prev, distance: dist }))} geojsonText={form.geojson} setGeojsonText={txt => setForm(prev => ({ ...prev, geojson: txt }))} />
+                  <RouteBuilderMap routeCoords={routeCoords} setRouteCoords={setRouteCoords} borderColor={form.color} distance={form.distance} setDistance={dist => setForm(prev => ({ ...prev, distance: dist }))} geojsonText={form.geojson} setGeojsonText={txt => setForm(prev => ({ ...prev, geojson: txt }))} />
                 </div>
               </form>
             </CardContent>
@@ -571,6 +561,16 @@ export default function RoutePage() {
                       {route.is_sequential && (
                         <span className="ml-2 px-1.5 py-0.5 text-[9px] bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded font-semibold uppercase tracking-wider">
                           Seq
+                        </span>
+                      )}
+                      {route.aggressive_snapping && (
+                        <span className="ml-2 px-1.5 py-0.5 text-[9px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 rounded font-semibold uppercase tracking-wider">
+                          Aggressive
+                        </span>
+                      )}
+                      {route.ai_reconstruction_enabled && (
+                        <span className="ml-2 px-1.5 py-0.5 text-[9px] bg-violet-500/10 border border-violet-500/30 text-violet-500 rounded font-semibold uppercase tracking-wider font-mono">
+                          AI
                         </span>
                       )}
                     </td>
