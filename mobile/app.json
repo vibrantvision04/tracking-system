@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "ISWM Field Mobile",
+    "slug": "iswm-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.iswm.mobile"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-secure-store"
+    ]
+  }
+}

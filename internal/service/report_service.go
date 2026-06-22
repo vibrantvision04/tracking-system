@@ -7,6 +7,9 @@ import (
 	"gps-tracking-system/internal/decoder"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/utils"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -143,10 +146,7 @@ func parseGeoJSONPolygons(geoJSONStr string) [][]geofencePoint {
 	return polygons
 }
 
-func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, date time.Time, zone, ward string) error {
-	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
-	end := start.Add(24 * time.Hour)
-
+func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID int, date time.Time, start, end time.Time, zone, ward string) (*repository.MovementReport, error) {
 	// Resolve Zone from vehicle_regions mapping (Vehicle-Zone Assignments page)
 	var zoneName string
 	err := s.gRepo.Pool().QueryRow(ctx, `
@@ -223,10 +223,10 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		wardPolygons = parseGeoJSONPolygons(wardGeoJSON)
 	}
 
-	// Fetch GPS data for the day
+	// Fetch GPS data for the period
 	data, err := s.gRepo.GetByVehicle(ctx, vehicleID, start, end)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Filter out invalid GPS data
@@ -238,7 +238,32 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	}
 
 	if len(validData) == 0 {
-		return nil
+		var regNo, vType, imei string
+		_ = s.gRepo.Pool().QueryRow(ctx, `
+			SELECT v.registration_no, COALESCE(vt.vehicle_type_name, 'Vehicle'), COALESCE(d.imei, '')
+			FROM vehicles v
+			LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+			LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
+			LEFT JOIN gps_devices d ON m.device_id = d.id
+			WHERE v.id = $1
+		`, vehicleID).Scan(&regNo, &vType, &imei)
+
+		return &repository.MovementReport{
+			VehicleID:                vehicleID,
+			IMEI:                     imei,
+			RegistrationNo:           regNo,
+			VehicleType:              vType,
+			ReportDate:               date,
+			Zone:                     zone,
+			Ward:                     ward,
+			TotalActiveDuration:      "00:00:00",
+			TotalIdleDuration:        "00:00:00",
+			TotalStoppageDuration:    "00:00:00",
+			InParkingDuration:        "24:00:00",
+			ActualIgnitionOnDuration: "00:00:00",
+			TotalIgnitionOnDuration:  "00:00:00",
+			Stoppages:                []repository.Stoppage{},
+		}, nil
 	}
 
 	// ─────────────────────────────────────────────────────────────────
@@ -469,10 +494,20 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 	startPoint := &repository.Coordinate{X: startLng, Y: startLat}
 	endPoint := &repository.Coordinate{X: endLng, Y: endLat}
 
+	var regNo, vType string
+	_ = s.gRepo.Pool().QueryRow(ctx, `
+		SELECT v.registration_no, COALESCE(vt.vehicle_type_name, 'Vehicle')
+		FROM vehicles v
+		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		WHERE v.id = $1
+	`, vehicleID).Scan(&regNo, &vType)
+
 	report := &repository.MovementReport{
 		VehicleID:                vehicleID,
 		IMEI:                     validData[0].IMEI,
-		ReportDate:               start,
+		RegistrationNo:           regNo,
+		VehicleType:              vType,
+		ReportDate:               date,
 		Zone:                     zone,
 		Ward:                     ward,
 		AverageSpeed:             avgSpeed,
@@ -494,14 +529,198 @@ func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, 
 		Stoppages:                stoppages,
 	}
 
+	return report, nil
+}
+
+func (s *ReportService) GenerateDailyReport(ctx context.Context, vehicleID int, date time.Time, zone, ward string) error {
+	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	end := start.Add(24 * time.Hour)
+	
+	report, err := s.CalculateMovementReport(ctx, vehicleID, date, start, end, zone, ward)
+	if err != nil {
+		return err
+	}
+	if report == nil {
+		return nil
+	}
 	return s.repo.Upsert(ctx, report)
+}
+
+func parseTimeOfDay(s string) (int, int, int, error) {
+	parts := strings.Split(s, ":")
+	if len(parts) < 2 {
+		return 0, 0, 0, fmt.Errorf("invalid time format: %s", s)
+	}
+	h, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	m, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	sec := 0
+	if len(parts) > 2 {
+		sec, err = strconv.Atoi(parts[2])
+		if err != nil {
+			return 0, 0, 0, err
+		}
+	}
+	return h, m, sec, nil
+}
+
+func resolveShiftTimes(date time.Time, startTimeStr, endTimeStr string) (time.Time, time.Time, error) {
+	sh, sm, ss, err := parseTimeOfDay(startTimeStr)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	eh, em, es, err := parseTimeOfDay(endTimeStr)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+
+	start := time.Date(date.Year(), date.Month(), date.Day(), sh, sm, ss, 0, utils.IndianLocation)
+	
+	var end time.Time
+	if eh < sh || (eh == sh && em < sm) || (eh == sh && em == sm && es < ss) {
+		// Midnight crossing
+		nextDay := date.AddDate(0, 0, 1)
+		end = time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), eh, em, es, 0, utils.IndianLocation)
+	} else {
+		end = time.Date(date.Year(), date.Month(), date.Day(), eh, em, es, 0, utils.IndianLocation)
+	}
+
+	return start, end, nil
+}
+
+func (s *ReportService) GetReportsDynamic(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int, zoneID, wardID, shiftID int, useTime bool, startTimeStr, endTimeStr string) ([]repository.MovementReport, int, error) {
+	var targetVehicles []repository.Vehicle
+	if vehicleID > 0 {
+		vehicle, err := s.vRepo.GetByID(ctx, vehicleID)
+		if err == nil && vehicle != nil {
+			targetVehicles = append(targetVehicles, *vehicle)
+		}
+	} else {
+		vehicles, err := s.vRepo.GetAll(ctx)
+		if err == nil {
+			for _, v := range vehicles {
+				if zoneID > 0 && (v.ZoneID == nil || *v.ZoneID != zoneID) {
+					continue
+				}
+				if wardID > 0 && (v.WardID == nil || *v.WardID != wardID) {
+					continue
+				}
+				targetVehicles = append(targetVehicles, v)
+			}
+		}
+	}
+
+	if len(targetVehicles) == 0 {
+		return []repository.MovementReport{}, 0, nil
+	}
+
+	var finalStartTimeStr, finalEndTimeStr string
+	if useTime {
+		finalStartTimeStr = startTimeStr
+		finalEndTimeStr = endTimeStr
+	} else if shiftID > 0 {
+		var startTStr, endTStr string
+		err := s.gRepo.Pool().QueryRow(ctx, "SELECT COALESCE(start_time::text, ''), COALESCE(end_time::text, '') FROM shifts WHERE id = $1", shiftID).Scan(&startTStr, &endTStr)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to fetch shift times: %w", err)
+		}
+		finalStartTimeStr = startTStr
+		finalEndTimeStr = endTStr
+	}
+
+	type reportTask struct {
+		vehicleID int
+		date      time.Time
+	}
+	var tasks []reportTask
+	curr := from
+	for !curr.After(to) {
+		for _, v := range targetVehicles {
+			tasks = append(tasks, reportTask{vehicleID: v.ID, date: curr})
+		}
+		curr = curr.AddDate(0, 0, 1)
+	}
+
+	totalCount := len(tasks)
+
+	startIndex := offset
+	if startIndex > totalCount {
+		startIndex = totalCount
+	}
+	endIndex := offset + limit
+	if endIndex > totalCount {
+		endIndex = totalCount
+	}
+	pageTasks := tasks[startIndex:endIndex]
+
+	reports := make([]repository.MovementReport, len(pageTasks))
+	var wg sync.WaitGroup
+	var calcErr error
+	var errOnce sync.Once
+
+	for idx, task := range pageTasks {
+		wg.Add(1)
+		go func(i int, t reportTask) {
+			defer wg.Done()
+			
+			var windowStart, windowEnd time.Time
+			if finalStartTimeStr != "" && finalEndTimeStr != "" {
+				var err error
+				windowStart, windowEnd, err = resolveShiftTimes(t.date, finalStartTimeStr, finalEndTimeStr)
+				if err != nil {
+					errOnce.Do(func() { calcErr = err })
+					return
+				}
+			} else {
+				windowStart = time.Date(t.date.Year(), t.date.Month(), t.date.Day(), 0, 0, 0, 0, utils.IndianLocation)
+				windowEnd = windowStart.Add(24 * time.Hour)
+			}
+
+			var zName, wName string
+			_ = s.gRepo.Pool().QueryRow(ctx, `
+				SELECT COALESCE(z.region_name, ''), COALESCE(w.region_name, '')
+				FROM vehicles v
+				LEFT JOIN regions z ON v.zone_id = z.id
+				LEFT JOIN regions w ON v.ward_id = w.id
+				WHERE v.id = $1
+			`, t.vehicleID).Scan(&zName, &wName)
+
+			rep, err := s.CalculateMovementReport(ctx, t.vehicleID, t.date, windowStart, windowEnd, zName, wName)
+			if err != nil {
+				errOnce.Do(func() { calcErr = err })
+				return
+			}
+			if rep != nil {
+				reports[i] = *rep
+			}
+		}(idx, task)
+	}
+	wg.Wait()
+
+	if calcErr != nil {
+		return nil, 0, calcErr
+	}
+
+	var finalReports []repository.MovementReport
+	for _, r := range reports {
+		if r.VehicleID > 0 {
+			finalReports = append(finalReports, r)
+		}
+	}
+
+	return finalReports, totalCount, nil
 }
 
 // GetReports retrieves pre-computed reports from the movement_reports table.
 // Reports are generated exclusively by the nightly cron job, NOT on each API call.
 // This ensures consistent, fast responses regardless of GPS data volume.
-func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int) ([]repository.MovementReport, int, error) {
-	return s.repo.Get(ctx, vehicleID, from, to, limit, offset)
+func (s *ReportService) GetReports(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int, zoneID, wardID int) ([]repository.MovementReport, int, error) {
+	return s.repo.Get(ctx, vehicleID, from, to, limit, offset, zoneID, wardID)
 }
 
 func (s *ReportService) FinalizeForDate(ctx context.Context, date time.Time) error {

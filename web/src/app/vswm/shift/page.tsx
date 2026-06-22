@@ -23,7 +23,7 @@ const shiftSchema = z.object({
   shift_name: z.string().trim().min(1, "Shift Name is required").max(100, "Shift Name cannot exceed 100 characters"),
   start_time: z.string().min(1, "Start Time is required"),
   end_time: z.string().min(1, "End Time is required"),
-  time_duration: z.number().int().min(1, "Duration must be at least 1 hour").max(24, "Duration cannot exceed 24 hours"),
+  time_duration: z.number().min(0.1, "Duration must be positive").max(24, "Duration cannot exceed 24 hours"),
   report_type_id: z.number().int().min(1, "Report Type is required")
 });
 
@@ -42,6 +42,29 @@ export default function ShiftManager() {
     time_duration: 8,
     report_type_id: 1
   });
+
+  useEffect(() => {
+    if (form.start_time && form.end_time) {
+      const [startH, startM] = form.start_time.split(":").map(Number);
+      const [endH, endM] = form.end_time.split(":").map(Number);
+      
+      if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
+        let durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+        if (durationMinutes <= 0) {
+          // Midnight crossing or 24-hour shift
+          durationMinutes += 24 * 60;
+        }
+        
+        const durationHours = Math.round((durationMinutes / 60) * 10) / 10;
+        if (durationHours > 0 && durationHours <= 24) {
+          setForm(prev => {
+            if (prev.time_duration === durationHours) return prev;
+            return { ...prev, time_duration: durationHours };
+          });
+        }
+      }
+    }
+  }, [form.start_time, form.end_time]);
 
   const loadShifts = async () => {
     setTableLoading(true);
@@ -195,16 +218,17 @@ export default function ShiftManager() {
                   error={errors.end_time}
                 />
 
-                <Input
-                  label="Duration (Hours)"
-                  type="number"
-                  required
-                  min="1"
-                  max="24"
-                  value={form.time_duration}
-                  onChange={e => setForm({...form, time_duration: Number(e.target.value)})}
-                  error={errors.time_duration}
-                />
+ <div>
+  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+    Duration
+  </label>
+
+  <div className="flex h-[40px] items-center rounded-md border border-slate-200 bg-slate-50 px-4">
+    <span className="text-sm font-medium text-slate-900">
+      {form.time_duration} Hours
+    </span>
+  </div>
+</div>
 
                 <div className="flex flex-col space-y-1.5">
                   <label className="text-xs font-semibold text-theme-text-dim">Report Type</label>

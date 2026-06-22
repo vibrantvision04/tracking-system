@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"time"
 
@@ -56,7 +57,8 @@ func haversineMeters(lat1, lng1, lat2, lng2 float64) float64 {
 }
 
 // ValidateSequential runs a pure sequential validation scan of GPS path coordinates
-// against the ordered lane points.
+// against the ordered lane points, checking if the path segment between consecutive
+// GPS coordinates passes through each lane point for improved leniency and drift recovery.
 func ValidateSequential(points []LanePoint, gpsPath []GPSCoord, proximityMeters float64) CoverageState {
 	statuses := make([]LanePointStatus, len(points))
 	hitTimes := make([]*time.Time, len(points))
@@ -76,20 +78,34 @@ func ValidateSequential(points []LanePoint, gpsPath []GPSCoord, proximityMeters 
 		return state
 	}
 
-	for _, gps := range gpsPath {
+	for idx, gps := range gpsPath {
 		// Skip invalid coordinates
-		if !math.IsNaN(gps.Lat) && !math.IsNaN(gps.Lng) && !math.IsInf(gps.Lat, 0) && !math.IsInf(gps.Lng, 0) {
-			if gps.Lat == 0.0 && gps.Lng == 0.0 {
-				continue
-			}
-		} else {
+		if math.IsNaN(gps.Lat) || math.IsNaN(gps.Lng) || math.IsInf(gps.Lat, 0) || math.IsInf(gps.Lng, 0) || (gps.Lat == 0.0 && gps.Lng == 0.0) {
 			continue
 		}
 
 		nextExpectedIdx := state.LastAchievedIdx + 1
 		if nextExpectedIdx < len(points) {
 			nextCp := points[nextExpectedIdx]
-			dist := haversineMeters(gps.Lat, gps.Lng, nextCp.Latitude, nextCp.Longitude)
+			
+			var dist float64
+			if idx == 0 {
+				dist = haversineMeters(gps.Lat, gps.Lng, nextCp.Latitude, nextCp.Longitude)
+			} else {
+				prevGps := gpsPath[idx-1]
+				if math.IsNaN(prevGps.Lat) || math.IsNaN(prevGps.Lng) || math.IsInf(prevGps.Lat, 0) || math.IsInf(prevGps.Lng, 0) || (prevGps.Lat == 0.0 && prevGps.Lng == 0.0) {
+					dist = haversineMeters(gps.Lat, gps.Lng, nextCp.Latitude, nextCp.Longitude)
+				} else {
+					timeDiff := gps.Time.Sub(prevGps.Time).Seconds()
+					distDiff := haversineMeters(prevGps.Lat, prevGps.Lng, gps.Lat, gps.Lng)
+					if math.Abs(timeDiff) <= 180.0 && distDiff <= 2000.0 {
+						dist = distanceToSegment(nextCp.Latitude, nextCp.Longitude, prevGps.Lat, prevGps.Lng, gps.Lat, gps.Lng)
+					} else {
+						dist = haversineMeters(gps.Lat, gps.Lng, nextCp.Latitude, nextCp.Longitude)
+					}
+				}
+			}
+
 			if dist <= proximityMeters {
 				state.Statuses[nextExpectedIdx] = StatusAchieved
 				t := gps.Time
@@ -102,15 +118,29 @@ func ValidateSequential(points []LanePoint, gpsPath []GPSCoord, proximityMeters 
 			hitSubsequent := false
 			for j := nextExpectedIdx + 1; j < len(points); j++ {
 				cp := points[j]
-				d := haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+				var d float64
+				if idx == 0 {
+					d = haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+				} else {
+					prevGps := gpsPath[idx-1]
+					if math.IsNaN(prevGps.Lat) || math.IsNaN(prevGps.Lng) || math.IsInf(prevGps.Lat, 0) || math.IsInf(prevGps.Lng, 0) || (prevGps.Lat == 0.0 && prevGps.Lng == 0.0) {
+						d = haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+					} else {
+						timeDiff := gps.Time.Sub(prevGps.Time).Seconds()
+						distDiff := haversineMeters(prevGps.Lat, prevGps.Lng, gps.Lat, gps.Lng)
+						if math.Abs(timeDiff) <= 180.0 && distDiff <= 2000.0 {
+							d = distanceToSegment(cp.Latitude, cp.Longitude, prevGps.Lat, prevGps.Lng, gps.Lat, gps.Lng)
+						} else {
+							d = haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+						}
+					}
+				}
+
 				if d <= proximityMeters {
-					// Violation occurred!
 					state.ViolationOccurred = true
-					// Mark all skipped points as missed
 					for k := nextExpectedIdx; k < j; k++ {
 						state.Statuses[k] = StatusMissed
 					}
-					// Mark the reached point as achieved
 					state.Statuses[j] = StatusAchieved
 					t := gps.Time
 					state.HitTimes[j] = &t
@@ -130,7 +160,7 @@ func ValidateSequential(points []LanePoint, gpsPath []GPSCoord, proximityMeters 
 }
 
 // ValidateNonSequential runs a non-sequential validation scan of GPS path coordinates
-// against the lane points, crediting hits in any order.
+// against the lane points, crediting hits in any order, checking segment mid-points for robustness.
 func ValidateNonSequential(points []LanePoint, gpsPath []GPSCoord, proximityMeters float64) CoverageState {
 	statuses := make([]LanePointStatus, len(points))
 	hitTimes := make([]*time.Time, len(points))
@@ -150,13 +180,32 @@ func ValidateNonSequential(points []LanePoint, gpsPath []GPSCoord, proximityMete
 		return state
 	}
 
-	for i, cp := range points {
+	for idx, cp := range points {
 		var hitTime *time.Time
-		for _, gps := range gpsPath {
+		for i := 0; i < len(gpsPath); i++ {
+			gps := gpsPath[i]
 			if math.IsNaN(gps.Lat) || math.IsNaN(gps.Lng) || math.IsInf(gps.Lat, 0) || math.IsInf(gps.Lng, 0) || (gps.Lat == 0.0 && gps.Lng == 0.0) {
 				continue
 			}
-			dist := haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+
+			var dist float64
+			if i == 0 {
+				dist = haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+			} else {
+				prevGps := gpsPath[i-1]
+				if math.IsNaN(prevGps.Lat) || math.IsNaN(prevGps.Lng) || math.IsInf(prevGps.Lat, 0) || math.IsInf(prevGps.Lng, 0) || (prevGps.Lat == 0.0 && prevGps.Lng == 0.0) {
+					dist = haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+				} else {
+					timeDiff := gps.Time.Sub(prevGps.Time).Seconds()
+					distDiff := haversineMeters(prevGps.Lat, prevGps.Lng, gps.Lat, gps.Lng)
+					if math.Abs(timeDiff) <= 180.0 && distDiff <= 2000.0 {
+						dist = distanceToSegment(cp.Latitude, cp.Longitude, prevGps.Lat, prevGps.Lng, gps.Lat, gps.Lng)
+					} else {
+						dist = haversineMeters(gps.Lat, gps.Lng, cp.Latitude, cp.Longitude)
+					}
+				}
+			}
+
 			if dist <= proximityMeters {
 				t := gps.Time
 				if hitTime == nil || t.Before(*hitTime) {
@@ -165,10 +214,10 @@ func ValidateNonSequential(points []LanePoint, gpsPath []GPSCoord, proximityMete
 			}
 		}
 		if hitTime != nil {
-			state.Statuses[i] = StatusAchieved
-			state.HitTimes[i] = hitTime
+			state.Statuses[idx] = StatusAchieved
+			state.HitTimes[idx] = hitTime
 		} else {
-			state.Statuses[i] = StatusMissed
+			state.Statuses[idx] = StatusMissed
 		}
 	}
 
@@ -186,6 +235,7 @@ func RecalculateLanePointCoverage(
 	routeID int,
 	dateStr string,
 	proximityMeters float64,
+	useReconstructed bool,
 ) error {
 	dayStart, err := time.ParseInLocation("2006-01-02", dateStr, utils.IndianLocation)
 	if err != nil {
@@ -223,33 +273,58 @@ func RecalculateLanePointCoverage(
 		}
 	}
 
-	// Fetch historical GPS data
-	gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, dayStart, dayEnd)
-	if err != nil {
-		return err
+	var gpsPath []GPSCoord
+
+	if useReconstructed {
+		recon, err := routeRepo.GetRouteReconstruction(ctx, vehicleID, routeID, dateStr)
+		if err == nil && recon != nil && recon.ReconstructedPath != "" {
+			type ReconstructedPoint struct {
+				Lat  float64   `json:"lat"`
+				Lng  float64   `json:"lng"`
+				Time time.Time `json:"time"`
+			}
+			var reconPoints []ReconstructedPoint
+			if err := json.Unmarshal([]byte(recon.ReconstructedPath), &reconPoints); err == nil && len(reconPoints) > 0 {
+				gpsPath = make([]GPSCoord, len(reconPoints))
+				for i, p := range reconPoints {
+					gpsPath[i] = GPSCoord{
+						Lat:  p.Lat,
+						Lng:  p.Lng,
+						Time: p.Time,
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to raw GPS data if no reconstructed path was loaded
+	if len(gpsPath) == 0 {
+		gpsData, err := gpsRepo.GetByVehicle(ctx, vehicleID, dayStart, dayEnd)
+		if err != nil {
+			return err
+		}
+		if len(gpsData) > 0 {
+			gpsData = smoothGpsData(gpsData)
+			var cleanedGps []decoder.AVLData
+			for _, p := range gpsData {
+				if p.Lat != 0.0 && p.Lng != 0.0 {
+					cleanedGps = append(cleanedGps, p)
+				}
+			}
+			gpsPath = make([]GPSCoord, len(cleanedGps))
+			for i, p := range cleanedGps {
+				gpsPath[i] = GPSCoord{
+					Lat:  p.Lat,
+					Lng:  p.Lng,
+					Time: p.Time,
+				}
+			}
+		}
 	}
 
 	var logs []repository.VehicleLanePointLog
 
-	if len(gpsData) > 0 {
-		// Smooth GPS data (package-visible from report_handlers.go)
-		gpsData = smoothGpsData(gpsData)
-
-		var cleanedGps []decoder.AVLData
-		for _, p := range gpsData {
-			if p.Lat != 0.0 && p.Lng != 0.0 {
-				cleanedGps = append(cleanedGps, p)
-			}
-		}
-
-		gpsPath := make([]GPSCoord, len(cleanedGps))
-		for i, p := range cleanedGps {
-			gpsPath[i] = GPSCoord{
-				Lat:  p.Lat,
-				Lng:  p.Lng,
-				Time: p.Time,
-			}
-		}
+	if len(gpsPath) > 0 {
 
 		// Run validation based on route sequential configuration
 		var state CoverageState

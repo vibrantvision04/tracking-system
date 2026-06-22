@@ -28,6 +28,7 @@ export default function RouteBuilderMap({
 	const routePolylineRef = useRef<L.Polyline | null>(null);
 	const routeMarkersRef = useRef<L.Marker[]>([]);
 	const vertexMarkersRef = useRef<L.Marker[]>([]);
+	const lanePointLayersRef = useRef<L.Layer[]>([]);
 	const hasFitBoundsRef = useRef(false);
 
 	const [isDrawing, setIsDrawing] = useState(false);
@@ -99,6 +100,7 @@ export default function RouteBuilderMap({
 			center: [26.9124, 75.7873], // Jaipur
 			zoom: 13,
 			zoomControl: true,
+			preferCanvas: true,
 		});
 
 		L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
@@ -276,26 +278,27 @@ export default function RouteBuilderMap({
 				className: "route-vertex-handle",
 				html: `
 					<div style="
-						width: 20px;
-						height: 20px;
+						width: 14px;
+						height: 14px;
 						background: white;
 						border: 2px solid #fba339;
 						border-radius: 50%;
-						box-shadow: 0 0 5px rgba(0,0,0,0.6);
+						box-shadow: 0 0 4px rgba(0,0,0,0.5);
 						cursor: ${isDrawing ? 'grab' : 'pointer'};
 						display: flex;
 						align-items: center;
 						justify-content: center;
 						font-family: 'Inter', sans-serif;
-						font-size: 10px;
-						font-weight: 800;
+						font-size: 8px;
+						font-weight: 900;
 						color: #1e293b;
+						line-height: 1;
 					">
 						${idx + 1}
 					</div>
 				`,
-				iconSize: [20, 20],
-				iconAnchor: [10, 10],
+				iconSize: [14, 14],
+				iconAnchor: [7, 7],
 			});
 
 			const marker = L.marker([coord.lat, coord.lng], {
@@ -308,7 +311,7 @@ export default function RouteBuilderMap({
 			})
 			.bindPopup(`
 				<div style="font-family: inherit; font-size: 11px; text-align: center; min-width: 90px; padding: 2px;">
-					<strong style="display: block; margin-bottom: 6px; color: #0f172a;">Lane Point #${idx + 1}</strong>
+					<strong style="display: block; margin-bottom: 6px; color: #0f172a;">Path Point #${idx + 1}</strong>
 					${isDrawing ? `<button 
 						type="button" 
 						onclick="event.stopPropagation(); event.preventDefault(); window.deletePoint(${idx})" 
@@ -368,6 +371,59 @@ export default function RouteBuilderMap({
 			vertexMarkersRef.current = [];
 		};
 	}, [routeCoords, isDrawing]);
+
+	// Render lane points (at actual vertex coordinates) with 10m radius circles
+	useEffect(() => {
+		const m = mapRef.current;
+		if (!m) return;
+
+		// Clear previous lane point layers
+		lanePointLayersRef.current.forEach((layer) => layer.remove());
+		lanePointLayersRef.current = [];
+
+		if (routeCoords.length === 0) return;
+		if (!showRoute) return;
+
+		const layers: L.Layer[] = [];
+
+		for (let i = 0; i < routeCoords.length; i++) {
+			const coord = routeCoords[i];
+
+			// 1. Draw 10m coverage circle
+			const zoneCircle = L.circle([coord.lat, coord.lng], {
+				radius: 10,
+				color: "#10b981",
+				weight: 1.2,
+				fillColor: "#10b981",
+				fillOpacity: 0.12,
+				dashArray: "3, 3",
+				interactive: false,
+			}).addTo(m);
+			layers.push(zoneCircle);
+
+			// 2. Draw small center dot
+			const centerDot = L.circleMarker([coord.lat, coord.lng], {
+				radius: 2.0,
+				color: "#ffffff",
+				weight: 0.8,
+				fillColor: "#10b981",
+				fillOpacity: 1,
+				opacity: 1,
+			})
+			.bindTooltip(`Lane Point #${i + 1}`, {
+				direction: "top",
+				permanent: false,
+			})
+			.addTo(m);
+			layers.push(centerDot);
+		}
+
+		lanePointLayersRef.current = layers;
+
+		return () => {
+			layers.forEach((layer) => layer.remove());
+		};
+	}, [routeCoords, showRoute]);
 
 	// Parse custom input JSON coordinates
 	useEffect(() => {

@@ -264,6 +264,7 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 	type GeofenceSession struct {
 		GeofenceName string     `json:"geofence_name"`
 		Entity       string     `json:"entity"`
+		Status       string     `json:"status"` // "inside" or "outside"
 		EntryTime    time.Time  `json:"entry_time"`
 		ExitTime     *time.Time `json:"exit_time"`
 		Duration     string     `json:"duration"`
@@ -345,94 +346,102 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 		var zoneVisits, wardVisits, fuelVisits, transportVisits, workshopVisits, parkingVisits int
 
 		for _, events := range gEvents {
-			var activeSession *GeofenceSession = nil
-			for _, ev := range events {
-				if ev.EventType == "enter" {
-					if activeSession != nil {
-						exitT := ev.EventTime
-						activeSession.ExitTime = &exitT
-						activeSession.Duration = formatGeofenceDuration(exitT.Sub(activeSession.EntryTime))
-						
-						// Check if session overlaps with vehicle's shift window
-						if activeSession.EntryTime.Before(vEnd) && (activeSession.ExitTime == nil || activeSession.ExitTime.After(vStart)) {
-							repSession := *activeSession
-							if repSession.EntryTime.Before(vStart) {
-								repSession.EntryTime = vStart
-							}
-							if repSession.ExitTime != nil && repSession.ExitTime.After(vEnd) {
-								truncatedExit := vEnd
-								repSession.ExitTime = &truncatedExit
-							}
-							repSession.Duration = formatGeofenceDuration(repSession.ExitTime.Sub(repSession.EntryTime))
-							sessions = append(sessions, repSession)
-						}
+			if len(events) == 0 {
+				continue
+			}
+
+			// We need a helper to safely append clamped sessions
+			addSession := func(s GeofenceSession) {
+				// Check if session overlaps with vehicle's shift window
+				if s.EntryTime.Before(vEnd) && (s.ExitTime == nil || s.ExitTime.After(vStart)) {
+					repSession := s
+					if repSession.EntryTime.Before(vStart) {
+						repSession.EntryTime = vStart
 					}
-					activeSession = &GeofenceSession{
-						GeofenceName: ev.EntityName,
-						Entity:       ev.Entity,
-						EntryTime:    ev.EventTime,
-					}
-				} else if ev.EventType == "exit" {
-					if activeSession != nil {
-						exitT := ev.EventTime
-						activeSession.ExitTime = &exitT
-						
-						// Check if session overlaps with vehicle's shift window
-						if activeSession.EntryTime.Before(vEnd) && (activeSession.ExitTime == nil || activeSession.ExitTime.After(vStart)) {
-							repSession := *activeSession
-							if repSession.EntryTime.Before(vStart) {
-								repSession.EntryTime = vStart
-							}
-							if repSession.ExitTime != nil && repSession.ExitTime.After(vEnd) {
-								truncatedExit := vEnd
-								repSession.ExitTime = &truncatedExit
-							}
-							repSession.Duration = formatGeofenceDuration(repSession.ExitTime.Sub(repSession.EntryTime))
-							sessions = append(sessions, repSession)
+					var exitTime time.Time
+					if repSession.ExitTime != nil {
+						if repSession.ExitTime.After(vEnd) {
+							truncatedExit := vEnd
+							repSession.ExitTime = &truncatedExit
 						}
-						activeSession = nil
+						exitTime = *repSession.ExitTime
 					} else {
-						// Exit without enter: assume entry at vStart
-						entryT := vStart
+						// For active sessions, duration is calculated up to now/vEnd
+						nowInIndia := utils.CurrentTimeInIndia()
+						if nowInIndia.Before(vEnd) {
+							exitTime = nowInIndia
+						} else {
+							exitTime = vEnd
+							repSession.ExitTime = &exitTime
+						}
+					}
+
+					if exitTime.After(repSession.EntryTime) {
+						repSession.Duration = formatGeofenceDuration(exitTime.Sub(repSession.EntryTime))
+						sessions = append(sessions, repSession)
+					}
+				}
+			}
+
+			// Determine initial state based on first event
+			var activeSession *GeofenceSession = nil
+			firstEvent := events[0]
+			if firstEvent.EventType == "exit" {
+				activeSession = &GeofenceSession{
+					GeofenceName: firstEvent.EntityName,
+					Entity:       firstEvent.Entity,
+					Status:       "inside",
+					EntryTime:    vStart,
+				}
+			} else {
+				activeSession = &GeofenceSession{
+					GeofenceName: firstEvent.EntityName,
+					Entity:       firstEvent.Entity,
+					Status:       "outside",
+					EntryTime:    vStart,
+				}
+			}
+
+			for _, ev := range events {
+				if activeSession.Status == "inside" {
+					if ev.EventType == "exit" {
 						exitT := ev.EventTime
-						
-						if entryT.Before(vEnd) && exitT.After(vStart) {
-							repSession := GeofenceSession{
-								GeofenceName: ev.EntityName,
-								Entity:       ev.Entity,
-								EntryTime:    entryT,
-								ExitTime:     &exitT,
-							}
-							if repSession.EntryTime.Before(vStart) {
-								repSession.EntryTime = vStart
-							}
-							if repSession.ExitTime != nil && repSession.ExitTime.After(vEnd) {
-								truncatedExit := vEnd
-								repSession.ExitTime = &truncatedExit
-							}
-							repSession.Duration = formatGeofenceDuration(repSession.ExitTime.Sub(repSession.EntryTime))
-							sessions = append(sessions, repSession)
+						activeSession.ExitTime = &exitT
+						addSession(*activeSession)
+
+						activeSession = &GeofenceSession{
+							GeofenceName: ev.EntityName,
+							Entity:       ev.Entity,
+							Status:       "outside",
+							EntryTime:    ev.EventTime,
+						}
+					}
+				} else { // "outside"
+					if ev.EventType == "enter" {
+						enterT := ev.EventTime
+						activeSession.ExitTime = &enterT
+						addSession(*activeSession)
+
+						activeSession = &GeofenceSession{
+							GeofenceName: ev.EntityName,
+							Entity:       ev.Entity,
+							Status:       "inside",
+							EntryTime:    ev.EventTime,
 						}
 					}
 				}
 			}
-			// Handle unclosed session at the end of the shift
+
+			// Handle unclosed active session at the end of the shift/day
 			if activeSession != nil {
 				endTime := vEnd
 				nowInIndia := utils.CurrentTimeInIndia()
+				var exitT *time.Time = &endTime
 				if nowInIndia.Before(vEnd) && nowInIndia.After(vStart) {
-					endTime = nowInIndia
+					exitT = nil
 				}
-				
-				if activeSession.EntryTime.Before(vEnd) {
-					repSession := *activeSession
-					if repSession.EntryTime.Before(vStart) {
-						repSession.EntryTime = vStart
-					}
-					repSession.ExitTime = &endTime
-					repSession.Duration = formatGeofenceDuration(repSession.ExitTime.Sub(repSession.EntryTime))
-					sessions = append(sessions, repSession)
-				}
+				activeSession.ExitTime = exitT
+				addSession(*activeSession)
 			}
 		}
 
@@ -447,19 +456,21 @@ func (h *Handler) GetGeofenceEventReport(w http.ResponseWriter, r *http.Request)
 
 		// Count visit metrics
 		for _, s := range sessions {
-			switch s.Entity {
-			case "Zone":
-				zoneVisits++
-			case "Ward":
-				wardVisits++
-			case "Fuel Station":
-				fuelVisits++
-			case "Transport Station":
-				transportVisits++
-			case "Workshop":
-				workshopVisits++
-			case "Parking":
-				parkingVisits++
+			if s.Status == "inside" {
+				switch s.Entity {
+				case "Zone":
+					zoneVisits++
+				case "Ward":
+					wardVisits++
+				case "Fuel Station":
+					fuelVisits++
+				case "Transport Station":
+					transportVisits++
+				case "Workshop":
+					workshopVisits++
+				case "Parking":
+					parkingVisits++
+				}
 			}
 		}
 

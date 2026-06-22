@@ -16,7 +16,7 @@ export default function VswmPlaceholderPage() {
         The page for <span className="text-theme-accent font-mono">/vswm/{path}</span> is currently being developed as part of the system conversion.
       </p>
       <div className="text-xs text-theme-text-dim uppercase tracking-wider">
-        VSWM Jaipur Heritage
+        VSWM Jaipur
       </div>
     </div>
   );

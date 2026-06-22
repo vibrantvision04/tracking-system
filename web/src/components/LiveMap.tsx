@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
@@ -8,6 +8,8 @@ import { api, wsUrl } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import * as turf from "@turf/turf";
 import { populateOpenDepotLayer } from "@/components/OpenDepotMapLayer";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import MultiSelect from "@/components/ui/MultiSelect";
 
 // ─── Smooth marker slide animation ───
 function slideMarkerTo(
@@ -50,6 +52,8 @@ if (typeof document !== "undefined" && !document.getElementById("lm-pulse")) {
     @keyframes lm-pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.45)}70%{box-shadow:0 0 0 10px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
     .lm-moving{animation:lm-pulse 2s ease-out infinite}
     .lm-ws-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;flex-shrink:0}
+    .lm-tooltip{background:#1e293b !important;border:1px solid #475569 !important;color:#f8fafc !important;font-weight:600;font-size:10px;padding:2px 6px;border-radius:4px;box-shadow:0 4px 10px rgba(0,0,0,0.3)}
+    .leaflet-tooltip-top:before{border-top-color:#1e293b !important}
   `;
   document.head.appendChild(s);
 }
@@ -71,8 +75,12 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
   const fuelStationsLayerRef = useRef<L.LayerGroup | null>(null);
   const workshopsLayerRef = useRef<L.LayerGroup | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [selectedWard, setSelectedWard] = useState<string>("all");
+  const [selectedVehicleType, setSelectedVehicleType] = useState<string>("all");
+  const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
+  const [hasInitializedVehicles, setHasInitializedVehicles] = useState(false);
+  const [showRegistrationNo, setShowRegistrationNo] = useState(false);
+
   const [livePos, setLivePos] = useState<Record<string, LivePosition>>({});
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [wsConnected, setWsConnected] = useState(false);
@@ -113,6 +121,41 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       }
     }
   }, []);
+
+  // Initialize selectedVehicles with all IMEIs on load
+  useEffect(() => {
+    if (vehicles.length > 0 && !hasInitializedVehicles) {
+      const imeis = vehicles.map(v => v.gps_device?.imei).filter(Boolean) as string[];
+      setSelectedVehicles(imeis);
+      setHasInitializedVehicles(true);
+    }
+  }, [vehicles, hasInitializedVehicles]);
+
+  // When filters change, auto-select all vehicles matching the new filters
+  const lastFilters = useRef({ zone: selectedZone, ward: selectedWard, type: selectedVehicleType });
+  useEffect(() => {
+    if (
+      lastFilters.current.zone !== selectedZone ||
+      lastFilters.current.ward !== selectedWard ||
+      lastFilters.current.type !== selectedVehicleType
+    ) {
+      const matched = vehicles.filter((v) => {
+        if (selectedZone && selectedZone !== "all") {
+          if ((v as any).zone_id !== parseInt(selectedZone) && v.assigned_zone_id !== parseInt(selectedZone)) return false;
+        }
+        if (selectedWard && selectedWard !== "all") {
+          if ((v as any).ward_id !== parseInt(selectedWard) && v.assigned_ward_id !== parseInt(selectedWard)) return false;
+        }
+        if (selectedVehicleType && selectedVehicleType !== "all") {
+          if (v.vehicle_type?.name !== selectedVehicleType) return false;
+        }
+        return true;
+      });
+      const imeis = matched.map(v => v.gps_device?.imei).filter(Boolean) as string[];
+      setSelectedVehicles(imeis);
+      lastFilters.current = { zone: selectedZone, ward: selectedWard, type: selectedVehicleType };
+    }
+  }, [selectedZone, selectedWard, selectedVehicleType, vehicles]);
 
   useEffect(() => {
     Promise.all([
@@ -445,7 +488,8 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       const activeZoneId = parseInt(selectedZone);
       const activeWards = regionsList.filter(r => 
         r.region_type_id === 3 && 
-        r.parent_id === activeZoneId
+        r.parent_id === activeZoneId &&
+        (selectedWard === "all" || r.id === parseInt(selectedWard))
       );
 
       const activeZone = zones.find(z => z.id === activeZoneId);
@@ -455,7 +499,7 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
       const zoneColor = selectedZoneRegion && selectedZoneRegion.color ? selectedZoneRegion.color : "#8b5cf6";
 
       // 1. Draw Combined Zone Boundary
-      if (selectedZoneRegion && selectedZoneRegion.geojson) {
+      if (selectedZoneRegion && selectedZoneRegion.geojson && selectedWard === "all") {
         try {
           const zoneBoundaryLayer = L.geoJSON(selectedZoneRegion.geojson, {
             style: {
@@ -560,10 +604,10 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         }
       }
     }
-  }, [selectedZone, regionsList, zones]);
+  }, [selectedZone, selectedWard, regionsList, zones]);
 
   // ─── Marker helper ───
-  const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string, isLive: boolean, lastTime?: string | null) => {
+  const upsertMarker = useCallback((imei: string, lat: number, lng: number, speed: number, ignition: boolean, regNo: string, typeName: string, isLive: boolean, lastTime?: string | null, showRegNo?: boolean) => {
     if (!mapRef.current) return;
     if (typeof lat !== 'number' || typeof lng !== 'number' || lat === 0) {
       console.warn("Invalid lat/lng for", imei, lat, lng);
@@ -621,29 +665,57 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
         <div style="color:#6366f1;font-size:11px;margin-top:4px;">IMEI: ${imei}</div>
       </div>
     `);
+
+    if (showRegNo) {
+      markers.current[imei].bindTooltip(regNo, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -15],
+        className: "lm-tooltip"
+      });
+      // Force it to open
+      markers.current[imei].openTooltip();
+    } else {
+      markers.current[imei].unbindTooltip();
+    }
   }, []);
 
   // ─── Marker Management (Filtered & Live Position Synced) ───
   useEffect(() => {
     if (!mapRef.current) return;
     
-    const filteredVehicles = vehicles.filter((v) => {
-      if (!selectedZone || selectedZone === "all") return true;
-      return (v as any).zone_id === parseInt(selectedZone);
+    // 1. Apply Zone, Ward, Vehicle Type filters
+    const filteredByFilters = vehicles.filter((v) => {
+      if (selectedZone && selectedZone !== "all") {
+        if ((v as any).zone_id !== parseInt(selectedZone) && v.assigned_zone_id !== parseInt(selectedZone)) return false;
+      }
+      if (selectedWard && selectedWard !== "all") {
+        if ((v as any).ward_id !== parseInt(selectedWard) && v.assigned_ward_id !== parseInt(selectedWard)) return false;
+      }
+      if (selectedVehicleType && selectedVehicleType !== "all") {
+        if (v.vehicle_type?.name !== selectedVehicleType) return false;
+      }
+      return true;
     });
 
-    const filteredImeis = new Set(filteredVehicles.map(v => v.gps_device?.imei).filter(Boolean));
+    // 2. Only show markers for vehicles that are checked in selectedVehicles
+    const displayedVehicles = filteredByFilters.filter((v) => {
+      const imei = v.gps_device?.imei;
+      return imei && selectedVehicles.includes(imei);
+    });
+
+    const displayedImeis = new Set(displayedVehicles.map(v => v.gps_device?.imei).filter(Boolean));
     
     // Cleanup hidden markers
     Object.keys(markers.current).forEach((imei) => {
-      if (!filteredImeis.has(imei)) {
+      if (!displayedImeis.has(imei)) {
         markers.current[imei].remove();
         delete markers.current[imei];
       }
     });
 
     // Create/Update visible markers
-    filteredVehicles.forEach((v) => {
+    displayedVehicles.forEach((v) => {
       const imei = v.gps_device?.imei;
       if (!imei) return;
 
@@ -659,7 +731,8 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           v.registration_no,
           v.vehicle_type?.name || "Vehicle",
           true,
-          pos.time || v.last_time
+          pos.time || v.last_time,
+          showRegistrationNo
         );
       } else if (v.last_lat && v.last_lng) {
         // Fallback to static DB values
@@ -677,11 +750,12 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
           v.registration_no,
           v.vehicle_type?.name || "Vehicle",
           simulatedIsLive,
-          v.last_time
+          v.last_time,
+          showRegistrationNo
         );
       }
     });
-  }, [vehicles, selectedZone, livePos, upsertMarker]);
+  }, [vehicles, selectedZone, selectedWard, selectedVehicleType, selectedVehicles, livePos, showRegistrationNo, upsertMarker]);
 
   // ─── Fit Bounds on Zone Change or Load ───
   const lastFittedZone = useRef<string | null | undefined>(undefined);
@@ -712,6 +786,18 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
 
   const selectedZoneRef = useRef(selectedZone);
   useEffect(() => { selectedZoneRef.current = selectedZone; }, [selectedZone]);
+
+  const selectedWardRef = useRef(selectedWard);
+  useEffect(() => { selectedWardRef.current = selectedWard; }, [selectedWard]);
+
+  const selectedVehicleTypeRef = useRef(selectedVehicleType);
+  useEffect(() => { selectedVehicleTypeRef.current = selectedVehicleType; }, [selectedVehicleType]);
+
+  const selectedVehiclesRef = useRef(selectedVehicles);
+  useEffect(() => { selectedVehiclesRef.current = selectedVehicles; }, [selectedVehicles]);
+
+  const showRegistrationNoRef = useRef(showRegistrationNo);
+  useEffect(() => { showRegistrationNoRef.current = showRegistrationNo; }, [showRegistrationNo]);
 
   // ─── WebSocket for real-time GPS ───
   useEffect(() => {
@@ -754,7 +840,24 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
               
               const v = vehiclesRef.current.find((vv) => vv.gps_device?.imei === msg.imei);
               const sz = selectedZoneRef.current;
-              const isVisible = !sz || sz === "all" || (v && (v as any).zone_id === parseInt(sz));
+              const sw = selectedWardRef.current;
+              const svt = selectedVehicleTypeRef.current;
+              const svs = selectedVehiclesRef.current;
+              const srn = showRegistrationNoRef.current;
+              
+              let isVisible = true;
+              if (sz && sz !== "all") {
+                if ((v as any)?.zone_id !== parseInt(sz) && v?.assigned_zone_id !== parseInt(sz)) isVisible = false;
+              }
+              if (sw && sw !== "all") {
+                if ((v as any)?.ward_id !== parseInt(sw) && v?.assigned_ward_id !== parseInt(sw)) isVisible = false;
+              }
+              if (svt && svt !== "all") {
+                if (v?.vehicle_type?.name !== svt) isVisible = false;
+              }
+              if (msg.imei && !svs.includes(msg.imei)) {
+                isVisible = false;
+              }
               
               if (isVisible) {
                 // Instantly update marker on map without layout/render thrashing
@@ -767,7 +870,8 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
                   v?.registration_no || msg.imei,
                   v?.vehicle_type?.name || "Vehicle",
                   true,
-                  livePosMsg.time
+                  livePosMsg.time,
+                  srn
                 );
               } else {
                 if (markers.current[msg.imei]) {
@@ -851,112 +955,175 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
     realStatus: getStatus(v.gps_device?.imei || "")
   }));
 
-  const filteredByZone = processedVehicles.filter((v) => {
-    if (!selectedZone || selectedZone === "all") return true;
-    return (v as any).zone_id === parseInt(selectedZone);
+  const filteredByFilters = processedVehicles.filter((v) => {
+    if (selectedZone && selectedZone !== "all") {
+      if ((v as any).zone_id !== parseInt(selectedZone) && v.assigned_zone_id !== parseInt(selectedZone)) return false;
+    }
+    if (selectedWard && selectedWard !== "all") {
+      if ((v as any).ward_id !== parseInt(selectedWard) && v.assigned_ward_id !== parseInt(selectedWard)) return false;
+    }
+    if (selectedVehicleType && selectedVehicleType !== "all") {
+      if (v.vehicle_type?.name !== selectedVehicleType) return false;
+    }
+    return true;
   });
 
-  const filtered = filteredByZone.filter((v) =>
-    v.registration_no.toLowerCase().includes(search.toLowerCase()) ||
-    (v.vehicle_type?.name || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const displayedVehicles = filteredByFilters.filter((v) => {
+    const imei = v.gps_device?.imei;
+    return imei && selectedVehicles.includes(imei);
+  });
 
   const counts = {
-    running: filteredByZone.filter((v) => v.realStatus === "running").length,
-    idle: filteredByZone.filter((v) => v.realStatus === "idle").length,
-    stopped: filteredByZone.filter((v) => v.realStatus === "stopped").length,
-    offline: filteredByZone.filter((v) => v.realStatus === "offline").length,
+    running: filteredByFilters.filter((v) => v.realStatus === "running").length,
+    idle: filteredByFilters.filter((v) => v.realStatus === "idle").length,
+    stopped: filteredByFilters.filter((v) => v.realStatus === "stopped").length,
+    offline: filteredByFilters.filter((v) => v.realStatus === "offline").length,
   };
 
+  const zoneOptions = [
+    { value: "all", label: "Jaipur (All Zones)" },
+    ...zones.map(z => ({ value: String(z.id), label: z.region_name }))
+  ];
+
+  const filteredWards = !selectedZone || selectedZone === "all"
+    ? regionsList.filter(r => r.region_type_id === 3)
+    : regionsList.filter(r => r.region_type_id === 3 && r.parent_id === parseInt(selectedZone));
+
+  const wardOptions = [
+    { value: "all", label: "Select Ward" },
+    ...filteredWards.map(w => ({ value: String(w.id), label: w.region_name }))
+  ];
+
+  const vehicleTypes = Array.from(
+    new Set(vehicles.map(v => v.vehicle_type?.name).filter(Boolean))
+  ) as string[];
+
+  const vehicleTypeOptions = [
+    { value: "all", label: "Select Vehicle Type" },
+    ...vehicleTypes.map(name => ({ value: name, label: name }))
+  ];
+
+  const vehicleOptions = filteredByFilters
+    .filter(v => v.gps_device?.imei)
+    .map(v => ({
+      value: v.gps_device!.imei,
+      label: v.registration_no
+    }));
+
+  // Fit Bounds on Ward Change
+  const lastFittedWard = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (selectedWard === "all" || lastFittedWard.current === selectedWard) return;
+
+    const wardIdInt = parseInt(selectedWard);
+    const targetWard = regionsList.find(r => r.region_type_id === 3 && r.id === wardIdInt);
+    if (targetWard && targetWard.geojson) {
+      try {
+        const boundary = L.geoJSON(targetWard.geojson);
+        mapRef.current.fitBounds(boundary.getBounds(), { padding: [30, 30], maxZoom: 16 });
+        lastFittedWard.current = selectedWard;
+      } catch (e) {
+        console.error("Failed to fit bounds for ward", e);
+      }
+    }
+  }, [selectedWard, regionsList]);
+
   return (
-    <div className="flex-1 w-full flex relative overflow-hidden">
-      <div ref={box} className="flex-1 w-full" />
-
-      {/* Overlay Panel */}
+    <div className="flex-1 w-full flex flex-col relative overflow-hidden bg-theme-base">
+      {/* HORIZONTAL CONTROLS PANEL */}
       {showMenu && (
-        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[300px] max-h-[calc(100%-32px)] bg-slate-100/95 backdrop-blur-2xl rounded-xl border border-slate-700 z-[1000] flex flex-col shadow-2xl shadow-black/40 text-slate-200">
-          {/* Stats Row */}
-          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 text-[11px] font-semibold">
-            <span className="lm-ws-dot" style={{ background: wsConnected ? "#22c55e" : "#ef4444" }} title={wsConnected ? "Live Connected" : "Disconnected"} />
-            <span className="text-green-400">● {counts.running}</span>
-            <span className="text-amber-400">● {counts.idle}</span>
-            <span className="text-red-400">● {counts.stopped}</span>
-            <span className="text-slate-900 ml-auto">{filteredByZone.length} visible</span>
+        <section className="bg-theme-surface border-b border-theme-border px-6 py-3 z-10 shrink-0 w-full flex flex-wrap items-center justify-between gap-4 select-none">
+          <div className="flex flex-wrap items-center gap-3.5">
+            {/* Select Zone */}
+            <div className="min-w-[160px]">
+              <SearchableSelect
+                value={selectedZone || "all"}
+                onChange={(val) => {
+                  setSelectedZone(val);
+                  setSelectedWard("all");
+                  localStorage.setItem("selectedZone", val);
+                }}
+                options={zoneOptions}
+                placeholder="Select Zone"
+                className="w-full"
+              />
+            </div>
+
+            {/* Select Ward */}
+            <div className="min-w-[160px]">
+              <SearchableSelect
+                value={selectedWard || "all"}
+                onChange={(val) => {
+                  setSelectedWard(val);
+                }}
+                options={wardOptions}
+                placeholder="Select Ward"
+                className="w-full"
+                disabled={!selectedZone || selectedZone === "all"}
+              />
+            </div>
+
+            {/* Select Vehicle Type */}
+            <div className="min-w-[180px]">
+              <SearchableSelect
+                value={selectedVehicleType || "all"}
+                onChange={(val) => {
+                  setSelectedVehicleType(val);
+                }}
+                options={vehicleTypeOptions}
+                placeholder="Select Vehicle Type"
+                className="w-full"
+              />
+            </div>
+
+            {/* Select Vehicle (MultiSelect) */}
+            <div className="min-w-[260px] max-w-[360px]">
+              <MultiSelect
+                options={vehicleOptions}
+                selectedValues={selectedVehicles}
+                onChange={(vals) => {
+                  setSelectedVehicles(vals);
+                }}
+                placeholder="Select Vehicle"
+                className="w-full"
+              />
+            </div>
+
+            {/* Show Registration No. Checkbox */}
+            <div className="flex items-center gap-2 px-2 border-l border-theme-border">
+              <input
+                id="show-reg-no-checkbox"
+                type="checkbox"
+                checked={showRegistrationNo}
+                onChange={(e) => setShowRegistrationNo(e.target.checked)}
+                className="w-4 h-4 text-theme-accent border-slate-300 rounded focus:ring-theme-accent cursor-pointer"
+              />
+              <label htmlFor="show-reg-no-checkbox" className="text-xs font-bold text-theme-text cursor-pointer select-none">
+                Show Registration No.
+              </label>
+            </div>
           </div>
 
-          {/* Zone Selector */}
-          <div className="p-3 border-b border-slate-900">
-            <select
-              value={selectedZone || "all"}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedZone(val);
-                localStorage.setItem("selectedZone", val);
-              }}
-              className="w-full px-3 py-2 bg-slate-100 border border-slate-600 rounded-lg text-[13px] text-slate-900 placeholder:text-slate-500 outline-none focus:border-emerald-500 transition"
-            >
-              <option value="all">Jaipur Heritage (All Zones)</option>
-              {zones.map((z, idx) => (
-                <option key={`zone-${z.id}-${idx}`} value={z.id}>{z.region_name}</option>
-              ))}
-            </select>
+          {/* Live Stats Row */}
+          <div className="flex items-center gap-3.5 text-xs font-semibold text-theme-text border-l border-theme-border pl-4 h-8 shrink-0">
+            <span className="flex items-center gap-1">
+              <span className="lm-ws-dot" style={{ background: wsConnected ? "#22c55e" : "#ef4444" }} title={wsConnected ? "Live Connected" : "Disconnected"} />
+              <span className="text-[10px] text-theme-text-dim uppercase tracking-wider">{wsConnected ? "Live" : "Offline"}</span>
+            </span>
+            <span className="text-green-600">● {counts.running} Running</span>
+            <span className="text-amber-600">● {counts.idle} Idle</span>
+            <span className="text-red-600">● {counts.stopped} Stopped</span>
+            <span className="text-slate-500">● {counts.offline} Offline</span>
+            <span className="bg-theme-base text-theme-text-dim px-2 py-0.5 rounded text-[11px] font-bold ml-2">
+              {displayedVehicles.length} / {filteredByFilters.length} visible
+            </span>
           </div>
-
-          {/* Search */}
-          <div className="p-3 border-b border-slate-900">
-            <input
-              placeholder="Search reg no, type…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-100 border border-slate-600 rounded-lg text-[13px] text-slate-900 placeholder:text-slate-500 outline-none focus:border-emerald-500 transition"
-            />
-          </div>
-
-          {/* List */}
-          <div className="flex-1 overflow-y-auto">
-            {filtered.map((v, idx) => {
-              const imei = v.gps_device?.imei || "";
-              const pos = livePos[imei];
-              const sel = selected === imei;
-              const dotColor = v.realStatus === "running" ? "#22c55e" : v.realStatus === "idle" ? "#f59e0b" : v.realStatus === "stopped" ? "#ef4444" : "#475569";
-              return (
-                <div
-                  key={`vehicle-${v.id}-${idx}`}
-                  onClick={() => {
-                    setSelected(imei);
-                    if (markers.current[imei] && mapRef.current) {
-                      mapRef.current.setView(markers.current[imei].getLatLng(), 16);
-                      markers.current[imei].openPopup();
-                    }
-                  }}
-                  className={`flex items-center gap-3 px-4 py-3 border-b border-slate-700/50 cursor-pointer transition
-                    ${sel ? "bg-indigo-500/20 border-l-[3px] border-l-indigo-500" : "hover:bg-slate-800/50"}`}
-                >
-                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: v.realStatus === "running" ? `0 0 6px ${dotColor}` : "none" }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="text-[13px] font-semibold text-slate-900 truncate">{v.registration_no}</div>
-                        {statuses[imei] === "connected" && (
-                          <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded-full border border-green-500/20 font-medium">CONNECTED</span>
-                        )}
-                      </div>
-                      {pos && (
-                        <div className={`text-[9px] px-1.5 py-0.5 rounded border ${pos.ignition ? "text-green-400 border-green-400/30" : "text-red-400 border-red-400/30"}`}>
-                          IGN {pos.ignition ? "ON" : "OFF"}
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-slate-900 truncate">{v.vehicle_type?.name || "—"}</div>
-                    {pos && <div className="text-[10px] text-theme-accent mt-0.5">{pos.speed} km/h</div>}
-                  </div>
-                </div>
-              );
-            })}
-            {filtered.length === 0 && <div className="text-center py-8 text-slate-500 text-sm">No vehicles</div>}
-          </div>
-        </div>
+        </section>
       )}
+
+      {/* Map Viewport */}
+      <div ref={box} className="flex-1 w-full z-0" />
     </div>
   );
 }

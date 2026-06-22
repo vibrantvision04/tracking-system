@@ -177,6 +177,7 @@ function fetchMapMatchedRouteTurf(points: GpsDataPoint[], routeGeoJSON: any, tol
   let lastRawLat = -999;
   let lastRawLng = -999;
   let lastMatched: [number, number] = [0, 0];
+  let lastMatchedSegmentIdx = -1;
 
   points.forEach(p => {
     // 1. Caching: If the point is very close to the last computed point (less than 5 meters), reuse the matched result
@@ -185,54 +186,85 @@ function fetchMapMatchedRouteTurf(points: GpsDataPoint[], routeGeoJSON: any, tol
       return;
     }
 
-    // 2. Euclidean snap to route segments
-    let minDistanceSq = Infinity;
-    let bestLat = p.lat;
-    let bestLng = p.lng;
+    // Define function to find the closest segment in a specific index range
+    const findClosestSegment = (startIdx: number, endIdx: number) => {
+      let minDistanceSq = Infinity;
+      let bestLat = p.lat;
+      let bestLng = p.lng;
+      let bestSegmentIdx = -1;
 
-    for (let i = 0; i < routePts.length - 1; i++) {
-      const p1 = routePts[i];
-      const p2 = routePts[i + 1];
+      for (let i = startIdx; i <= endIdx; i++) {
+        if (i < 0 || i >= routePts.length - 1) continue;
 
-      const y = p.lat;
-      const x = p.lng;
-      const y1 = p1[0];
-      const x1 = p1[1];
-      const y2 = p2[0];
-      const x2 = p2[1];
+        const p1 = routePts[i];
+        const p2 = routePts[i + 1];
 
-      const dy = y2 - y1;
-      const dx = (x2 - x1) * kx;
+        const y = p.lat;
+        const x = p.lng;
+        const y1 = p1[0];
+        const x1 = p1[1];
+        const y2 = p2[0];
+        const x2 = p2[1];
 
-      const py = y - y1;
-      const px = (x - x1) * kx;
+        const dy = y2 - y1;
+        const dx = (x2 - x1) * kx;
 
-      const segmentLenSq = dx * dx + dy * dy;
-      let t = 0;
-      if (segmentLenSq > 0) {
-        t = (px * dx + py * dy) / segmentLenSq;
-        t = Math.max(0, Math.min(1, t));
+        const py = y - y1;
+        const px = (x - x1) * kx;
+
+        const segmentLenSq = dx * dx + dy * dy;
+        let t = 0;
+        if (segmentLenSq > 0) {
+          t = (px * dx + py * dy) / segmentLenSq;
+          t = Math.max(0, Math.min(1, t));
+        }
+
+        const snapLat = y1 + t * dy;
+        const snapLng = x1 + t * (x2 - x1);
+
+        const diffLat = snapLat - y;
+        const diffLng = (snapLng - x) * kx;
+        const distSq = diffLat * diffLat + diffLng * diffLng;
+
+        if (distSq < minDistanceSq) {
+          minDistanceSq = distSq;
+          bestLat = snapLat;
+          bestLng = snapLng;
+          bestSegmentIdx = i;
+        }
       }
+      return { minDistanceSq, bestLat, bestLng, bestSegmentIdx };
+    };
 
-      const snapLat = y1 + t * dy;
-      const snapLng = x1 + t * (x2 - x1);
+    // 2. Perform snapping
+    let snapResult: { minDistanceSq: number; bestLat: number; bestLng: number; bestSegmentIdx: number } | null = null;
 
-      const diffLat = snapLat - y;
-      const diffLng = (snapLng - x) * kx;
-      const distSq = diffLat * diffLat + diffLng * diffLng;
-
-      if (distSq < minDistanceSq) {
-        minDistanceSq = distSq;
-        bestLat = snapLat;
-        bestLng = snapLng;
+    if (lastMatchedSegmentIdx !== -1) {
+      // Local search: check segments around last matched index (-2 to +5)
+      const localStart = lastMatchedSegmentIdx - 2;
+      const localEnd = lastMatchedSegmentIdx + 5;
+      const res = findClosestSegment(localStart, localEnd);
+      
+      const distMeters = Math.sqrt(res.minDistanceSq) * 111000;
+      if (distMeters <= toleranceMeters) {
+        snapResult = res;
       }
     }
 
-    // Convert distance from degrees to meters (approx 1 degree = 111,000 meters)
-    const distMeters = Math.sqrt(minDistanceSq) * 111000;
-    if (distMeters <= toleranceMeters) {
-      lastMatched = [bestLat, bestLng];
+    if (!snapResult) {
+      // Global search if no local match (or first point)
+      const res = findClosestSegment(0, routePts.length - 2);
+      const distMeters = Math.sqrt(res.minDistanceSq) * 111000;
+      if (distMeters <= toleranceMeters) {
+        snapResult = res;
+      }
+    }
+
+    if (snapResult) {
+      lastMatched = [snapResult.bestLat, snapResult.bestLng];
+      lastMatchedSegmentIdx = snapResult.bestSegmentIdx;
     } else {
+      // If too far from any segment, do not snap (use raw coordinates)
       lastMatched = [p.lat, p.lng];
     }
 
@@ -599,6 +631,7 @@ export default function PlaybackPage() {
   const stoppageMarkersRef = useRef<any[]>([]);
   const checkpointMarkersRef = useRef<any[]>([]);
   const checkpointMarkersMapRef = useRef<Record<number, any>>({});
+  const checkpointsWithStatusRef = useRef<any[]>([]);
   const assignedRouteLayerRef = useRef<any>(null);
   const boundaryLayerRef = useRef<any>(null); // For selected zone/ward boundaries
   const intervalRef = useRef<any>(null);
@@ -1026,6 +1059,199 @@ export default function PlaybackPage() {
     }
   }, [routeIdParam, routesList, regionsList]);
 
+  const redrawCheckpoints = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const L = require("leaflet");
+
+    const points = checkpointsWithStatusRef.current || [];
+    if (points.length === 0 || !showPlannedRoute) {
+      if (checkpointMarkersRef.current) {
+        checkpointMarkersRef.current.forEach((marker: any) => {
+          if (marker.isPopupOpen && marker.isPopupOpen()) return;
+          map.removeLayer(marker);
+        });
+      }
+      checkpointMarkersMapRef.current = {};
+      checkpointMarkersRef.current = [];
+      return;
+    }
+
+    const zoom = map.getZoom();
+    const bounds = map.getBounds();
+
+    if (zoom < 14) {
+      // Clear checkpoints at zoom < 14 to avoid UI clutter and GPU/CPU compositing lag
+      if (checkpointMarkersRef.current) {
+        checkpointMarkersRef.current.forEach((marker: any) => {
+          if (marker.isPopupOpen && marker.isPopupOpen()) return;
+          map.removeLayer(marker);
+        });
+      }
+      checkpointMarkersMapRef.current = {};
+      checkpointMarkersRef.current = [];
+      return;
+    }
+
+    const desiredType = zoom >= 18 ? 'marker' : 'circleMarker';
+
+    const newMarkersMap: Record<number, any> = {};
+    const newMarkersList: any[] = [];
+
+    points.forEach((cp) => {
+      const visited = cp.visited;
+      const reason = cp.reason;
+      const color = visited ? '#10b981' : '#ef4444';
+
+      const shouldShow = visited ? showCoveredCheckpoints : showUncoveredCheckpoints;
+      if (!shouldShow) return;
+
+      const latlng = L.latLng(cp.latitude, cp.longitude);
+      const inBounds = bounds.contains(latlng);
+
+      const existing = checkpointMarkersMapRef.current[cp.id];
+      const hasOpenPopup = existing && existing.isPopupOpen && existing.isPopupOpen();
+      const shouldBeOnMap = inBounds || hasOpenPopup;
+
+      if (existing && existing.checkpointType === desiredType) {
+        if (shouldBeOnMap) {
+          if (!map.hasLayer(existing)) {
+            existing.addTo(map);
+          }
+        } else {
+          if (map.hasLayer(existing)) {
+            map.removeLayer(existing);
+          }
+        }
+        newMarkersMap[cp.id] = existing;
+        newMarkersList.push(existing);
+        return;
+      }
+
+      if (existing) {
+        if (hasOpenPopup) {
+          newMarkersMap[cp.id] = existing;
+          newMarkersList.push(existing);
+          return;
+        }
+        map.removeLayer(existing);
+      }
+
+      let marker: any;
+      if (desiredType === 'marker') {
+        const cpIcon = L.divIcon({
+          html: `
+            <div style="
+              width: 14px;
+              height: 14px;
+              background: #ffffff;
+              border: 2px solid ${color};
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            ">
+              <span style="
+                color: ${color};
+                font-family: 'Inter', sans-serif;
+                font-size: 7.5px;
+                font-weight: 900;
+                line-height: 1;
+              ">
+                ${cp.sequence_order}
+              </span>
+            </div>
+          `,
+          className: "",
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+        });
+
+        marker = L.marker(latlng, { icon: cpIcon });
+        marker.bindPopup(`
+          <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; padding: 2px; min-width: 150px;">
+            <div style="font-weight: 700; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px; margin-bottom: 8px; color: ${color}; font-size: 14px;">
+              📍 Point #${cp.sequence_order}
+            </div>
+            <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
+              <span style="color: #64748b;">Status:</span>
+              <span style="font-weight: 700; color: ${color};">${visited ? '✅ Visited' : '❌ Not Visited'}</span>
+            </div>
+            ${!visited && reason ? `
+            <div style="margin-bottom: 4.5px; display: flex; flex-direction: column; gap: 2px; background: #fef2f2; border: 1px solid #fee2e2; border-radius: 6px; padding: 6px 8px; margin-top: 4px;">
+              <span style="color: #dc2626; font-size: 10px; font-weight: 800; text-transform: uppercase;">⚠️ Miss Reason:</span>
+              <span style="font-weight: 700; color: #991b1b; font-size: 11px;">${reason}</span>
+            </div>
+            ` : ''}
+          </div>
+        `, { autoPan: false });
+      } else {
+        let radius = 1.0;
+        if (zoom >= 17) {
+          radius = 2.5;
+        } else if (zoom >= 16) {
+          radius = 2.0;
+        } else if (zoom >= 15) {
+          radius = 1.5;
+        }
+
+        marker = L.circleMarker(latlng, {
+          radius: radius,
+          fillColor: color,
+          color: '#ffffff',
+          weight: zoom >= 16 ? 0.8 : 0.5,
+          opacity: 0.8,
+          fillOpacity: 0.85
+        });
+        marker.bindPopup(`
+          <div style="color: #0f172a; font-family: sans-serif; font-size: 12px; padding: 2px;">
+            <strong>Point #${cp.sequence_order}</strong><br/>
+            Status: <span style="font-weight:750; color:${color};">${visited ? 'Visited' : 'Not Visited'}</span>
+            ${!visited && reason ? `<br/><span style="color:#b91c1c;">Reason: ${reason}</span>` : ''}
+          </div>
+        `, { autoPan: false });
+      }
+
+      marker.checkpointType = desiredType;
+      marker.checkpointId = cp.id;
+      marker.isVisited = visited;
+      marker.sequenceOrder = cp.sequence_order;
+
+      if (shouldBeOnMap) {
+        marker.addTo(map);
+      }
+      newMarkersMap[cp.id] = marker;
+      newMarkersList.push(marker);
+    });
+
+    Object.keys(checkpointMarkersMapRef.current).forEach((idStr) => {
+      const id = parseInt(idStr);
+      const marker = checkpointMarkersMapRef.current[id];
+      if (marker && !newMarkersMap[id]) {
+        if (marker.isPopupOpen && marker.isPopupOpen()) {
+          newMarkersMap[id] = marker;
+          newMarkersList.push(marker);
+          return;
+        }
+        map.removeLayer(marker);
+      }
+    });
+
+    checkpointMarkersRef.current = newMarkersList;
+    checkpointMarkersMapRef.current = newMarkersMap;
+  }, [showPlannedRoute, showCoveredCheckpoints, showUncoveredCheckpoints]);
+
+
+  const redrawCheckpointsRef = useRef(redrawCheckpoints);
+  useEffect(() => {
+    redrawCheckpointsRef.current = redrawCheckpoints;
+  }, [redrawCheckpoints]);
+
+  useEffect(() => {
+    redrawCheckpoints();
+  }, [redrawCheckpoints]);
+
   // Init Leaflet map
   useEffect(() => {
     if (typeof window === "undefined" || !box.current || mapRef.current) return;
@@ -1062,72 +1288,19 @@ export default function PlaybackPage() {
       "Dark Map": darkLayer
     }, {}, { position: 'bottomleft' }).addTo(mapRef.current);
 
-    const handleZoomEnd = () => {
-      const map = mapRef.current;
-      if (!map) return;
-      const zoom = map.getZoom();
-      if (checkpointMarkersRef.current && checkpointMarkersRef.current.length > 0) {
-        checkpointMarkersRef.current.forEach((marker: any) => {
-          const visited = marker.isVisited;
-          const sequenceOrder = marker.sequenceOrder;
-          const color = visited ? '#10b981' : '#ef4444';
-          
-          let newIcon;
-          if (zoom >= 16) {
-            newIcon = L.divIcon({
-              html: `
-                <div style="
-                  width: 24px;
-                  height: 24px;
-                  background: #ffffff;
-                  border: 3px solid ${color};
-                  border-radius: 50%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-                ">
-                  <span style="
-                    color: ${color};
-                    font-family: 'Inter', sans-serif;
-                    font-size: 10px;
-                    font-weight: 800;
-                  ">
-                    ${sequenceOrder}
-                  </span>
-                </div>
-              `,
-              className: "",
-              iconSize: [24, 24],
-              iconAnchor: [12, 12],
-            });
-          } else {
-            newIcon = L.divIcon({
-              html: `
-                <div style="
-                  width: 8px;
-                  height: 8px;
-                  background: ${color};
-                  border: 1.5px solid #ffffff;
-                  border-radius: 50%;
-                  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-                "></div>
-              `,
-              className: "",
-              iconSize: [8, 8],
-              iconAnchor: [4, 4],
-            });
-          }
-          marker.setIcon(newIcon);
-        });
+    const handleMapChange = () => {
+      if (redrawCheckpointsRef.current) {
+        redrawCheckpointsRef.current();
       }
     };
 
-    mapRef.current.on("zoomend", handleZoomEnd);
+    mapRef.current.on("zoomend", handleMapChange);
+    mapRef.current.on("moveend", handleMapChange);
 
     return () => {
       if (mapRef.current) {
-        mapRef.current.off("zoomend", handleZoomEnd);
+        mapRef.current.off("zoomend", handleMapChange);
+        mapRef.current.off("moveend", handleMapChange);
         mapRef.current.remove();
         mapRef.current = null;
         allRoutesLayerRef.current = null;
@@ -1373,7 +1546,34 @@ export default function PlaybackPage() {
       const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${selectedImei}?from=${from}&to=${to}`);
       const data = r.data || [];
       const validPointsRaw = data.filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number' && p.lat !== 0);
-      const validPoints = smoothGpsTrace(validPointsRaw);
+
+      // Determine shift times
+      let shiftStart: Date | null = null;
+      let shiftEnd: Date | null = null;
+      if (selectedShift && selectedShift !== "all" && shiftsList.length > 0) {
+        const shiftObj = shiftsList.find(s => s.shift_name === selectedShift);
+        if (shiftObj) {
+          const [sh, sm, ss] = (shiftObj.start_time || "00:00:00").split(":").map(Number);
+          const [eh, em, es] = (shiftObj.end_time || "23:59:59").split(":").map(Number);
+          const [year, month, day] = date.split("-").map(Number);
+          shiftStart = new Date(year, month - 1, day, sh || 0, sm || 0, ss || 0);
+          shiftEnd = new Date(year, month - 1, day, eh || 0, em || 0, es || 0);
+          if (shiftEnd.getTime() <= shiftStart.getTime()) {
+            shiftEnd.setDate(shiftEnd.getDate() + 1);
+          }
+        }
+      }
+
+      // Filter raw points by shift if shift is selected
+      let filteredPointsRaw = validPointsRaw;
+      if (shiftStart && shiftEnd) {
+        filteredPointsRaw = validPointsRaw.filter(p => {
+          const t = new Date(p.time).getTime();
+          return t >= shiftStart!.getTime() && t <= shiftEnd!.getTime();
+        });
+      }
+
+      const validPoints = smoothGpsTrace(filteredPointsRaw);
       setPoints(validPoints);
       setIdx(0);
       setPlaying(autoplay);
@@ -1423,6 +1623,120 @@ export default function PlaybackPage() {
 
       const baseCoords = validPoints.map((p) => [p.lat, p.lng] as [number, number]);
 
+      // Fetch vehicle movement report from API or fallback
+      let reportData: any = null;
+      const targetVehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
+      if (targetVehicle) {
+        try {
+          const shiftObj = selectedShift && selectedShift !== "all" && shiftsList.length > 0
+            ? shiftsList.find(s => s.shift_name === selectedShift)
+            : null;
+          const shiftQuery = shiftObj ? `&shift_id=${shiftObj.id}` : "";
+          const repRes = await api<any>(`/api/reports?vehicle_id=${targetVehicle.id}&from=${date}&to=${date}${shiftQuery}&limit=1`);
+          if (repRes && repRes.success && repRes.data && repRes.data.length > 0) {
+            reportData = repRes.data[0];
+          }
+        } catch (err) {
+          console.warn("[Playback] Failed to fetch report data for marker popups:", err);
+        }
+      }
+
+      // Calculate fallback values in case the API report is missing
+      const totalSecs = validPoints.length >= 2 
+        ? Math.round((new Date(validPoints[validPoints.length - 1].time).getTime() - new Date(validPoints[0].time).getTime()) / 1000)
+        : 0;
+      const formatSecs = (s: number) => {
+        const hrs = Math.floor(s / 3600);
+        const mins = Math.floor((s % 3600) / 60);
+        const secs = s % 60;
+        return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      };
+
+      const calculatedDist = (() => {
+        let d = 0;
+        for (let i = 1; i < validPoints.length; i++) {
+          d += haversineDistance(validPoints[i-1].lat, validPoints[i-1].lng, validPoints[i].lat, validPoints[i].lng);
+        }
+        return d;
+      })();
+
+      const calculatedAvgSpeed = totalSecs > 0 ? (calculatedDist / (totalSecs / 3600)) : 0;
+
+      const finalReport = reportData || {
+        registration_no: targetVehicle?.registration_no || "N/A",
+        start_time: validPoints.length > 0 ? validPoints[0].time : null,
+        end_time: validPoints.length > 0 ? validPoints[validPoints.length - 1].time : null,
+        total_distance: calculatedDist,
+        average_speed: calculatedAvgSpeed,
+        total_active_duration: formatSecs(totalSecs),
+        total_stoppage_duration: "00:00:00",
+        total_idle_duration: "00:00:00",
+        in_parking_duration: "00:00:00"
+      };
+
+      // Detect starting parking lot dynamically
+      let startingParkingLot = "N/A";
+      const startingPos = baseCoords[0];
+      if (startingPos && parkingSpots && parkingSpots.length > 0) {
+        const pt = turf.point([startingPos[1], startingPos[0]]); // [lng, lat]
+        let insideSpot = null;
+        for (const spot of parkingSpots) {
+          if (spot.geojson) {
+            try {
+              let geojson = spot.geojson;
+              if (typeof geojson === "string") {
+                geojson = JSON.parse(geojson);
+              }
+              let geometry = geojson;
+              if (geojson.type === "Feature") {
+                geometry = geojson.geometry;
+              } else if (geojson.type === "FeatureCollection") {
+                geometry = geojson.features[0]?.geometry;
+              }
+              if (geometry && (geometry.type === "Polygon" || geometry.type === "MultiPolygon")) {
+                if (turf.booleanPointInPolygon(pt, geometry)) {
+                  insideSpot = spot;
+                  break;
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+        }
+        if (insideSpot) {
+          startingParkingLot = insideSpot.name;
+        } else {
+          // Fallback: closest parking spot within 150m
+          let closestSpot = null;
+          let minDistance = Infinity;
+          for (const spot of parkingSpots) {
+            if (spot.geojson) {
+              try {
+                let geojson = spot.geojson;
+                if (typeof geojson === "string") {
+                  geojson = JSON.parse(geojson);
+                }
+                const center = turf.centroid(geojson);
+                if (center && center.geometry && center.geometry.coordinates) {
+                  const coords = center.geometry.coordinates;
+                  const dist = haversineDistance(startingPos[0], startingPos[1], coords[1], coords[0]) * 1000;
+                  if (dist < minDistance) {
+                    minDistance = dist;
+                    closestSpot = spot;
+                  }
+                }
+              } catch (e) {
+                // ignore
+              }
+            }
+          }
+          if (closestSpot && minDistance < 150) {
+            startingParkingLot = closestSpot.name;
+          }
+        }
+      }
+
       // Fetch the assigned route for this vehicle today to snap against
       let routeCheckpoints: any[] = [];
       let assignedRouteData: any = null;
@@ -1458,7 +1772,7 @@ export default function PlaybackPage() {
         try {
           const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
           if (vehicle) {
-            const cov = await api<any>(`/api/vehicles/${vehicle.id}/lane-point-coverage?date=${date}&route_id=${targetRouteId}`);
+            const cov = await api<any>(`/api/vehicles/${vehicle.id}/lane-point-coverage?date=${date}&route_id=${targetRouteId}&use_reconstructed=${aiRouteCorrectionActive}`);
             if (cov.success && cov.details) {
               visitedCheckpointsList = cov.details.map((d: any) => ({
                 checkpoint_id: d.lane_point_id,
@@ -1624,7 +1938,7 @@ export default function PlaybackPage() {
               checkpointsRef.current = snapResult.normalisedCheckpoints || routeCheckpoints;
             } else {
               // Default Mode: Turf.js light correction is active
-              const tolerance = 13.0;
+              const tolerance = 14.0;
               const geojsonObj = assignedRouteData.geojson || {
                 type: "LineString",
                 coordinates: rawRoadCoords.map((c: any) => [c[1], c[0]]) // GeoJSON is [lng, lat]
@@ -1634,7 +1948,6 @@ export default function PlaybackPage() {
                 geojsonObj,
                 tolerance
               );
-              let lastRoadIdx = 0;
               matchedRoadIndices = matchedCoords.map((coord, idx) => {
                 const raw = validPoints[idx];
                 if (coord[0] === raw.lat && coord[1] === raw.lng) {
@@ -1643,16 +1956,13 @@ export default function PlaybackPage() {
                 if (roadCoords.length === 0) return -1;
                 let closestIdx = -1;
                 let closestDist = Infinity;
-                for (let i = lastRoadIdx; i < roadCoords.length; i++) {
+                for (let i = 0; i < roadCoords.length; i++) {
                   const rc = roadCoords[i];
                   const d = haversineDistance(coord[0], coord[1], rc[0], rc[1]);
                   if (d < closestDist) {
                     closestDist = d;
                     closestIdx = i;
                   }
-                }
-                if (closestIdx !== -1) {
-                  lastRoadIdx = closestIdx;
                 }
                 return closestIdx;
               });
@@ -1752,7 +2062,7 @@ export default function PlaybackPage() {
 
               const isPhysicallyImpossible = gap > maxAllowedGap;
 
-              if (!isPhysicallyImpossible || useAI) {
+              if (!isPhysicallyImpossible) {
                 if (prevIdx <= currIdx) {
                   for (let j = prevIdx + 1; j <= currIdx; j++) {
                     if (roadCoords[j]) {
@@ -1891,7 +2201,41 @@ export default function PlaybackPage() {
         iconSize: [32, 32],
         iconAnchor: [16, 16],
       });
-      startMarkerRef.current = L.marker(baseCoords[0], { icon: startIcon });
+      const formattedStartTime = finalReport.start_time ? formatDateTo12H(finalReport.start_time) : "N/A";
+      const formattedEndTime = finalReport.end_time ? formatDateTo12H(finalReport.end_time) : "N/A";
+      const totalDistanceStr = typeof finalReport.total_distance === "number"
+        ? `${finalReport.total_distance.toFixed(2)}KM(s)`
+        : `${parseFloat(finalReport.total_distance || "0").toFixed(2)}KM(s)`;
+      const avgSpeedStr = typeof finalReport.average_speed === "number"
+        ? `${finalReport.average_speed.toFixed(2)}KM(s)/Hour`
+        : `${parseFloat(finalReport.average_speed || "0").toFixed(2)}KM(s)/Hour`;
+
+      const routeObj = routesList.find(r => String(r.id) === String(targetRouteId));
+      const routeLengthStr = routeObj ? `${Number(routeObj.distance).toFixed(2)}KM(s)` : "N/A";
+
+      const startPopupContent = `
+        <div style="font-family: Arial, sans-serif; padding: 4px 8px; min-width: 320px; line-height: 1.5; color: #333;">
+          <div style="text-align: center; color: #00cc00; font-size: 16px; font-weight: bold; margin-bottom: 6px;">
+            Start Point
+          </div>
+          <div style="font-size: 16px; font-weight: bold; color: #000000; margin-bottom: 6px;">
+            ${finalReport.registration_no || vehicle?.registration_no || "N/A"}
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; width: 140px; font-weight: normal; vertical-align: top;">Start Time</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${formattedStartTime}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">Parking Lot(s)</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${startingParkingLot}</td>
+            </tr>
+          </table>
+        </div>
+      `;
+
+      startMarkerRef.current = L.marker(baseCoords[0], { icon: startIcon, zIndexOffset: 3000 })
+        .bindPopup(startPopupContent);
       if (showStartEndPoint) {
         startMarkerRef.current.addTo(map);
       }
@@ -1923,7 +2267,71 @@ export default function PlaybackPage() {
         iconSize: [32, 32],
         iconAnchor: [16, 16],
       });
-      endMarkerRef.current = L.marker(baseCoords[baseCoords.length - 1], { icon: endIcon });
+
+      const endPopupContent = `
+        <div style="font-family: Arial, sans-serif; padding: 4px 8px; min-width: 380px; line-height: 1.5; color: #333;">
+          <div style="text-align: center; color: #ff0000; font-size: 16px; font-weight: bold; margin-bottom: 6px;">
+            End Point
+          </div>
+          <div style="font-size: 16px; font-weight: bold; color: #000000; margin-bottom: 6px;">
+            ${finalReport.registration_no || vehicle?.registration_no || "N/A"}
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; width: 190px; vertical-align: top;">Start Time</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${formattedStartTime}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">End Time</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${formattedEndTime}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">Distance(km)</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${totalDistanceStr}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">Average Speed</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${avgSpeedStr}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">ROUTE LENGTH Distance(km)</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${routeLengthStr}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">ACTIVE DURATION</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${finalReport.total_active_duration || "00:00:00"}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">STOPPAGE DURATION</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${finalReport.total_stoppage_duration || "00:00:00"}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">Monitor.IDLE DURATION</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${finalReport.total_idle_duration || "00:00:00"}</td>
+            </tr>
+            <tr>
+              <td style="color: #4b5563; padding: 2px 0; vertical-align: top;">PARKED DURATION</td>
+              <td style="color: #000000; font-weight: bold; padding: 2px 0; vertical-align: top;">${finalReport.in_parking_duration || "00:00:00"}</td>
+            </tr>
+          </table>
+        </div>
+      `;
+
+      let endMarkerPos = baseCoords[baseCoords.length - 1];
+      if (shiftStart && shiftEnd) {
+        let lastOffIndex = -1;
+        for (let idx = validPoints.length - 1; idx >= 0; idx--) {
+          if (validPoints[idx].ignition === false) {
+            lastOffIndex = idx;
+            break;
+          }
+        }
+        if (lastOffIndex !== -1) {
+          endMarkerPos = baseCoords[lastOffIndex];
+        }
+      }
+      endMarkerRef.current = L.marker(endMarkerPos, { icon: endIcon, zIndexOffset: 3000 })
+        .bindPopup(endPopupContent);
       if (showStartEndPoint) {
         endMarkerRef.current.addTo(map);
       }
@@ -1951,7 +2359,7 @@ export default function PlaybackPage() {
         iconAnchor: [17, 17],
       });
       const startPos = matchedCoords.length > 0 ? matchedCoords[0] : baseCoords[0];
-      mkRef.current = L.marker(startPos, { icon: vehicleIcon })
+      mkRef.current = L.marker(startPos, { icon: vehicleIcon, zIndexOffset: 2000 })
         .bindPopup(getPopupContent(pointsToUse[0]))
         .addTo(map);
 
@@ -1999,7 +2407,7 @@ export default function PlaybackPage() {
           iconAnchor: [18, 18],
         });
 
-        const marker = L.marker([s.lat, s.lng], { icon: stopIcon });
+        const marker = L.marker([s.lat, s.lng], { icon: stopIcon, zIndexOffset: 100 });
         (marker as any).isMajor = isRed;
 
         const stopPopupContent = `
@@ -2155,112 +2563,22 @@ export default function PlaybackPage() {
         });
       }
 
-      const currentZoom = map.getZoom();
-      const checkpointMarkers: any[] = [];
-      const markersMap: Record<number, any> = {};
-      routeCheckpoints.forEach((cp, idx) => {
-        const cpStatus = checkedCheckpointsMap[cp.id] || { visited: false, reason: "" };
-        const visited = cpStatus.visited;
-        const reason = cpStatus.reason;
-
-        const color = visited ? '#10b981' : '#ef4444';
-        
-        let cpIcon;
-        if (currentZoom >= 16) {
-          cpIcon = L.divIcon({
-            html: `
-              <div style="
-                width: 24px;
-                height: 24px;
-                background: #ffffff;
-                border: 3px solid ${color};
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-              ">
-                <span style="
-                  color: ${color};
-                  font-family: 'Inter', sans-serif;
-                  font-size: 10px;
-                  font-weight: 800;
-                ">
-                  ${cp.sequence_order}
-                </span>
-              </div>
-            `,
-            className: "",
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          });
-        } else {
-          cpIcon = L.divIcon({
-            html: `
-              <div style="
-                width: 8px;
-                height: 8px;
-                background: ${color};
-                border: 1.5px solid #ffffff;
-                border-radius: 50%;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-              "></div>
-            `,
-            className: "",
-            iconSize: [8, 8],
-            iconAnchor: [4, 4],
-          });
-        }
-
-        const marker = L.marker([cp.latitude, cp.longitude], { icon: cpIcon });
-        (marker as any).isVisited = visited;
-        (marker as any).sequenceOrder = cp.sequence_order;
-        markersMap[cp.id] = marker;
-
-        marker.bindPopup(`
-          <div style="color: #0f172a; font-family: sans-serif; font-size: 13px; line-height: 1.4; padding: 2px; min-width: 150px;">
-            <div style="font-weight: 700; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px; margin-bottom: 8px; color: ${visited ? '#10b981' : '#ef4444'}; font-size: 14px;">
-              📍 ${formatCheckpointName(cp.checkpoint_name, cp.sequence_order)} (Point #${cp.sequence_order})
-            </div>
-            <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px;">
-              <span style="color: #64748b;">Status:</span>
-              <span style="font-weight: 700; color: ${visited ? '#10b981' : '#ef4444'};">${visited ? '✅ Visited (Hit)' : '❌ Not Visited'}</span>
-            </div>
-            ${!visited && reason ? `
-            <div style="margin-bottom: 4.5px; display: flex; flex-direction: column; gap: 2px; background: #fef2f2; border: 1px solid #fee2e2; border-radius: 6px; padding: 6px 8px; margin-top: 4px;">
-              <span style="color: #dc2626; font-size: 10px; font-weight: 800; text-transform: uppercase; tracking-wider: 0.05em;">⚠️ Miss Reason:</span>
-              <span style="font-weight: 700; color: #991b1b; font-size: 11px;">${reason}</span>
-            </div>
-            ` : ''}
-            <div style="margin-bottom: 4px; display: flex; justify-content: space-between; gap: 12px; margin-top: 6px;">
-              <span style="color: #64748b;">Radius:</span>
-              <span style="font-weight: 600; color: #1e293b;">${cp.radius_meters || 100} meters</span>
-            </div>
-          </div>
-        `);
-
-        const shouldShowCP = showPlannedRoute && (visited ? showCoveredCheckpoints : showUncoveredCheckpoints);
-        if (shouldShowCP) {
-          marker.addTo(map);
-        }
-
-        checkpointMarkers.push(marker);
-      });
-      checkpointMarkersRef.current = checkpointMarkers;
-      checkpointMarkersMapRef.current = markersMap;
-      setCheckpoints(routeCheckpoints.map(cp => {
+      const checkpointData = routeCheckpoints.map(cp => {
         const cpStatus = checkedCheckpointsMap[cp.id] || { visited: false, reason: "" };
         return {
           ...cp,
           visited: cpStatus.visited,
           reason: cpStatus.reason
         };
-      }));
+      });
+      checkpointsWithStatusRef.current = checkpointData;
+      setCheckpoints(checkpointData);
+      redrawCheckpoints();
 
     } catch (err) {
       console.error("Playback load error:", err);
     }
-  }, [selectedImei, date, routeIdParam, selectedRouteId, vehicles, aiRouteCorrectionActive, aggressiveSnapping]);
+  }, [selectedImei, date, routeIdParam, selectedRouteId, vehicles, aiRouteCorrectionActive, aggressiveSnapping, selectedShift, shiftsList, parkingSpots, routesList]);
 
   const recalculatePlaybackSteps = useCallback((isAggressive: boolean) => {
     const validPoints = points;
@@ -2422,7 +2740,6 @@ export default function PlaybackPage() {
 
     if (activeLineRef.current) {
       activeLineRef.current.setLatLngs(coveredCoords);
-      activeLineRef.current.bringToFront();
     } else {
       activeLineRef.current = L.polyline(coveredCoords, {
         color: aiRouteCorrectionActive ? "#0d9488" : assignedRouteColorRef.current,
@@ -3127,6 +3444,10 @@ export default function PlaybackPage() {
                         map.panTo([cp.latitude, cp.longitude]);
                         const marker = checkpointMarkersMapRef.current[cp.id];
                         if (marker) {
+                          if (!map.hasLayer(marker)) {
+                            marker.addTo(map);
+                            checkpointMarkersRef.current.push(marker);
+                          }
                           marker.openPopup();
                           const el = marker.getElement();
                           if (el) {

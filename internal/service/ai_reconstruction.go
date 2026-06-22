@@ -117,9 +117,13 @@ func (s *AIReconstructionService) ReconstructRoute(ctx context.Context, routeID 
 			if len(candidates) == 0 && closestIdx != -1 {
 				candidates = []Candidate{{Index: closestIdx, Dist: closestDist}}
 			}
+			// Always include off-route candidate as a fallback option with a penalty distance.
+			// This allows the HMM to stay off-route if the transition probability to on-route is poor.
+			candidates = append(candidates, Candidate{Index: -1, Dist: corridor * 1.2})
 		} else {
 			// Vehicle went outside the corridor (outer route) -> do not snap, keep raw coordinate (Index = -1)
-			candidates = []Candidate{{Index: -1, Dist: 0.0}}
+			// Consistently apply the off-route penalty distance to avoid free-pass bias.
+			candidates = []Candidate{{Index: -1, Dist: corridor * 0.5}}
 		}
 		lattice[t] = candidates
 	}
@@ -396,7 +400,13 @@ func (s *AIReconstructionService) runViterbi(
 					}
 				}
 
-				transitionLog := -math.Abs(roadDist-gpsDist) / beta
+				// Add a state transition penalty if switching between on-route and off-route
+				stateTransitionPenalty := 0.0
+				if (prevC.Index >= 0 && c.Index == -1) || (prevC.Index == -1 && c.Index >= 0) {
+					stateTransitionPenalty = 20.0 // equivalent to 25 meters penalty
+				}
+
+				transitionLog := -(math.Abs(roadDist-gpsDist) + stateTransitionPenalty) / beta
 				val := V[t-1][prevCIdx] + transitionLog
 				if val > maxVal {
 					maxVal = val

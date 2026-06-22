@@ -201,7 +201,7 @@ export default function VehiclePurposePage() {
           <CardHeader className="flex flex-row items-center justify-between py-4">
             <div>
               <CardTitle>Existing Categories</CardTitle>
-              <CardDescription>Full listing of municipal solid waste classifications used by Nagar Nigam Jaipur Heritage.</CardDescription>
+              <CardDescription>Full listing of municipal solid waste classifications used by Nagar Nigam Jaipur.</CardDescription>
             </div>
             <span className="text-[10px] px-2.5 py-1 bg-theme-base text-theme-accent rounded-full border border-theme-border font-bold">
               {purposes.length} Total Types

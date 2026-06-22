@@ -11,20 +11,17 @@ import {
   Map,
   MapPin,
   Users,
-  Keyboard,
   Tv,
   BarChart3,
   TrendingUp,
   CheckCircle2,
-  Rewind
+  Rewind,
+  CalendarCheck,
+  Radio
 } from "lucide-react";
 
 const navData = [
-  {
-    label: "Dashboard",
-    icon: Home,
-    href: "/",
-  },
+ 
   {
     label: "Vehicles",
     icon: Truck,
@@ -117,10 +114,18 @@ const navData = [
     ],
   },
   {
+    label: "RFID",
+    icon: Radio,
+    children: [
+      { label: "RFID Coverage Report", href: "/vswm/rfid-coverage" },
+      { label: "Survey Report", href: "/vswm/survey-report" },
+      { label: "Survey List", href: "/vswm/survey-list" },
+    ],
+  },
+  {
     label: "HR / Staff",
     icon: Users,
     children: [
-      { label: "Employee List", href: "/vswm/employee" },
       { label: "Department", href: "/vswm/department" },
       { label: "Designation", href: "/vswm/designation" },
       {
@@ -142,11 +147,14 @@ const navData = [
     ],
   },
   {
-    label: "Data Entry",
-    icon: Keyboard,
+    label: "Attendance",
+    icon: CalendarCheck,
     children: [
-      { label: "Trenching Ground Weighbridge Entry", href: "/vswm/trenching-ground-weighbridge-entry" },
-      { label: "Weighbridge 3 Bin Entry", href: "/vswm/weighbridge-3-bin-entry" },
+      { label: "Employee List", href: "/vswm/employee" },
+      { label: "Live Attendance", href: "/vswm/live-attendance" },
+      { label: "Driver Attendance", href: "/vswm/driver-attendance" },
+      { label: "Supervisor Attendance", href: "/vswm/supervisor-attendance" },
+      { label: "Zone Manager Attendance", href: "/vswm/zone-manager-attendance" },
     ],
   },
   {
@@ -158,6 +166,7 @@ const navData = [
       { label: "D2D", href: "/vswm/d2d" },
       { label: "Open Depot Live Map", href: "/vswm/open-depot-live-map" },
       { label: "Alert Manager", href: "/vswm/alert-manager" },
+      { label: "Household Monitoring", href: "/vswm/household-monitoring" },
     ],
   },
   {
@@ -178,12 +187,8 @@ const navData = [
           { label: "Active Vehicle Summary", href: "/vswm/active-vehicle-summary" },
           { label: "Ward Wise Active Vehicle Summary", href: "/vswm/active-inactive-vehicle-summary-by-ward" },
           { label: "Unauthorized Movement Report", href: "/vswm/unauthorized-movement" },
-          { label: "Vehicle Not Moving Report", href: "/vswm/vehicle-not-moving" },
-          { label: "Vehicle Based On Distance Report", href: "/vswm/vehicle-based-on-distance" },
-          { label: "Vehicle Under Maintenance Report", href: "/vswm/vehicle-under-maintenance" },
+          { label: "Early Departed Report", href: "/vswm/early-departed-report" },
           { label: "Vehicle Deployment Report", href: "/vswm/vehicle-deployment" },
-          { label: "Vehicle Breaking Geofence Report", href: "/vswm/vehicle-breaking-geofence" },
-          { label: "Vehicle Status Report", href: "/vswm/vehicle-status-report" },
           { label: "Vehicle Summary Report", href: "/vswm/vehicle-summary-report" },
         ],
       },
@@ -193,16 +198,8 @@ const navData = [
           { label: "D2D Vehicle Route Coverage Report", href: "/vswm/d2d-vehicle-route-coverage-report" },
           { label: "D2D Zone Ward Coverage Report", href: "/vswm/D2D-zone-ward-coverage-report" },
           { label: "Lane Monitoring Report", href: "/vswm/lane-monitoring-report" },
-          { label: "Lane Point Coverage Report", href: "/vswm/lane-point-coverage-report" },
-          { label: "First Lane Monitoring Report", href: "/vswm/first-lane-monitoring-report" },
-          { label: "Last Lane Monitoring Report", href: "/vswm/last-lane-coverage-report" },
           { label: "Litterbin Coverage Summary Report", href: "/vswm/litterbin-coverage-summary-report" },
           { label: "Collection Point Summary Report", href: "/vswm/collection-point-summary-report" },
-          { label: "Litterbin Coverage Report", href: "/vswm/litterbin-coverage-report" },
-          { label: "Collection Point Coverage Report", href: "/vswm/collection-point-coverage-report" },
-          { label: "Waste Generator Coverage Report", href: "/vswm/waste-generator-coverage-report" },
-          { label: "Waste Generator Summary Report", href: "/vswm/waste-generator-summary-report" },
-          { label: "Waste Weight Report", href: "/vswm/waste-weight-report" },
         ],
       },
       {
@@ -210,41 +207,23 @@ const navData = [
         children: [
           { label: "GTS Trip Report", href: "/vswm/trips-to-transferstation-report" },
           { label: "GTS Weighbridge Summary Report", href: "/vswm/gts-weighbridge-summary" },
-          { label: "Weighbridge Latest Data Report", href: "/vswm/weighbridge-latest-data-report" },
           { label: "Weighbridge Data Report", href: "/vswm/weighbridge-data-report" },
-          { label: "Weighbridge Source Summaries Report", href: "/vswm/weighbridge-source-summaries-report" },
-          { label: "Weighbridge Waste Type Summaries Report", href: "/vswm/weighbridge-waste-type-summaries-report" },
+
         ],
       },
       {
         label: "Alerts & Events",
         children: [
-          { label: "GPS Log Report", href: "/vswm/gps-log-report" },
-          { label: "Alerts And Events Report", href: "/vswm/alert-and-event-report" },
           { label: "Alert Detail Report", href: "/vswm/alert-detail" },
-          { label: "Speed Violation Report", href: "/vswm/speed-violation" },
           { label: "Geofence Event Report", href: "/vswm/geofence-event" },
           { label: "GPS Not Reporting Report", href: "/vswm/gps-not-reporting-report" },
         ],
       },
       {
-        label: "Fuel",
-        children: [
-          { label: "Fuel Summary Report", href: "/vswm/fuel-summary-report" },
-          { label: "Fuel Transaction Report", href: "/vswm/fuel-transaction-report" },
-          { label: "Fuel Consumption Report", href: "/vswm/fuel-consumption-report" },
-        ],
-      },
-      {
         label: "Operations",
         children: [
-          { label: "Delay In Starting Waste Collection Report", href: "/vswm/delay-in-starting-waste-collection-report" },
           { label: "Delay In Completing Waste Collection Report", href: "/vswm/delay-completing-waste-collection" },
-          { label: "Hydrant Trip Report", href: "/vswm/hydrant-trip-report" },
-          { label: "Vehicle Check Point Status Report", href: "/vswm/vehicle-check-point-status-report" },
-          { label: "Vehicle Check List Summary Report", href: "/vswm/vehicle-check-list-summary-report" },
-          { label: "Vehicle Check List Report", href: "/vswm/vehicle-check-list-report" },
-          { label: "Ward Geofance Report", href: "/vswm/ward-geofance-report" },
+          { label: "Root Geofance Report", href: "/vswm/ward-geofance-report" },
         ],
       },
     ],
@@ -347,18 +326,22 @@ export default function Sidebar() {
       <aside className={`
         fixed inset-y-0 left-0 z-[1002] flex flex-col bg-theme-surface border-r border-theme-border
         transition-all duration-300 ease-in-out lg:relative lg:translate-x-0
-        ${sidebarCollapsed ? "w-[64px]" : "w-[160px]"}
+        ${sidebarCollapsed ? "w-[64px]" : "w-[180px]"}
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
       `}>
-        {/* Brand with subtle glow */}
-        <div className={`flex items-center justify-between px-4 py-4 border-b border-theme-border ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
+        <div className={`flex items-center justify-between py-3 border-b border-theme-border transition-all duration-300 ${
+          sidebarCollapsed ? "px-2 lg:justify-center" : "px-4"
+        }`}>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 text-white font-bold text-[11px] shadow-lg shadow-emerald-600/20 shrink-0">
-              IS
-            </div>
+           <a href="/"> <img 
+              src="/Jaipur_Municipal_Corporation_Logo.png" 
+              alt="Jaipur Municipal Corporation Logo" 
+              className={`object-contain shrink-0 hover:scale-105 transition-transform duration-200 ${
+                sidebarCollapsed ? "h-9 w-[46px]" : "h-40 w-[76px]"
+              }`}
+            /></a>
             <div className={`transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
-              <div className="text-[11px] font-bold text-theme-text tracking-tight leading-none mb-0.5 whitespace-nowrap">VSWM Jaipur</div>
-              <div className="text-[7px] text-theme-text-dim uppercase tracking-[.15em] whitespace-nowrap">Heritage</div>
+              <div className="text-[11px] font-bold text-theme-text tracking-tight leading-none whitespace-nowrap">VSWM Jaipur</div>
             </div>
           </div>
           {!sidebarCollapsed && (
@@ -420,12 +403,12 @@ export default function Sidebar() {
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isCurrentPath
-                        ? "bg-gradient-to-r from-emerald-500/[.15] to-transparent text-theme-accent font-medium"
+                        ? "bg-gradient-to-r from-red-500/[.15] to-transparent text-theme-accent font-medium"
                         : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
                       }`}
                   >
                     <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
-                      <category.icon className="w-4 h-4 text-emerald-500" />
+                      <category.icon className="w-4 h-4 text-red-500" />
                     </span>
                     <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                   </Link>
@@ -435,13 +418,13 @@ export default function Sidebar() {
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg transition-all duration-200 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isActive
-                        ? "bg-gradient-to-r from-emerald-500/[.15] to-transparent text-theme-accent font-medium"
+                        ? "bg-gradient-to-r from-red-500/[.15] to-transparent text-theme-accent font-medium"
                         : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
                       }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
-                        <category.icon className="w-4 h-4 text-emerald-500" />
+                        <category.icon className="w-4 h-4 text-red-500" />
                       </span>
                       <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                     </div>
@@ -472,7 +455,7 @@ export default function Sidebar() {
 
         {/* Footer */}
         <div className={`px-3 py-3 border-t border-theme-border flex items-center gap-2 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-emerald-500 text-white text-[10px] font-bold shrink-0">
+          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-red-500 text-white text-[10px] font-bold shrink-0">
             AD
           </div>
           <div className={`min-w-0 transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>

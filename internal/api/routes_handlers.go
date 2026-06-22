@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"gps-tracking-system/internal/repository"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 )
 
 type RouteResponse struct {
@@ -146,46 +146,64 @@ func (h *Handler) GetShifts(w http.ResponseWriter, r *http.Request) {
 		group = r.URL.Query().Get("report_type")
 	}
 	reportTypeIDStr := r.URL.Query().Get("report_type_id")
+	vehicleIDStr := r.URL.Query().Get("vehicle_id")
+	wardIDStr := r.URL.Query().Get("ward_id")
+	zoneIDStr := r.URL.Query().Get("zone_id")
 
-	var rows pgx.Rows
-	var err error
+	var args []interface{}
+	argCount := 1
+
+	baseQuery := `SELECT DISTINCT s.id, s.shift_name, 
+	                     COALESCE(s.start_time::text, ''), 
+	                     COALESCE(s.end_time::text, ''), 
+	                     COALESCE(s.time_duration, 0),
+	                     s.report_type_id
+	              FROM shifts s`
+	
+	joins := ""
+	whereClauses := []string{"s.is_active = true"}
 
 	if group != "" {
-		rows, err = h.gpsRepo.Pool().Query(ctx, `
-			SELECT s.id, s.shift_name, 
-			       COALESCE(s.start_time::text, ''), 
-			       COALESCE(s.end_time::text, ''), 
-			       COALESCE(s.time_duration, 0),
-			       s.report_type_id
-			FROM shifts s
-			JOIN report_types rt ON s.report_type_id = rt.id
-			WHERE rt.name = $1 AND s.is_active = true
-			ORDER BY s.id ASC
-		`, group)
+		joins += " JOIN report_types rt ON s.report_type_id = rt.id"
+		whereClauses = append(whereClauses, fmt.Sprintf("rt.name = $%d", argCount))
+		args = append(args, group)
+		argCount++
 	} else if reportTypeIDStr != "" {
 		id, _ := strconv.Atoi(reportTypeIDStr)
-		rows, err = h.gpsRepo.Pool().Query(ctx, `
-			SELECT id, shift_name, 
-			       COALESCE(start_time::text, ''), 
-			       COALESCE(end_time::text, ''), 
-			       COALESCE(time_duration, 0),
-			       report_type_id
-			FROM shifts 
-			WHERE report_type_id = $1 AND is_active = true
-			ORDER BY id ASC
-		`, id)
-	} else {
-		rows, err = h.gpsRepo.Pool().Query(ctx, `
-			SELECT id, shift_name, 
-			       COALESCE(start_time::text, ''), 
-			       COALESCE(end_time::text, ''), 
-			       COALESCE(time_duration, 0),
-			       report_type_id
-			FROM shifts 
-			ORDER BY id ASC
-		`)
+		whereClauses = append(whereClauses, fmt.Sprintf("s.report_type_id = $%d", argCount))
+		args = append(args, id)
+		argCount++
 	}
 
+	if vehicleIDStr != "" {
+		vID, _ := strconv.Atoi(vehicleIDStr)
+		joins += " JOIN vehicle_route_assignments vra ON vra.shift_id = s.id"
+		whereClauses = append(whereClauses, fmt.Sprintf("vra.vehicle_id = $%d", argCount))
+		args = append(args, vID)
+		argCount++
+	}
+
+	if wardIDStr != "" {
+		wardID, _ := strconv.Atoi(wardIDStr)
+		joins += " JOIN routes r_w ON r_w.shift_id = s.id JOIN route_wards rw ON rw.route_id = r_w.id"
+		whereClauses = append(whereClauses, fmt.Sprintf("rw.ward_id = $%d", argCount))
+		args = append(args, wardID)
+		argCount++
+	} else if zoneIDStr != "" {
+		zoneID, _ := strconv.Atoi(zoneIDStr)
+		joins += " JOIN routes r_z ON r_z.shift_id = s.id JOIN route_wards rw_z ON rw_z.route_id = r_z.id JOIN regions w_z ON rw_z.ward_id = w_z.id"
+		whereClauses = append(whereClauses, fmt.Sprintf("w_z.parent_id = $%d", argCount))
+		args = append(args, zoneID)
+		argCount++
+	}
+
+	query := baseQuery + joins
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+	query += " ORDER BY s.id ASC"
+
+	rows, err := h.gpsRepo.Pool().Query(ctx, query, args...)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query shifts: " + err.Error()})
 		return
@@ -534,10 +552,8 @@ func (h *Handler) CreateRoute(w http.ResponseWriter, r *http.Request) {
 		`, routeID, *req.WardID)
 	}
 
-	// Sync lanes to route_checkpoints
-	if len(req.Lanes) > 0 {
-		syncRouteCheckpoints(ctx, h, routeID, req.RouteName, req.Lanes)
-	}
+	// Sync checkpoints and lane points (from Lanes or GeoJSON)
+	syncRouteCheckpointsAndLanePoints(ctx, h, routeID, req.RouteName, req.Lanes, req.GeoJSON)
 
 	sendJSON(w, http.StatusCreated, map[string]interface{}{
 		"success": true,
@@ -670,13 +686,8 @@ func (h *Handler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 		`, routeID, *req.WardID)
 	}
 
-	// Sync lanes to route_checkpoints
-	if len(req.Lanes) > 0 {
-		syncRouteCheckpoints(ctx, h, routeID, req.RouteName, req.Lanes)
-	} else {
-		// Clear checkpoints if lanes are empty
-		h.gpsRepo.Pool().Exec(ctx, "DELETE FROM route_checkpoints WHERE route_id = $1", routeID)
-	}
+	// Sync checkpoints and lane points (from Lanes or GeoJSON)
+	syncRouteCheckpointsAndLanePoints(ctx, h, routeID, req.RouteName, req.Lanes, req.GeoJSON)
 
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -714,85 +725,157 @@ func (h *Handler) DeleteRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper to automatically convert Lanes into Checkpoints for coverage calculations
-func syncRouteCheckpoints(ctx context.Context, h *Handler, routeID int, routeName string, lanesJSON []byte) {
-	type Point struct {
-		X float64 `json:"x"`
-		Y float64 `json:"y"`
-	}
-	type Lane struct {
-		LaneOrder        int     `json:"lane_order"`
-		StartPoint       Point   `json:"start_point"`
-		EndPoint         Point   `json:"end_point"`
-		// Fallbacks for old database format
-		OldLaneOrder     int     `json:"laneOrder"`
-		OldStartLat      float64 `json:"startLat"`
-		OldStartLng      float64 `json:"startLng"`
-		OldEndLat        float64 `json:"endLat"`
-		OldEndLng        float64 `json:"endLng"`
+type GeoJSONGeometry struct {
+	Type        string        `json:"type"`
+	Coordinates [][]float64   `json:"coordinates"`
+}
+
+type GeoJSONFeature struct {
+	Type     string          `json:"type"`
+	Geometry GeoJSONGeometry `json:"geometry"`
+}
+
+func parseCoordinatesFromGeoJSON(geojsonStr string) [][]float64 {
+	if geojsonStr == "" {
+		return nil
 	}
 
-	var lanes []Lane
-	if err := json.Unmarshal(lanesJSON, &lanes); err != nil {
-		fmt.Println("syncRouteCheckpoints json.Unmarshal error:", err)
-		return
+	// Try parsing as Feature
+	var feature GeoJSONFeature
+	if err := json.Unmarshal([]byte(geojsonStr), &feature); err == nil && feature.Geometry.Type == "LineString" {
+		return feature.Geometry.Coordinates
 	}
-	fmt.Printf("syncRouteCheckpoints: parsed %d lanes for route %d\n", len(lanes), routeID)
 
+	// Try parsing as raw Geometry LineString
+	var geom GeoJSONGeometry
+	if err := json.Unmarshal([]byte(geojsonStr), &geom); err == nil && geom.Type == "LineString" {
+		return geom.Coordinates
+	}
+
+	return nil
+}
+
+// Helper to automatically convert Lanes or GeoJSON into Checkpoints and Lane Points for coverage calculations
+func syncRouteCheckpointsAndLanePoints(ctx context.Context, h *Handler, routeID int, routeName string, lanesJSON []byte, geojsonStr string) {
 	db := h.gpsRepo.Pool()
 
-	// 1. Clear old checkpoints for this route
+	// 1. Clear old checkpoints and lane points
 	_, err := db.Exec(ctx, "DELETE FROM route_checkpoints WHERE route_id = $1", routeID)
 	if err != nil {
-		fmt.Println("syncRouteCheckpoints DELETE error:", err)
+		fmt.Println("syncRouteCheckpointsAndLanePoints route_checkpoints DELETE error:", err)
+	}
+	_, err = db.Exec(ctx, "DELETE FROM route_lane_points WHERE route_id = $1", routeID)
+	if err != nil {
+		fmt.Println("syncRouteCheckpointsAndLanePoints route_lane_points DELETE error:", err)
 	}
 
-	// 2. Insert new checkpoints
-	// For each lane, we insert the start point and the end point
-	seq := 1
-	for _, lane := range lanes {
-		laneOrder := lane.LaneOrder
-		if laneOrder == 0 {
-			laneOrder = lane.OldLaneOrder
+	type TempPoint struct {
+		Name string
+		Lat  float64
+		Lng  float64
+	}
+	var points []TempPoint
+
+	// 2. Try to get points from Lanes
+	var hasLanes bool
+	if len(lanesJSON) > 0 && string(lanesJSON) != "[]" && string(lanesJSON) != "null" {
+		type Point struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+		}
+		type Lane struct {
+			LaneOrder        int     `json:"lane_order"`
+			StartPoint       Point   `json:"start_point"`
+			EndPoint         Point   `json:"end_point"`
+			OldLaneOrder     int     `json:"laneOrder"`
+			OldStartLat      float64 `json:"startLat"`
+			OldStartLng      float64 `json:"startLng"`
+			OldEndLat        float64 `json:"endLat"`
+			OldEndLng        float64 `json:"endLng"`
 		}
 
-		startLat := lane.StartPoint.Y
-		startLng := lane.StartPoint.X
-		if startLat == 0 && startLng == 0 {
-			startLat = lane.OldStartLat
-			startLng = lane.OldStartLng
-		}
+		var lanes []Lane
+		if err := json.Unmarshal(lanesJSON, &lanes); err == nil && len(lanes) > 0 {
+			hasLanes = true
+			for _, lane := range lanes {
+				laneOrder := lane.LaneOrder
+				if laneOrder == 0 {
+					laneOrder = lane.OldLaneOrder
+				}
 
-		endLat := lane.EndPoint.Y
-		endLng := lane.EndPoint.X
-		if endLat == 0 && endLng == 0 {
-			endLat = lane.OldEndLat
-			endLng = lane.OldEndLng
-		}
+				startLat := lane.StartPoint.Y
+				startLng := lane.StartPoint.X
+				if startLat == 0 && startLng == 0 {
+					startLat = lane.OldStartLat
+					startLng = lane.OldStartLng
+				}
 
-		fmt.Printf("syncRouteCheckpoints: inserting Start checkpoint for lane %d\n", laneOrder)
-		// Start Point
+				endLat := lane.EndPoint.Y
+				endLng := lane.EndPoint.X
+				if endLat == 0 && endLng == 0 {
+					endLat = lane.OldEndLat
+					endLng = lane.OldEndLng
+				}
+
+				points = append(points, TempPoint{
+					Name: routeName + "_Lane" + strconv.Itoa(laneOrder) + "_Start",
+					Lat:  startLat,
+					Lng:  startLng,
+				})
+
+				if startLat != endLat || startLng != endLng {
+					points = append(points, TempPoint{
+						Name: routeName + "_Lane" + strconv.Itoa(laneOrder) + "_End",
+						Lat:  endLat,
+						Lng:  endLng,
+					})
+				}
+			}
+		}
+	}
+
+	// 3. Fallback to GeoJSON coordinates if no lanes
+	if !hasLanes && geojsonStr != "" {
+		coords := parseCoordinatesFromGeoJSON(geojsonStr)
+		for idx, c := range coords {
+			if len(c) >= 2 {
+				points = append(points, TempPoint{
+					Name: routeName + "_Point" + strconv.Itoa(idx+1),
+					Lat:  c[1],
+					Lng:  c[0],
+				})
+			}
+		}
+	}
+
+	if len(points) == 0 {
+		fmt.Printf("syncRouteCheckpointsAndLanePoints: no points to insert for route %d\n", routeID)
+		return
+	}
+
+	fmt.Printf("syncRouteCheckpointsAndLanePoints: inserting %d points for route %d\n", len(points), routeID)
+
+	// 4. Insert into route_checkpoints and route_lane_points
+	for i, pt := range points {
+		seq := i + 1
+		
+		// Insert into route_checkpoints (for legacy support)
 		_, err = db.Exec(ctx, `
 			INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, routeID, routeName+"_Lane"+strconv.Itoa(laneOrder)+"_Start", startLat, startLng, 10.0, seq)
+		`, routeID, pt.Name, pt.Lat, pt.Lng, 10.0, seq)
 		if err != nil {
-			fmt.Println("syncRouteCheckpoints INSERT start error:", err)
+			fmt.Println("syncRouteCheckpointsAndLanePoints route_checkpoints INSERT error:", err)
 		}
-		seq++
 
-		// End Point
-		// Check if end is significantly different from start to avoid duplicate pins
-		if startLat != endLat || startLng != endLng {
-			fmt.Printf("syncRouteCheckpoints: inserting End checkpoint for lane %d\n", laneOrder)
-			_, err = db.Exec(ctx, `
-				INSERT INTO route_checkpoints (route_id, checkpoint_name, latitude, longitude, radius_meters, sequence_order)
-				VALUES ($1, $2, $3, $4, $5, $6)
-			`, routeID, routeName+"_Lane"+strconv.Itoa(laneOrder)+"_End", endLat, endLng, 10.0, seq)
-			if err != nil {
-				fmt.Println("syncRouteCheckpoints INSERT end error:", err)
-			}
-			seq++
+		// Insert into route_lane_points (the core table)
+		_, err = db.Exec(ctx, `
+			INSERT INTO route_lane_points (route_id, sequence_number, latitude, longitude)
+			VALUES ($1, $2, $3, $4)
+		`, routeID, seq, pt.Lat, pt.Lng)
+		if err != nil {
+			fmt.Println("syncRouteCheckpointsAndLanePoints route_lane_points INSERT error:", err)
 		}
 	}
-	fmt.Println("syncRouteCheckpoints: done syncing")
+	fmt.Println("syncRouteCheckpointsAndLanePoints: done syncing")
 }

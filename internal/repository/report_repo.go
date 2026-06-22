@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -186,7 +188,7 @@ func (r *ReportRepository) UnfinalizeReportsForDate(ctx context.Context, date ti
 	return err
 }
 
-func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int) ([]MovementReport, int, error) {
+func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time.Time, limit, offset int, zoneID, wardID int) ([]MovementReport, int, error) {
 	var query string
 	var rows pgx.Rows
 	var err error
@@ -204,26 +206,50 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 			  JOIN vehicles v ON r.vehicle_id = v.id
 			  LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id `
 
-	countQuery := `SELECT COUNT(*) FROM movement_reports r `
+	countQuery := `SELECT COUNT(*) 
+	               FROM movement_reports r 
+	               JOIN vehicles v ON r.vehicle_id = v.id `
+
+	var conditions []string
+	var args []interface{}
+	argCount := 1
+
+	conditions = append(conditions, fmt.Sprintf("r.report_date BETWEEN $%d AND $%d", argCount, argCount+1))
+	args = append(args, from, to)
+	argCount += 2
 
 	if vehicleID > 0 {
-		query = baseQuery + `WHERE r.vehicle_id = $1 AND r.report_date BETWEEN $2 AND $3 ORDER BY r.report_date DESC LIMIT $4 OFFSET $5`
-		rows, err = r.pool.Query(ctx, query, vehicleID, from, to, limit, offset)
-		
-		err = r.pool.QueryRow(ctx, countQuery+`WHERE vehicle_id = $1 AND report_date BETWEEN $2 AND $3`, vehicleID, from, to).Scan(&totalCount)
-		if err != nil {
-			return nil, 0, err
-		}
-	} else {
-		query = baseQuery + `WHERE r.report_date BETWEEN $1 AND $2 ORDER BY r.report_date DESC LIMIT $3 OFFSET $4`
-		rows, err = r.pool.Query(ctx, query, from, to, limit, offset)
-
-		err = r.pool.QueryRow(ctx, countQuery+`WHERE report_date BETWEEN $1 AND $2`, from, to).Scan(&totalCount)
-		if err != nil {
-			return nil, 0, err
-		}
+		conditions = append(conditions, fmt.Sprintf("r.vehicle_id = $%d", argCount))
+		args = append(args, vehicleID)
+		argCount++
 	}
-	
+	if zoneID > 0 {
+		conditions = append(conditions, fmt.Sprintf("v.zone_id = $%d", argCount))
+		args = append(args, zoneID)
+		argCount++
+	}
+	if wardID > 0 {
+		conditions = append(conditions, fmt.Sprintf("v.ward_id = $%d", argCount))
+		args = append(args, wardID)
+		argCount++
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// Count query
+	err = r.pool.QueryRow(ctx, countQuery+whereClause, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Paginated query
+	query = baseQuery + whereClause + fmt.Sprintf(" ORDER BY r.report_date DESC LIMIT $%d OFFSET $%d", argCount, argCount+1)
+	args = append(args, limit, offset)
+
+	rows, err = r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}

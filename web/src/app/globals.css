@@ -1,28 +1,53 @@
 @import "tailwindcss";
 
 @theme {
-  --color-theme-base: #f4f6fa;
-  --color-theme-surface: #ffffff;
-  --color-theme-surface-hover: #f8fafc;
-  --color-theme-text: #1e293b;
-  --color-theme-text-dim: #64748b;
-  --color-theme-border: #e2e8f0;
-  --color-theme-accent: #059669;
-  --color-theme-accent-hover: #047857;
-  --color-theme-danger: #ef4444;
-  --color-theme-danger-hover: #dc2626;
+  --color-theme-base: #0b0f19;
+  --color-theme-surface: #151d30;
+  --color-theme-surface-hover: #1e293b;
+  --color-theme-text: #f8fafc;
+  --color-theme-text-dim: #94a3b8;
+  --color-theme-border: #1e293b;
+  --color-theme-accent: #ef4444;
+  --color-theme-accent-hover: #dc2626;
+  --color-theme-danger: #f87171;
+  --color-theme-danger-hover: #ef4444;
+
+  /* Color Mapping Overrides (Fail-safe for hardcoded green classes) */
+  --color-emerald-50: #fef2f2;
+  --color-emerald-100: #fee2e2;
+  --color-emerald-200: #fca5a5;
+  --color-emerald-500: #ef4444;
+  --color-emerald-600: #dc2626;
+  --color-emerald-700: #b91c1c;
+
+  --color-green-500: #ef4444;
+  --color-green-600: #dc2626;
+  --color-green-700: #b91c1c;
 }
 
 :root {
+  --color-theme-base: #0b0f19;
+  --color-theme-surface: #151d30;
+  --color-theme-surface-hover: #1e293b;
+  --color-theme-text: #f8fafc;
+  --color-theme-text-dim: #94a3b8;
+  --color-theme-border: #1e293b;
+  --color-theme-accent: #ef4444;
+  --color-theme-accent-hover: #dc2626;
+  --color-theme-danger: #f87171;
+  --color-theme-danger-hover: #ef4444;
+
+  /* Mapped CSS Variables for raw styling (e.g. body, Leaflet) */
   --bg-dark: var(--color-theme-base);
   --bg-card: var(--color-theme-surface);
   --bg-sidebar: var(--color-theme-surface);
   --bg-surface: var(--color-theme-surface);
   --primary: var(--color-theme-accent);
-  --primary-glow: rgba(5, 150, 105, 0.18);
+  --primary-glow: rgba(239, 68, 68, 0.15);
   --text-main: var(--color-theme-text);
   --text-dim: var(--color-theme-text-dim);
   --border: var(--color-theme-border);
+
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;

@@ -35,7 +35,7 @@ func main() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	log.Info().Msg("Starting VSWM Jaipur Heritage Tracking System...")
+	log.Info().Msg("Starting VSWM Jaipur Tracking System...")
 
 	// 3. Initialize Databases
 	db, err := repository.InitDB(cfg)

@@ -158,6 +158,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Get("/reports/ward-geofence", h.GetWardGeofenceReport)
 		r.Get("/reports/gts-trips", h.GetGTSTripReport)
 		r.Get("/reports/special-operations", h.GetShiftBasedOpsReport)
+		r.Get("/reports/early-departed", h.GetEarlyDepartureReport)
 
 		// Ultimate Reports — new independent module (does not affect existing Reports)
 		r.Get("/ultimate-reports/daily-excel", h.GetUltimateDailyExcelReport)
@@ -203,6 +204,9 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Put("/users/{id}", h.UpdateUser)
 		r.Delete("/users/{id}", h.DeleteUser)
 
+		// Attendance endpoints
+		r.Get("/attendance", h.GetAttendance)
+
 		// Reason Management endpoints
 		r.Get("/reasons", h.GetReasons)
 		r.Post("/reasons", h.CreateReason)
@@ -225,6 +229,55 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		// Worker Upload & Submission endpoints (Worker side - unsecured for testing phase)
 		r.Post("/open-depots/cleanings/upload", h.UploadCleaningPhoto)
 		r.Post("/open-depots/cleanings", h.CreateCleaningSubmission)
+	})
+
+	// 4. Mobile API Routes
+	r.Route("/api/mobile", func(r chi.Router) {
+		r.Post("/login", h.MobileLogin)
+		r.Post("/refresh", h.MobileRefresh)
+
+		// Authenticated Mobile Routes
+		r.Group(func(r chi.Router) {
+			r.Use(AuthMiddleware(cfg))
+
+			r.Get("/me", h.MobileMe)
+			r.Post("/logout", h.MobileLogout)
+
+			// Attendance
+			r.Post("/attendance/validate-photo", h.MobileValidatePhoto)
+			r.Post("/attendance/punch-in", h.MobilePunchIn)
+			r.Post("/attendance/punch-out", h.MobilePunchOut)
+			r.Post("/attendance/mark", h.MobileMarkAttendance)
+			r.Get("/attendance/status", h.MobileAttendanceStatus)
+			r.Get("/attendance/list", h.MobileAttendanceList)
+
+			// Routes & Coverage
+			r.Get("/routes/my", h.MobileMyRoutes)
+			r.Get("/coverage/my", h.MobileMyCoverage)
+			r.Get("/coverage/wards", h.MobileWardsCoverage)
+			r.Get("/coverage/zone", h.MobileZoneCoverage)
+
+			// Alerts
+			r.Get("/alerts/my", h.MobileMyAlerts)
+			r.Get("/alerts/ward", h.MobileWardAlerts)
+			r.Get("/alerts/zone", h.MobileZoneAlerts)
+			r.Post("/alerts/acknowledge/{id}", h.MobileAcknowledgeAlert)
+			r.Post("/alerts/custom", h.MobileSendCustomAlert)
+
+			// Blockages
+			r.Post("/blockages", h.MobileSubmitBlockage)
+			r.Get("/blockages", h.MobileListBlockages)
+			r.Patch("/blockages/{id}", h.MobileReviewBlockage)
+
+			// Open Depot
+			r.Get("/open-depot/depots", h.MobileGetOpenDepots)
+			r.Get("/open-depot/submissions", h.MobileGetOpenDepotSubmissions)
+			r.Post("/open-depot", h.MobileSubmitOpenDepot)
+
+			// Live Tracking
+			r.Get("/tracking/ward", h.MobileLiveTrackingWard)
+			r.Get("/tracking/zone", h.MobileLiveTrackingZone)
+		})
 	})
 
 	// Static files serving for uploaded cleaning photos

@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import SearchableDropdown from "@/components/shared/SearchableDropdown";
+import SearchableSelect from "@/components/ui/SearchableSelect";
 
 interface MovementReport {
   id: number;
@@ -35,6 +35,12 @@ interface ReportsResponse {
   total_pages: number;
 }
 
+interface TimeVal {
+  hh: number;
+  mm: number;
+  ss: number;
+}
+
 const formatDuration = (durationStr: string) => {
   if (!durationStr || durationStr === "00:00:00" || durationStr === "-") return "-";
   const parts = durationStr.split(":");
@@ -51,6 +57,52 @@ const formatDuration = (durationStr: string) => {
   return durationStr;
 };
 
+const formatTime = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    // Show '—' for null/epoch (1970-01-01)
+    if (d.getFullYear() <= 1970) return '—';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return '—';
+  }
+};
+
+const formatCoord = (val: any) => {
+  if (!val) return "-";
+  let obj = val;
+  if (typeof val === "string") {
+    try {
+      obj = JSON.parse(val);
+    } catch (e) {
+      return val;
+    }
+  }
+  if (obj && typeof obj === "object") {
+    const lat = obj.lat !== undefined ? obj.lat : obj.y;
+    const lng = obj.lng !== undefined ? obj.lng : obj.x;
+    if (lat !== undefined && lng !== undefined) {
+      return `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
+    }
+  }
+  return String(val);
+};
+
+const TimeInputBox = ({ value, onUp, onDown }: { value: string; onUp: () => void; onDown: () => void }) => (
+  <div className="flex flex-col items-center select-none">
+    <button onClick={onUp} className="text-emerald-500 hover:text-emerald-600 focus:outline-none text-[12px] font-bold py-0.5 px-2">
+      ▲
+    </button>
+    <div className="bg-slate-100 border border-slate-200 rounded px-2.5 py-1 text-sm font-mono font-bold text-slate-700 w-12 text-center shadow-sm">
+      {value}
+    </div>
+    <button onClick={onDown} className="text-emerald-500 hover:text-emerald-600 focus:outline-none text-[12px] font-bold py-0.5 px-2">
+      ▼
+    </button>
+  </div>
+);
+
 export default function ReportsPage() {
   const [reports, setReports] = useState<MovementReport[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -60,42 +112,55 @@ export default function ReportsPage() {
   const [zones, setZones] = useState<any[]>([]);
   const [wards, setWards] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
   
   const [selectedZone, setSelectedZone] = useState<string>("");
   const [selectedWard, setSelectedWard] = useState<string>("");
   const [selectedVehicle, setSelectedVehicle] = useState<string>("");
+  const [selectedShift, setSelectedShift] = useState<string>("");
 
-  const [zoneSearch, setZoneSearch] = useState("");
-  const [wardSearch, setWardSearch] = useState("");
-  const [vehicleSearch, setVehicleSearch] = useState("");
-
-  const [zoneOpen, setZoneOpen] = useState(false);
-  const [wardOpen, setWardOpen] = useState(false);
-  const [vehicleOpen, setVehicleOpen] = useState(false);
-
-  const zoneRef = useRef<HTMLDivElement>(null);
-  const wardRef = useRef<HTMLDivElement>(null);
-  const vehicleRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (zoneRef.current && !zoneRef.current.contains(e.target as Node)) setZoneOpen(false);
-      if (wardRef.current && !wardRef.current.contains(e.target as Node)) setWardOpen(false);
-      if (vehicleRef.current && !vehicleRef.current.contains(e.target as Node)) setVehicleOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const [useTime, setUseTime] = useState(false);
+  const [startTime, setStartTime] = useState<TimeVal>({ hh: 0, mm: 0, ss: 0 });
+  const [endTime, setEndTime] = useState<TimeVal>({ hh: 0, mm: 0, ss: 0 });
 
   const limit = 10;
+  const allowHistoricalRecalculation = true;
 
-  const allowHistoricalRecalculation = true; // Set to false to disable recalculation in UI
+  const pad = (num: number) => String(num).padStart(2, '0');
+
+  const adjustTime = (
+    type: "start" | "end",
+    field: "hh" | "mm" | "ss",
+    amount: number
+  ) => {
+    const setter = type === "start" ? setStartTime : setEndTime;
+    setter((prev) => {
+      let val = prev[field] + amount;
+      if (field === "hh") {
+        if (val < 0) val = 23;
+        if (val > 23) val = 0;
+      } else {
+        if (val < 0) val = 59;
+        if (val > 59) val = 0;
+      }
+      return { ...prev, [field]: val };
+    });
+  };
 
   const load = (d: string, p: number, vId: string, force: boolean = false) => {
     setLoading(true);
     const vParam = vId ? `&vehicle_id=${vId}` : "";
     const forceParam = force ? "&force=true" : "";
-    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}${vParam}${forceParam}`)
+    const zParam = selectedZone ? `&zone_id=${selectedZone}` : "";
+    const wParam = selectedWard ? `&ward_id=${selectedWard}` : "";
+    const sParam = selectedShift ? `&shift_id=${selectedShift}` : "";
+    
+    let timeParams = "";
+    if (useTime) {
+      timeParams = `&use_time=true&start_time=${pad(startTime.hh)}:${pad(startTime.mm)}:${pad(startTime.ss)}&end_time=${pad(endTime.hh)}:${pad(endTime.mm)}:${pad(endTime.ss)}`;
+    }
+
+    api<ReportsResponse>(`/api/reports?from=${d}&to=${d}&page=${p}&limit=${limit}${vParam}${zParam}${wParam}${sParam}${timeParams}${forceParam}`)
       .then((r) => {
         setReports(r.data || []);
         setTotalPages(r.total_pages || 1);
@@ -123,37 +188,33 @@ export default function ReportsPage() {
       .catch(() => {});
   }, []);
 
-  const formatCoord = (val: any) => {
-    if (!val) return "-";
-    let obj = val;
-    if (typeof val === "string") {
-      try {
-        obj = JSON.parse(val);
-      } catch (e) {
-        return val;
-      }
-    }
-    if (obj && typeof obj === "object") {
-      const lat = obj.lat !== undefined ? obj.lat : obj.y;
-      const lng = obj.lng !== undefined ? obj.lng : obj.x;
-      if (lat !== undefined && lng !== undefined) {
-        return `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
-      }
-    }
-    return String(val);
-  };
+  // Fetch dedicated shifts reactively
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.append("group", "VEHICLE_MOVEMENT");
+    if (selectedZone) params.append("zone_id", selectedZone);
+    if (selectedWard) params.append("ward_id", selectedWard);
+    if (selectedVehicle) params.append("vehicle_id", selectedVehicle);
 
-  const formatTime = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr);
-      // Show '—' for null/epoch (1970-01-01)
-      if (d.getFullYear() <= 1970) return '—';
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return '—';
-    }
-  };
+    api<{success: boolean, data: any[]}>(`/api/shifts?${params.toString()}`)
+      .then((r) => {
+        setShifts(r.data || []);
+        // Reset shift selection if it's no longer in the filtered list
+        if (selectedShift && !r.data.some((s: any) => s.id.toString() === selectedShift)) {
+          setSelectedShift("");
+        }
+      })
+      .catch(() => {});
+  }, [selectedZone, selectedWard, selectedVehicle]);
+
+  // Derived options for filters
+  const filteredWards = wards.filter(w => !selectedZone || w.parent_id?.toString() === selectedZone);
+  
+  const filteredVehicles = vehicles.filter(v => {
+    if (selectedWard && v.ward_id?.toString() !== selectedWard) return false;
+    if (selectedZone && v.zone_id?.toString() !== selectedZone) return false;
+    return true;
+  });
 
   return (
     <div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 overflow-hidden font-sans">
@@ -168,70 +229,84 @@ export default function ReportsPage() {
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
         <div className="max-w-[1600px] mx-auto">
           {/* Filters Grid */}
-          <div className="bg-theme-surface rounded-xl border border-theme-border p-6 mb-6 shadow-sm">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <SearchableDropdown
-                label="Zone"
-                selectedName={zones.find(z => z.id.toString() === selectedZone)?.region_name || "Select Zone"}
-                isSelected={!!selectedZone}
-                isOpen={zoneOpen}
-                setOpen={setZoneOpen}
-                search={zoneSearch}
-                setSearch={setZoneSearch}
-                items={zones.filter(z => z.region_name.toLowerCase().includes(zoneSearch.toLowerCase()))}
-                onSelect={(id) => { setSelectedZone(id.toString()); setZoneOpen(false); }}
-                dropdownRef={zoneRef}
-                keyField="id"
-                displayField="region_name"
-              />
-              <SearchableDropdown
-                label="Ward"
-                selectedName={wards.find(w => w.id.toString() === selectedWard)?.region_name || "Select Ward"}
-                isSelected={!!selectedWard}
-                isOpen={wardOpen}
-                setOpen={setWardOpen}
-                search={wardSearch}
-                setSearch={setWardSearch}
-                items={wards.filter(w => w.region_name.toLowerCase().includes(wardSearch.toLowerCase()))}
-                onSelect={(id) => { setSelectedWard(id.toString()); setWardOpen(false); }}
-                dropdownRef={wardRef}
-                keyField="id"
-                displayField="region_name"
-              />
-              <SearchableDropdown
-                label="Vehicle(s) RTO"
-                selectedName={vehicles.find(v => v.id.toString() === selectedVehicle)?.registration_no || "All Vehicles"}
-                isSelected={!!selectedVehicle}
-                isOpen={vehicleOpen}
-                setOpen={setVehicleOpen}
-                search={vehicleSearch}
-                setSearch={setVehicleSearch}
-                items={vehicles.filter(v => v.registration_no.toLowerCase().includes(vehicleSearch.toLowerCase()))}
-                onSelect={(id) => {
-                  // Allow deselecting to see "All Vehicles"
-                  if (selectedVehicle === id.toString()) {
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Zone</span>
+                <SearchableSelect
+                  value={selectedZone}
+                  onChange={(val) => {
+                    setSelectedZone(val);
+                    setSelectedWard("");
                     setSelectedVehicle("");
-                  } else {
-                    setSelectedVehicle(id.toString());
-                  }
-                  setVehicleOpen(false);
-                }}
-                dropdownRef={vehicleRef}
-                keyField="id"
-                displayField="registration_no"
-              />
+                  }}
+                  options={[
+                    { value: "", label: "All Zones" },
+                    ...zones.map(z => ({ value: z.id.toString(), label: z.region_name }))
+                  ]}
+                  placeholder="Select Zone"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Ward</span>
+                <SearchableSelect
+                  value={selectedWard}
+                  onChange={(val) => {
+                    setSelectedWard(val);
+                    setSelectedVehicle("");
+                    if (val) {
+                      const w = wards.find(x => x.id.toString() === val);
+                      if (w && w.parent_id) {
+                        setSelectedZone(w.parent_id.toString());
+                      }
+                    }
+                  }}
+                  options={[
+                    { value: "", label: "All Wards" },
+                    ...filteredWards.map(w => ({ value: w.id.toString(), label: w.region_name }))
+                  ]}
+                  placeholder="Select Ward"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Vehicle(s) RTO</span>
+                <SearchableSelect
+                  value={selectedVehicle}
+                  onChange={(val) => setSelectedVehicle(val)}
+                  options={[
+                    { value: "", label: "All Vehicles" },
+                    ...filteredVehicles.map(v => ({ value: v.id.toString(), label: v.registration_no }))
+                  ]}
+                  placeholder="All Vehicles"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Shift</span>
+                <SearchableSelect
+                  value={selectedShift}
+                  onChange={(val) => setSelectedShift(val)}
+                  options={[
+                    { value: "", label: "All Shifts" },
+                    ...shifts.map(s => ({ value: s.id.toString(), label: s.shift_name }))
+                  ]}
+                  placeholder="Select Shift"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
               <div>
-                <label className="block text-xs font-medium text-theme-text-dim mb-2">From Date</label>
+                <label className="block text-xs font-medium text-slate-500 mb-2">From Date</label>
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500" />
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-theme-text-dim mb-2">To Date</label>
+                <label className="block text-xs font-medium text-slate-500 mb-2">To Date</label>
                 <input type="date" value={date} readOnly
-                  className="w-full px-3 py-2 bg-theme-surface border border-theme-border rounded-lg text-sm outline-none focus:border-indigo-500 bg-slate-100 cursor-not-allowed" />
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm outline-none bg-slate-100 cursor-not-allowed text-slate-500" />
               </div>
               <div className="flex gap-3">
                 <button 
@@ -254,13 +329,81 @@ export default function ReportsPage() {
                 </button>
               </div>
             </div>
+
+            {/* Time-Based Filter Section */}
+            <div className="flex items-center gap-6 mt-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="use-time-filter"
+                  checked={useTime}
+                  onChange={(e) => setUseTime(e.target.checked)}
+                  className="h-4 w-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <label htmlFor="use-time-filter" className="text-xs font-semibold text-slate-700 select-none cursor-pointer">
+                  Time
+                </label>
+              </div>
+
+              {useTime && (
+                <div className="flex items-center gap-8 animate-fadeIn">
+                  {/* Start Time */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-slate-500">Start Time</span>
+                    <div className="flex items-center gap-1">
+                      <TimeInputBox
+                        value={pad(startTime.hh)}
+                        onUp={() => adjustTime("start", "hh", 1)}
+                        onDown={() => adjustTime("start", "hh", -1)}
+                      />
+                      <span className="text-xs font-bold text-slate-400">:</span>
+                      <TimeInputBox
+                        value={pad(startTime.mm)}
+                        onUp={() => adjustTime("start", "mm", 1)}
+                        onDown={() => adjustTime("start", "mm", -1)}
+                      />
+                      <span className="text-xs font-bold text-slate-400">:</span>
+                      <TimeInputBox
+                        value={pad(startTime.ss)}
+                        onUp={() => adjustTime("start", "ss", 1)}
+                        onDown={() => adjustTime("start", "ss", -1)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* End Time */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-slate-500">End Time</span>
+                    <div className="flex items-center gap-1">
+                      <TimeInputBox
+                        value={pad(endTime.hh)}
+                        onUp={() => adjustTime("end", "hh", 1)}
+                        onDown={() => adjustTime("end", "hh", -1)}
+                      />
+                      <span className="text-xs font-bold text-slate-400">:</span>
+                      <TimeInputBox
+                        value={pad(endTime.mm)}
+                        onUp={() => adjustTime("end", "mm", 1)}
+                        onDown={() => adjustTime("end", "mm", -1)}
+                      />
+                      <span className="text-xs font-bold text-slate-400">:</span>
+                      <TimeInputBox
+                        value={pad(endTime.ss)}
+                        onUp={() => adjustTime("end", "ss", 1)}
+                        onDown={() => adjustTime("end", "ss", -1)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Table */}
-          <div className="bg-theme-surface rounded-xl border border-theme-border shadow-sm overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[10px]">
-                <thead className="bg-theme-surface text-theme-text-dim border-b border-theme-border uppercase tracking-tighter">
+                <thead className="bg-[#f8fafc] text-slate-500 border-b border-slate-200 uppercase tracking-tighter">
                   <tr>
                     <th className="px-3 py-3 font-bold">S. NO.</th>
                     <th className="px-3 py-3 font-bold">DATE</th>
@@ -284,18 +427,18 @@ export default function ReportsPage() {
                     <th className="px-3 py-3 font-bold text-center">TOTAL STOPPAGES</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-theme-text">
+                <tbody className="divide-y divide-slate-100 text-slate-700">
                   {loading ? (
                     <tr>
-                      <td colSpan={20} className="px-4 py-8 text-center text-theme-text-dim">Loading reports...</td>
+                      <td colSpan={20} className="px-4 py-8 text-center text-slate-400">Loading reports...</td>
                     </tr>
                   ) : reports.length === 0 ? (
                     <tr>
-                      <td colSpan={20} className="px-4 py-8 text-center text-theme-text-dim">No reports found for this date.</td>
+                      <td colSpan={20} className="px-4 py-8 text-center text-slate-400">No reports found for this date.</td>
                     </tr>
                   ) : (
                     reports.map((r, i) => (
-                      <tr key={`${r.id}-${i}`} className="hover:bg-theme-surface transition">
+                      <tr key={`${r.id}-${i}`} className="hover:bg-slate-50 transition">
                         <td className="px-3 py-3">{(page - 1) * limit + i + 1}</td>
                         <td className="px-3 py-3 whitespace-nowrap">{new Date(r.report_date).toLocaleDateString()}</td>
                         <td className="px-3 py-3 font-bold text-slate-900 whitespace-nowrap">{r.registration_no}</td>
@@ -324,22 +467,22 @@ export default function ReportsPage() {
             </div>
 
             {/* Pagination */}
-            <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between bg-theme-surface">
-              <div className="text-xs text-theme-text-dim">
-                Page <span className="font-medium text-theme-text">{page}</span> of <span className="font-medium text-theme-text">{totalPages}</span>
+            <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="text-xs text-slate-500">
+                Page <span className="font-medium text-slate-700">{page}</span> of <span className="font-medium text-slate-700">{totalPages}</span>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page === 1 || loading}
-                  className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-medium bg-theme-surface hover:bg-theme-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
                 >
                   Previous
                 </button>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages || loading}
-                  className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-medium bg-theme-surface hover:bg-theme-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
                 >
                   Next
                 </button>

@@ -161,7 +161,7 @@ export default function VehicleTypePage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between py-4">
-            <div><CardTitle>Existing Vehicle Types</CardTitle><CardDescription>Full listing of fleet categories configured for Nagar Nigam Jaipur Heritage.</CardDescription></div>
+            <div><CardTitle>Existing Vehicle Types</CardTitle><CardDescription>Full listing of fleet categories configured for Nagar Nigam Jaipur.</CardDescription></div>
             <span className="text-[10px] px-2.5 py-1 bg-theme-base text-theme-accent rounded-full border border-theme-border font-bold">{types.length} total</span>
           </CardHeader>
           <CardContent className="p-0">

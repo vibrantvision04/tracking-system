@@ -141,10 +141,13 @@ func (h *Handler) GetVehicleLanePointCoverage(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	useReconstructed := r.URL.Query().Get("use_reconstructed") == "true"
+
 	// Recalculation logic trigger
 	isToday := (dateStr == utils.CurrentTimeInIndia().Format("2006-01-02"))
 	forceRecalc := r.URL.Query().Get("force_recalc") == "true"
-	localForceRecalc := forceRecalc || isToday
+	hasUseReconParam := r.URL.Query().Get("use_reconstructed") != ""
+	localForceRecalc := forceRecalc || isToday || hasUseReconParam
 
 	var hasHistory bool
 	err = h.gpsRepo.Pool().QueryRow(ctx, `
@@ -159,7 +162,7 @@ func (h *Handler) GetVehicleLanePointCoverage(w http.ResponseWriter, r *http.Req
 
 	if localForceRecalc || !hasHistory {
 		proximityMeters := 10.0
-		err = RecalculateLanePointCoverage(ctx, h.gpsRepo, h.routeRepo, vehicleID, routeID, dateStr, proximityMeters)
+		err = RecalculateLanePointCoverage(ctx, h.gpsRepo, h.routeRepo, vehicleID, routeID, dateStr, proximityMeters, useReconstructed)
 		if err != nil {
 			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to recalculate lane point coverage: " + err.Error()})
 			return

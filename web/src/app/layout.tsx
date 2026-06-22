@@ -11,8 +11,8 @@ import "react-toastify/dist/ReactToastify.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "VSWM Jaipur Heritage | GPS Vehicle Tracking",
-  description: "Real-time GPS tracking & waste management for Jaipur Heritage Municipal Corporation",
+  title: "VSWM Jaipur | GPS Vehicle Tracking",
+  description: "Real-time GPS tracking & waste management for Jaipur Municipal Corporation",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

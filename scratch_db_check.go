@@ -39,42 +39,50 @@ func main() {
 
 	routeID := 22
 	dateStr := "2026-06-18"
-	var geomID *int = nil
-	_ = geomID
 
-	fmt.Println("\n--- Querying Geofence Poly ---\n")
-	if geomID != nil {
-		var poly string
-		err = pool.QueryRow(ctx, "SELECT polygon::text FROM geofences WHERE id = $1", *geomID).Scan(&poly)
-		if err != nil {
-			fmt.Printf("Error fetching geofence: %v\n", err)
-		} else {
-			fmt.Printf("Polygon Length: %d\nPreview: %s\n", len(poly), poly[:mathMin(150, len(poly))])
-		}
-	}
-
-	fmt.Println("\n--- Querying Route Lane Points ---\n")
-	var lpCount int
-	err = pool.QueryRow(ctx, "SELECT COUNT(*) FROM route_lane_points WHERE route_id = $1", routeID).Scan(&lpCount)
+	fmt.Println("\n--- Comparing Route 22 GeoJSON vs Checkpoints ---")
+	var lanes []byte
+	var geoJSON string
+	err = pool.QueryRow(ctx, "SELECT r.lanes, COALESCE(g.polygon::text, '') FROM routes r LEFT JOIN geofences g ON r.geometry_id = g.id WHERE r.id = $1", routeID).Scan(&lanes, &geoJSON)
 	if err != nil {
-		fmt.Printf("Error counting lane points: %v\n", err)
+		fmt.Printf("Error: %v\n", err)
 	} else {
-		fmt.Printf("Total Lane Points: %d\n", lpCount)
+	fmt.Println("\n--- Migrating old checkpoints to route_lane_points ---")
+	tag, err := pool.Exec(ctx, `
+		INSERT INTO route_lane_points (route_id, sequence_number, latitude, longitude)
+		SELECT route_id, sequence_order, latitude, longitude
+		FROM route_checkpoints
+		ON CONFLICT (route_id, sequence_number) DO NOTHING
+	`)
+	if err != nil {
+		fmt.Printf("Error migrating: %v\n", err)
+	} else {
+		fmt.Printf("Migrated successfully. Rows affected: %d\n", tag.RowsAffected())
 	}
 
-	rows, err := pool.Query(ctx, "SELECT id, sequence_number, latitude, longitude FROM route_lane_points WHERE route_id = $1 ORDER BY sequence_number ASC LIMIT 10", routeID)
-	if err == nil {
-		for rows.Next() {
-			var id, seq int
-			var lat, lng float64
-			rows.Scan(&id, &seq, &lat, &lng)
-			fmt.Printf("  LP ID: %d, Seq: %d, Lat: %f, Lng: %f\n", id, seq, lat, lng)
+	fmt.Println("\n--- Querying Route Lane Points & Checkpoints ---")
+	rowsLP, err := pool.Query(ctx, `
+		SELECT r.id, r.route_name,
+		       (SELECT COUNT(*) FROM route_checkpoints WHERE route_id = r.id) as cp_count,
+		       (SELECT COUNT(*) FROM route_lane_points WHERE route_id = r.id) as lp_count
+		FROM routes r
+	`)
+	if err != nil {
+		fmt.Printf("Error counting lane points/checkpoints: %v\n", err)
+	} else {
+		defer rowsLP.Close()
+		for rowsLP.Next() {
+			var id int
+			var name string
+			var cpCount, lpCount int
+			rowsLP.Scan(&id, &name, &cpCount, &lpCount)
+			fmt.Printf("Route ID: %d, Name: %s, Checkpoints (old): %d, Lane Points (new): %d\n", id, name, cpCount, lpCount)
 		}
-		rows.Close()
+	}
 	}
 
 	fmt.Println("\n--- Querying Vehicle Route Assignments ---\n")
-	rows, err = pool.Query(ctx, "SELECT vehicle_id, shift_id, assigned_date, is_active FROM vehicle_route_assignments WHERE route_id = $1 AND assigned_date = $2", routeID, dateStr)
+	rows, err := pool.Query(ctx, "SELECT vehicle_id, shift_id, assigned_date, is_active FROM vehicle_route_assignments WHERE route_id = $1 AND assigned_date = $2", routeID, dateStr)
 	if err == nil {
 		for rows.Next() {
 			var vid, sid int

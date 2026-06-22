@@ -147,7 +147,7 @@ export default function D2DMap() {
   const [shiftsList, setShiftsList] = useState<any[]>([]);
 
   // Filtering states
-  const [selectedZone, setSelectedZone] = useState("Jaipur Heritage (All Zones)");
+  const [selectedZone, setSelectedZone] = useState("Jaipur (All Zones)");
   const [selectedWard, setSelectedWard] = useState("");
   const [selectedRouteType, setSelectedRouteType] = useState("");
   const [selectedShift, setSelectedShift] = useState<string>("Morning Shift");
@@ -308,7 +308,7 @@ export default function D2DMap() {
       }
 
       if (zonesRes.success) {
-        const allOption = { id: -1, region_name: "Jaipur Heritage (All Zones)", name: "Jaipur Heritage (All Zones)" } as any;
+        const allOption = { id: -1, region_name: "Jaipur (All Zones)", name: "Jaipur (All Zones)" } as any;
         setZonesList([allOption, ...(zonesRes.data || [])]);
         localStorage.setItem("d2d_zones", JSON.stringify(zonesRes.data || []));
       }
@@ -380,7 +380,7 @@ export default function D2DMap() {
 
         if (cachedZones) {
           const parsed = JSON.parse(cachedZones);
-          const allOption = { id: -1, region_name: "Jaipur Heritage (All Zones)", name: "Jaipur Heritage (All Zones)" } as any;
+          const allOption = { id: -1, region_name: "Jaipur (All Zones)", name: "Jaipur (All Zones)" } as any;
           setZonesList([allOption, ...parsed]);
         }
         if (cachedWards) setWardsList(JSON.parse(cachedWards));
@@ -1084,7 +1084,7 @@ export default function D2DMap() {
 
     if (!showZoneBoundary && !showWardBoundary) return;
 
-    const isAllJaipur = selectedZone === "Jaipur Heritage (All Zones)";
+    const isAllJaipur = selectedZone === "Jaipur (All Zones)";
 
     if (isAllJaipur) {
       // Draw all zones and their wards
@@ -1452,7 +1452,7 @@ export default function D2DMap() {
     }
 
     let matchesZone = true;
-    if (selectedZone && selectedZone !== "Jaipur Heritage (All Zones)" && activeZone) {
+    if (selectedZone && selectedZone !== "Jaipur (All Zones)" && activeZone) {
       const wardRegion = regionsList.find(r => r.region_type_id === 3 && r.region_name.toLowerCase() === ward.toLowerCase());
       if (wardRegion) {
         matchesZone = wardRegion.parent_id === activeZone.id;

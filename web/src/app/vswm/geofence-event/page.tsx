@@ -18,6 +18,7 @@ interface Region {
 interface GeofenceSession {
   geofence_name: string;
   entity: string;
+  status: "inside" | "outside";
   entry_time: string;
   exit_time: string | null;
   duration: string;
@@ -521,28 +522,36 @@ export default function GeofenceEventReportPage() {
                   {selectedVehicle.sessions.map((session, sIdx) => {
                     let dotColor = "bg-theme-text border-theme-border";
                     let badgeColor = "bg-theme-base/40 text-theme-text";
-                    switch (session.entity) {
-                      case "Zone":
-                      case "Ward":
-                        dotColor = "bg-emerald-500 border-emerald-500/20";
-                        badgeColor = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15";
-                        break;
-                      case "Fuel Station":
-                        dotColor = "bg-orange-500 border-orange-500/20";
-                        badgeColor = "bg-orange-500/10 text-orange-400 border border-orange-500/15";
-                        break;
-                      case "Transport Station":
-                        dotColor = "bg-blue-500 border-blue-500/20";
-                        badgeColor = "bg-blue-500/10 text-blue-400 border border-blue-500/15";
-                        break;
-                      case "Workshop":
-                        dotColor = "bg-purple-500 border-purple-500/20";
-                        badgeColor = "bg-purple-500/10 text-purple-400 border border-purple-500/15";
-                        break;
-                      case "Parking":
-                        dotColor = "bg-indigo-500 border-indigo-500/20";
-                        badgeColor = "bg-indigo-500/10 text-indigo-400 border border-indigo-500/15";
-                        break;
+                    let badgeText = session.entity;
+
+                    if (session.status === "outside") {
+                      dotColor = "bg-rose-500 border-rose-500/20";
+                      badgeColor = "bg-rose-500/10 text-rose-400 border border-rose-500/15";
+                      badgeText = `Out of ${session.entity}`;
+                    } else {
+                      switch (session.entity) {
+                        case "Zone":
+                        case "Ward":
+                          dotColor = "bg-emerald-500 border-emerald-500/20";
+                          badgeColor = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15";
+                          break;
+                        case "Fuel Station":
+                          dotColor = "bg-orange-500 border-orange-500/20";
+                          badgeColor = "bg-orange-500/10 text-orange-400 border border-orange-500/15";
+                          break;
+                        case "Transport Station":
+                          dotColor = "bg-blue-500 border-blue-500/20";
+                          badgeColor = "bg-blue-500/10 text-blue-400 border border-blue-500/15";
+                          break;
+                        case "Workshop":
+                          dotColor = "bg-purple-500 border-purple-500/20";
+                          badgeColor = "bg-purple-500/10 text-purple-400 border border-purple-500/15";
+                          break;
+                        case "Parking":
+                          dotColor = "bg-indigo-500 border-indigo-500/20";
+                          badgeColor = "bg-indigo-500/10 text-indigo-400 border border-indigo-500/15";
+                          break;
+                      }
                     }
 
                     return (
@@ -555,29 +564,33 @@ export default function GeofenceEventReportPage() {
                           <div className="flex justify-between items-start">
                             <div>
                               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wide ${badgeColor}`}>
-                                {session.entity}
+                                {badgeText}
                               </span>
                               <div className="text-[11px] font-bold text-theme-text mt-1">
                                 {session.geofence_name}
                               </div>
                             </div>
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 uppercase tracking-wide">
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-wide ${
+                              session.status === "outside"
+                                ? "bg-rose-500/10 text-rose-400 border border-rose-500/15"
+                                : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15"
+                            }`}>
                               {session.duration}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center text-[9px] text-theme-text-dim border-t border-theme-border/40 pt-1.5 font-mono mt-1.5">
                             <div>
-                              <span className="text-emerald-500 font-extrabold uppercase text-[7px] block tracking-wider">
-                                Entry
+                              <span className={`${session.status === "outside" ? "text-rose-400" : "text-emerald-500"} font-extrabold uppercase text-[7px] block tracking-wider`}>
+                                {session.status === "outside" ? "Exit" : "Entry"}
                               </span>
                               {formatTime(session.entry_time)}
                             </div>
                             <div className="text-right">
-                              <span className="text-orange-500 font-extrabold uppercase text-[7px] block tracking-wider">
-                                Exit
+                              <span className={`${session.status === "outside" ? "text-emerald-500" : "text-rose-400"} font-extrabold uppercase text-[7px] block tracking-wider`}>
+                                {session.status === "outside" ? "Entry" : "Exit"}
                               </span>
-                              {session.exit_time ? formatTime(session.exit_time) : "Still Inside"}
+                              {session.exit_time ? formatTime(session.exit_time) : (session.status === "outside" ? "Still Outside" : "Still Inside")}
                             </div>
                           </div>
                         </div>
