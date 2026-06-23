@@ -17,7 +17,7 @@ export default function DeviceCard({ gpsDevicesCount }: { gpsDevicesCount: numbe
         {items.map((item, idx) => (
           <div key={idx} className="flex justify-between items-center group">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-[#ef4444]/10 text-[#ef4444] rounded-full border border-[#ef4444]/20 transition-all duration-300">
+              <div className="p-2 bg-[#10B981]/10 text-[#10B981] rounded-full border border-[#10B981]/20 transition-all duration-300">
                 {item.icon}
               </div>
               <div className="text-[11px] font-bold text-theme-text-dim uppercase tracking-wider">{item.label}</div>

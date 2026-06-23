@@ -29,7 +29,7 @@ export default function MainHeader() {
             ONLINE
           </span>
         </div>
-        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-red-500 to-rose-400 border border-red-400/20 flex items-center justify-center text-white text-[11px] font-black shadow shadow-red-500/10 select-none">
+        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 border border-emerald-400/20 flex items-center justify-center text-white text-[11px] font-black shadow shadow-emerald-500/10 select-none">
           AD
         </div>
       </div>

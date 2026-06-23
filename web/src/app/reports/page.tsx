@@ -254,7 +254,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-        <div className="max-w-[1600px] mx-auto">
+        <div className="w-full mx-auto">
 
           {/* Filters */}
           <div className="mb-6">
@@ -433,32 +433,33 @@ export default function ReportsPage() {
             headers={TABLE_HEADERS}
             isLoading={loading}
             paginate={false}
+            dense={true}
             emptyState={
               <p className="text-sm text-theme-text-dim">No reports found for this date.</p>
             }
           >
             {reports.map((r, i) => (
               <tr key={`${r.id}-${i}`}>
-                <td className="px-3 py-3 text-sm">{(page - 1) * limit + i + 1}</td>
-                <td className="px-3 py-3 text-sm whitespace-nowrap">{new Date(r.report_date).toLocaleDateString()}</td>
-                <td className="px-3 py-3 text-sm font-bold text-theme-text whitespace-nowrap">{r.registration_no}</td>
-                <td className="px-3 py-3 text-sm">{r.vehicle_type || "Vehicle"}</td>
-                <td className="px-3 py-3 text-sm">{r.zone || "-"}</td>
-                <td className="px-3 py-3 text-sm">{r.ward || "-"}</td>
-                <td className="px-3 py-3 text-sm text-[#06B6D4] font-mono whitespace-nowrap">{formatCoord(r.start_point)}</td>
-                <td className="px-3 py-3 text-sm text-[#06B6D4] font-mono whitespace-nowrap">{formatCoord(r.end_point)}</td>
-                <td className="px-3 py-3 text-sm whitespace-nowrap">{formatTime(r.start_time)}</td>
-                <td className="px-3 py-3 text-sm whitespace-nowrap">{formatTime(r.end_time)}</td>
-                <td className="px-3 py-3 text-sm font-mono">{formatDuration(r.total_active_duration)}</td>
-                <td className="px-3 py-3 text-sm font-mono font-bold text-theme-text text-center">{r.total_distance.toFixed(2)}</td>
-                <td className="px-3 py-3 text-sm font-mono text-center">{r.average_speed.toFixed(1)}</td>
-                <td className="px-3 py-3 text-sm font-mono font-bold text-center text-[#06B6D4]">{formatDuration(r.actual_ignition_on_duration)}</td>
-                <td className="px-3 py-3 text-sm font-mono">{formatDuration(r.total_ignition_on_duration)}</td>
-                <td className="px-3 py-3 text-sm font-mono">{formatDuration(r.total_stoppage_duration)}</td>
-                <td className="px-3 py-3 text-sm font-mono">{formatDuration(r.total_idle_duration)}</td>
-                <td className="px-3 py-3 text-sm font-semibold text-center text-theme-text-dim">{r.minor_stoppages}</td>
-                <td className="px-3 py-3 text-sm font-semibold text-center text-theme-text-dim">{r.major_stoppages}</td>
-                <td className="px-3 py-3 text-sm font-bold text-center text-[#06B6D4]">{r.stoppages_count}</td>
+                <td className="px-2 py-2 text-xs">{(page - 1) * limit + i + 1}</td>
+                <td className="px-2 py-2 text-xs whitespace-nowrap">{r.report_date ? new Date(r.report_date).toLocaleDateString() : "-"}</td>
+                <td className="px-2 py-2 text-xs font-bold text-theme-text whitespace-nowrap">{r.registration_no}</td>
+                <td className="px-2 py-2 text-xs">{r.vehicle_type || "Vehicle"}</td>
+                <td className="px-2 py-2 text-xs">{r.zone || "-"}</td>
+                <td className="px-2 py-2 text-xs">{r.ward || "-"}</td>
+                <td className="px-2 py-2 text-xs text-[#06B6D4] font-mono whitespace-nowrap">{formatCoord(r.start_point)}</td>
+                <td className="px-2 py-2 text-xs text-[#06B6D4] font-mono whitespace-nowrap">{formatCoord(r.end_point)}</td>
+                <td className="px-2 py-2 text-xs whitespace-nowrap">{formatTime(r.start_time)}</td>
+                <td className="px-2 py-2 text-xs whitespace-nowrap">{formatTime(r.end_time)}</td>
+                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_active_duration)}</td>
+                <td className="px-2 py-2 text-xs font-mono font-bold text-theme-text text-center">{r.total_distance.toFixed(2)}</td>
+                <td className="px-2 py-2 text-xs font-mono text-center">{r.average_speed.toFixed(1)}</td>
+                <td className="px-2 py-2 text-xs font-mono font-bold text-center text-[#06B6D4]">{formatDuration(r.actual_ignition_on_duration)}</td>
+                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_ignition_on_duration)}</td>
+                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_stoppage_duration)}</td>
+                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_idle_duration)}</td>
+                <td className="px-2 py-2 text-xs font-semibold text-center text-theme-text-dim">{r.minor_stoppages}</td>
+                <td className="px-2 py-2 text-xs font-semibold text-center text-theme-text-dim">{r.major_stoppages}</td>
+                <td className="px-2 py-2 text-xs font-bold text-center text-[#06B6D4]">{r.stoppages_count}</td>
               </tr>
             ))}
           </Table>

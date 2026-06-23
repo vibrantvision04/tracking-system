@@ -8,6 +8,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
+import Select from "@/components/ui/Select";
 
 interface Region {
   id: number;
@@ -56,27 +57,6 @@ export default function GeofenceEventReportPage() {
 
   // Selected vehicle for details drawer state
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleGeofenceSummary | null>(null);
-
-  // Search states for dropdowns
-  const [zoneSearch, setZoneSearch] = useState("");
-  const [shiftSearch, setShiftSearch] = useState("");
-
-  // Dropdown open states
-  const [zoneDropdownOpen, setZoneDropdownOpen] = useState(false);
-  const [shiftDropdownOpen, setShiftDropdownOpen] = useState(false);
-
-  // Refs for click outside
-  const zoneRef = useRef<HTMLDivElement>(null);
-  const shiftRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (zoneRef.current && !zoneRef.current.contains(e.target as Node)) setZoneDropdownOpen(false);
-      if (shiftRef.current && !shiftRef.current.contains(e.target as Node)) setShiftDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const loadMetaData = async () => {
     setMetaLoading(true);
@@ -230,59 +210,8 @@ export default function GeofenceEventReportPage() {
     document.body.removeChild(link);
   };
 
-  const filteredZones = zones.filter(z => z.region_name.toLowerCase().includes(zoneSearch.toLowerCase()));
   const selectedZoneName = zones.find(z => z.id === selectedZoneId)?.region_name || "Select Zone";
-
-  const filteredShifts = shifts.filter(s => s.shift_name.toLowerCase().includes(shiftSearch.toLowerCase()));
   const selectedShiftName = shifts.find(s => s.id === selectedShiftId)?.shift_name || "Select Shift";
-
-  const SearchableDropdown = ({ label, selectedName, isSelected, isOpen, setOpen, search, setSearch, items, onSelect, dropdownRef, keyField, displayField, searchPlaceholder }: any) => {
-    return (
-      <div className="flex flex-col relative" ref={dropdownRef}>
-        <span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">{label}</span>
-        <div
-          className="bg-theme-surface border border-theme-border rounded-xl px-3.5 py-2 text-xs cursor-pointer flex justify-between items-center hover:border-theme-accent/40 transition min-h-[38px]"
-          onClick={() => setOpen(!isOpen)}
-        >
-          <span className={isSelected ? "text-theme-text font-medium truncate" : "text-theme-text-dim truncate"}>{selectedName}</span>
-          <span className="text-theme-text-dim text-[10px] flex-shrink-0 ml-2">{isOpen ? "▲" : "▼"}</span>
-        </div>
-        {isOpen && (
-          <div className="absolute top-[64px] left-0 w-full bg-theme-surface border border-theme-border rounded-lg shadow-xl overflow-hidden z-50">
-            <div className="p-2 border-b border-theme-border">
-              <input
-                type="text"
-                placeholder={searchPlaceholder || `Search ${label}...`}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-transparent text-xs text-theme-text outline-none placeholder:text-theme-text-dim"
-                autoFocus
-              />
-            </div>
-            <div className="max-h-60 overflow-y-auto custom-scrollbar">
-              {items.length === 0 ? (
-                <div className="px-4 py-2 text-xs text-theme-text-dim italic">No options found</div>
-              ) : (
-                items.map((item: any) => {
-                  const id = keyField ? item[keyField] : item;
-                  const text = displayField ? item[displayField] : item;
-                  return (
-                    <div
-                      key={id}
-                      className="px-4 py-2 text-xs text-theme-text hover:bg-theme-accent/20 hover:text-emerald-400 cursor-pointer transition"
-                      onClick={() => onSelect(id)}
-                    >
-                      {text}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans space-y-6 p-6 lg:p-8 print:p-0 print:bg-white print:text-black">
@@ -309,51 +238,31 @@ export default function GeofenceEventReportPage() {
         <Card className="relative z-20 !overflow-visible print:hidden">
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <SearchableDropdown
+              <Select
                 label="Zone"
-                selectedName={selectedZoneName}
-                isSelected={!!selectedZoneId}
-                isOpen={zoneDropdownOpen}
-                setOpen={setZoneDropdownOpen}
-                search={zoneSearch}
-                setSearch={setZoneSearch}
-                items={filteredZones}
-                dropdownRef={zoneRef}
-                keyField="id"
-                displayField="region_name"
-                onSelect={(id: number) => {
-                  if (selectedZoneId === id) {
-                    setSelectedZoneId(null);
-                  } else {
-                    setSelectedZoneId(id);
-                  }
-                  setZoneDropdownOpen(false);
-                  setZoneSearch("");
-                }}
-              />
+                value={selectedZoneId ? String(selectedZoneId) : ""}
+                onChange={(e) => setSelectedZoneId(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">All Zones</option>
+                {zones.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.region_name}
+                  </option>
+                ))}
+              </Select>
 
-              <SearchableDropdown
+              <Select
                 label="Shift"
-                selectedName={selectedShiftName}
-                isSelected={!!selectedShiftId}
-                isOpen={shiftDropdownOpen}
-                setOpen={setShiftDropdownOpen}
-                search={shiftSearch}
-                setSearch={setShiftSearch}
-                items={filteredShifts}
-                dropdownRef={shiftRef}
-                keyField="id"
-                displayField="shift_name"
-                onSelect={(id: number) => {
-                  if (selectedShiftId === id) {
-                    setSelectedShiftId(null);
-                  } else {
-                    setSelectedShiftId(id);
-                  }
-                  setShiftDropdownOpen(false);
-                  setShiftSearch("");
-                }}
-              />
+                value={selectedShiftId ? String(selectedShiftId) : ""}
+                onChange={(e) => setSelectedShiftId(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">All Shifts</option>
+                {shifts.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.shift_name}
+                  </option>
+                ))}
+              </Select>
 
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">Date</span>

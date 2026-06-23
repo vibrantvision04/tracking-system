@@ -2909,7 +2909,7 @@ export default function PlaybackPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#0F172A] text-slate-800 font-sans">
+    <div className="flex-1 flex flex-col overflow-hidden bg-theme-base text-theme-text font-sans">
       <style dangerouslySetInnerHTML={{
         __html: `
         @keyframes stop-pulse {
@@ -2928,13 +2928,13 @@ export default function PlaybackPage() {
       `}} />
 
       {/* Sub-header / Playback Title with Green Line */}
-      <div className="bg-[#0F172A] px-6 py-2 border-b border-[#0F172A] shrink-0">
-        <h2 className="text-base font-bold text-white">Playback</h2>
+      <div className="bg-theme-surface px-6 py-2 border-b border-theme-border shrink-0">
+        <h2 className="text-base font-bold text-theme-text">Playback</h2>
         <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
       </div>
 
       {/* HORIZONTAL CONTROLS PANEL */}
-      <section className="bg-[#0F172A] border-b border-[#0F172A] px-6 py-3.5 z-10 shrink-0 w-full flex flex-col gap-3">
+      <section className="bg-theme-surface border-b border-theme-border px-6 py-3.5 z-10 shrink-0 w-full flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3.5 w-full">
 
           {/* Date Picker */}
@@ -2946,7 +2946,7 @@ export default function PlaybackPage() {
                 setDate(e.target.value);
                 setRouteIdParam(null);
               }}
-              className="w-full bg-[#0F172A] border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
+              className="w-full bg-white border border-slate-200 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium shadow-sm"
             />
           </div>
 
@@ -3093,7 +3093,7 @@ export default function PlaybackPage() {
 
         {/* Playback Progress timeline scrub slider - Always visible */}
         <div className="w-full flex items-center gap-3 mt-1">
-          <span className="text-xs font-semibold font-mono text-white w-14 shrink-0 text-left">
+          <span className="text-xs font-semibold font-mono text-theme-text w-14 shrink-0 text-left">
             {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[idx]?.time) : "00:00:00"}
           </span>
           <input
@@ -3112,9 +3112,9 @@ export default function PlaybackPage() {
                 setIdx(Number(e.target.value));
               }
             }}
-            className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-700 accent-[#22c55e] appearance-none outline-none"
+            className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-200 accent-[#10B981] appearance-none outline-none"
           />
-          <span className="text-xs font-semibold font-mono text-white w-14 shrink-0 text-right">
+          <span className="text-xs font-semibold font-mono text-theme-text w-14 shrink-0 text-right">
             {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[playbackSteps.length - 1]?.time) : "00:00:00"}
           </span>
         </div>

@@ -2,22 +2,22 @@
 
 @theme {
   /* ── Granular token variables ── */
-  --color-theme-background-base:     #0F172A;
-  --color-theme-background-surface:  #111827;
-  --color-theme-background-card:     #1E293B;
-  --color-theme-background-elevated: #243244;
-  --color-theme-brand-primary:       #DC2626;
-  --color-theme-brand-primaryHover:  #B91C1C;
-  --color-theme-brand-primaryLight:  #FEE2E2;
+  --color-theme-background-base:     #F3F4F6; /* light gray background */
+  --color-theme-background-surface:  #FFFFFF; /* white surface */
+  --color-theme-background-card:     #FFFFFF; /* white cards */
+  --color-theme-background-elevated: #F1F5F9; /* hover / active states */
+  --color-theme-brand-primary:       #10B981; /* vibrant emerald accent */
+  --color-theme-brand-primaryHover:  #059669;
+  --color-theme-brand-primaryLight:  #D1FAE5;
   --color-theme-semantic-success:    #16A34A;
   --color-theme-semantic-warning:    #F59E0B;
   --color-theme-semantic-error:      #EF4444;
   --color-theme-semantic-info:       #06B6D4;
-  --color-theme-text-default:        #F8FAFC;
-  --color-theme-text-dim:            #94A3B8;
-  --color-theme-text-inverted:       #0F172A;
-  --color-theme-border-default:      #1E293B;
-  --color-theme-border-subtle:       #243244;
+  --color-theme-text-default:        #1E293B; /* slate-800 dark text */
+  --color-theme-text-dim:            #64748B; /* slate-500 medium text */
+  --color-theme-text-inverted:       #FFFFFF; /* white text */
+  --color-theme-border-default:      #E2E8F0; /* slate-200 border */
+  --color-theme-border-subtle:       #F1F5F9; /* slate-100 border */
 
   /* ── Backward-compat aliases (existing components continue working) ── */
   --color-theme-base:         var(--color-theme-background-base);
@@ -34,38 +34,26 @@
   --color-theme-surface-hover: var(--color-theme-background-elevated);
   --color-theme-danger:        var(--color-theme-semantic-error);
   --color-theme-danger-hover:  var(--color-theme-semantic-error);
-
-  /* Color Mapping Overrides (Fail-safe for hardcoded green classes) */
-  --color-emerald-50: #fef2f2;
-  --color-emerald-100: #fee2e2;
-  --color-emerald-200: #fca5a5;
-  --color-emerald-500: #ef4444;
-  --color-emerald-600: #dc2626;
-  --color-emerald-700: #b91c1c;
-
-  --color-green-500: #ef4444;
-  --color-green-600: #dc2626;
-  --color-green-700: #b91c1c;
 }
 
 :root {
   /* ── Granular token variables ── */
-  --color-theme-background-base:     #0F172A;
-  --color-theme-background-surface:  #111827;
-  --color-theme-background-card:     #1E293B;
-  --color-theme-background-elevated: #243244;
-  --color-theme-brand-primary:       #DC2626;
-  --color-theme-brand-primaryHover:  #B91C1C;
-  --color-theme-brand-primaryLight:  #FEE2E2;
+  --color-theme-background-base:     #F3F4F6;
+  --color-theme-background-surface:  #FFFFFF;
+  --color-theme-background-card:     #FFFFFF;
+  --color-theme-background-elevated: #F1F5F9;
+  --color-theme-brand-primary:       #10B981;
+  --color-theme-brand-primaryHover:  #059669;
+  --color-theme-brand-primaryLight:  #D1FAE5;
   --color-theme-semantic-success:    #16A34A;
   --color-theme-semantic-warning:    #F59E0B;
   --color-theme-semantic-error:      #EF4444;
   --color-theme-semantic-info:       #06B6D4;
-  --color-theme-text-default:        #F8FAFC;
-  --color-theme-text-dim:            #94A3B8;
-  --color-theme-text-inverted:       #0F172A;
-  --color-theme-border-default:      #1E293B;
-  --color-theme-border-subtle:       #243244;
+  --color-theme-text-default:        #1E293B;
+  --color-theme-text-dim:            #64748B;
+  --color-theme-text-inverted:       #FFFFFF;
+  --color-theme-border-default:      #E2E8F0;
+  --color-theme-border-subtle:       #F1F5F9;
 
   /* ── Backward-compat aliases ── */
   --color-theme-base:         var(--color-theme-background-base);
@@ -89,7 +77,7 @@
   --bg-sidebar: var(--color-theme-surface);
   --bg-surface: var(--color-theme-surface);
   --primary: var(--color-theme-accent);
-  --primary-glow: rgba(220, 38, 38, 0.15);
+  --primary-glow: rgba(16, 185, 129, 0.15);
   --text-main: var(--color-theme-text);
   --text-dim: var(--color-theme-text-dim);
   --border: var(--color-theme-border);

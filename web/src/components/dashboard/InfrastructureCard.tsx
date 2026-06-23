@@ -40,7 +40,7 @@ export default function InfrastructureCard({
       <div className="grid grid-cols-2 gap-x-4 gap-y-5 mt-auto">
         {items.map((item, idx) => (
           <div key={idx} className="flex items-center gap-3 group">
-            <div className="p-2 bg-[#ef4444]/10 text-[#ef4444] rounded-full border border-[#ef4444]/20 transition-all duration-300 flex items-center justify-center shrink-0">
+            <div className="p-2 bg-[#10B981]/10 text-[#10B981] rounded-full border border-[#10B981]/20 transition-all duration-300 flex items-center justify-center shrink-0">
               {item.icon}
             </div>
             <div>

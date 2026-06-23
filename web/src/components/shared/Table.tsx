@@ -11,6 +11,7 @@ interface TableProps {
   className?: string;
   itemsPerPage?: number;
   paginate?: boolean;
+  dense?: boolean;
 }
 
 export function paginationSummary(n: number, itemsPerPage: number, currentPage: number): string {
@@ -28,6 +29,7 @@ export default function Table({
   className = "",
   itemsPerPage = 20,
   paginate = true,
+  dense = false,
 }: TableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const childrenArray = React.Children.toArray(children);
@@ -48,11 +50,16 @@ export default function Table({
   return (
     <div className={`w-full overflow-hidden flex flex-col rounded-xl border border-theme-border bg-theme-surface shadow-sm ${className}`}>
       <div className="overflow-x-auto custom-scrollbar">
-        <table className="w-full text-left border-collapse [&>tbody>tr:nth-child(odd)]:bg-theme-card [&>tbody>tr:nth-child(even)]:bg-theme-surface">
+        <table className="w-full text-left border-collapse [&>tbody>tr:nth-child(odd)]:bg-[#FAF9F5] [&>tbody>tr:nth-child(even)]:bg-white">
           <thead className="sticky top-0 z-10 bg-theme-card">
             <tr className="border-b border-theme-border select-none">
               {headers.map((header, idx) => (
-                <th key={idx} className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-theme-text-dim">
+                <th
+                  key={idx}
+                  className={`${
+                    dense ? "px-2 py-2.5 text-[10px] font-bold" : "px-5 py-3.5 text-xs font-semibold"
+                  } uppercase tracking-wider text-theme-text-dim`}
+                >
                   {header}
                 </th>
               ))}
@@ -85,7 +92,7 @@ export default function Table({
                 if (!React.isValidElement(child)) return child;
                 const existingClass: string = (child.props as { className?: string }).className ?? '';
                 return React.cloneElement(child as React.ReactElement<{ className?: string }>, {
-                  className: `${existingClass} text-sm hover:bg-theme-elevated transition-colors duration-150`.trim(),
+                  className: `${existingClass} ${dense ? "text-xs" : "text-sm"} hover:bg-theme-elevated transition-colors duration-150`.trim(),
                 });
               })
             )}

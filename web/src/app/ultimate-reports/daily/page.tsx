@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api, API_URL } from "@/lib/api";
+import Table from "@/components/shared/Table";
+import Select from "@/components/ui/Select";
 
 interface Exception {
   vehicle_reg_no?: string;
@@ -209,11 +211,10 @@ export default function UltimateDailyReportPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Exception Type</label>
-                <select 
+                <Select 
+                  label="Exception Type"
                   value={excType} 
                   onChange={(e) => setExcType(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-emerald-500 text-sm font-medium"
                 >
                   <option value="NOT_WORKED">Not Worked</option>
                   <option value="GPS_TAMPERED">GPS Tampered</option>
@@ -221,7 +222,7 @@ export default function UltimateDailyReportPage() {
                   <option value="VEHICLE_BREAKDOWN">Vehicle Breakdown</option>
                   <option value="REPLACED">Replaced</option>
                   <option value="OTHER">Other (Specify in Remarks)</option>
-                </select>
+                </Select>
               </div>
               {excType === "REPLACED" ? (
                 <div>
@@ -254,53 +255,42 @@ export default function UltimateDailyReportPage() {
             </form>
 
             {/* List of Exceptions */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <tr>
-                    <th className="px-6 py-3 font-semibold">Vehicle</th>
-                    <th className="px-6 py-3 font-semibold">Type</th>
-                    <th className="px-6 py-3 font-semibold">Replacement / Remarks</th>
-                    <th className="px-6 py-3 font-semibold text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loading ? (
-                    <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 font-medium">Loading overrides...</td></tr>
-                  ) : Object.keys(exceptions).length === 0 ? (
-                    <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 font-medium">No overrides for this date.</td></tr>
-                  ) : (
-                    Object.values(exceptions).map((exc, idx) => {
-                      const regNo = exc.vehicle_reg_no || exc.VehicleRegNo || "";
-                      const typeStr = exc.exception_type || exc.ExceptionType || "";
-                      const repl = exc.replacement_vehicle || exc.ReplacementVehicle || "";
-                      const rem = exc.remarks || exc.Remarks || "";
-                      
-                      return (
-                        <tr key={regNo || idx} className="hover:bg-slate-50">
-                          <td className="px-6 py-3 font-bold text-slate-800">{regNo}</td>
-                          <td className="px-6 py-3">
-                            <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded text-xs font-bold tracking-wide">
-                              {typeStr.replace("_", " ")}
-                            </span>
-                          </td>
-                          <td className="px-6 py-3 font-medium text-slate-600">
-                            {typeStr === "REPLACED" ? `Replaced by ${repl}` : rem || "-"}
-                          </td>
-                          <td className="px-6 py-3 text-right">
-                            <button 
-                              onClick={() => handleDeleteException(regNo)}
-                              className="text-red-500 hover:text-red-700 font-medium text-xs px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 transition"
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+            <div className="p-4 bg-white rounded-b-xl border-t border-slate-200">
+              <Table
+                headers={["Vehicle", "Type", "Replacement / Remarks", <div key="act" className="text-right">Action</div>]}
+                isLoading={loading}
+                emptyState="No overrides for this date."
+                paginate={false}
+              >
+                {Object.values(exceptions).map((exc, idx) => {
+                  const regNo = exc.vehicle_reg_no || exc.VehicleRegNo || "";
+                  const typeStr = exc.exception_type || exc.ExceptionType || "";
+                  const repl = exc.replacement_vehicle || exc.ReplacementVehicle || "";
+                  const rem = exc.remarks || exc.Remarks || "";
+                  
+                  return (
+                    <tr key={regNo || idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3.5 font-bold text-slate-800">{regNo}</td>
+                      <td className="px-5 py-3.5">
+                        <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded text-xs font-bold tracking-wide">
+                          {typeStr.replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 font-medium text-slate-600">
+                        {typeStr === "REPLACED" ? `Replaced by ${repl}` : rem || "-"}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <button 
+                          onClick={() => handleDeleteException(regNo)}
+                          className="text-red-500 hover:text-red-700 font-medium text-xs px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Table>
             </div>
 
           </div>

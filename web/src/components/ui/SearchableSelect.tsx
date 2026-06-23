@@ -53,7 +53,7 @@ export default function SearchableSelect({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-white border border-slate-200 px-3 py-1.5 rounded text-sm text-black hover:border-slate-300 focus:border-red-500 outline-none transition cursor-pointer font-medium flex items-center justify-between shadow-sm ${
+        className={`w-full bg-white border border-slate-200 px-3 py-1.5 rounded text-sm text-black hover:border-slate-300 focus:border-emerald-500 outline-none transition cursor-pointer font-medium flex items-center justify-between shadow-sm ${
           disabled ? "opacity-50 cursor-not-allowed bg-slate-50 text-slate-400" : ""
         }`}
       >
@@ -105,12 +105,12 @@ export default function SearchableSelect({
                   }}
                   className={`w-full text-left px-3 py-2 text-xs cursor-pointer transition flex items-center justify-between ${
                     opt.value === value
-                      ? 'bg-red-50 text-red-600 font-semibold'
+                      ? 'bg-emerald-50 text-emerald-600 font-semibold'
                       : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <span className="truncate">{opt.label}</span>
-                  {opt.value === value && <span className="text-[10px] text-red-600">✓</span>}
+                  {opt.value === value && <span className="text-[10px] text-emerald-600">✓</span>}
                 </button>
               ))
             ) : (

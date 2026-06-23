@@ -350,26 +350,27 @@ export default function Sidebar() {
         <div className={`flex flex-col items-center py-4 border-b border-theme-border transition-all duration-300 w-full relative ${
           sidebarCollapsed ? "px-2" : "px-4"
         }`}>
-          <div className="flex flex-col items-center gap-3 w-full">
-            <a href="/">
-              <img 
-                src="/Jaipur_Municipal_Corporation_Logo.png" 
-                alt="Jaipur Municipal Corporation Logo" 
-                className={`object-contain shrink-0 hover:scale-105 transition-transform duration-200 ${
-                  sidebarCollapsed ? "h-9 w-[46px]" : "h-24 w-[110px]"
-                }`}
-              />
-            </a>
-            {!sidebarCollapsed && (
-              <div className="flex flex-col items-center mt-1 text-center select-none">
-                <div className="text-sm font-black text-theme-text tracking-widest uppercase">
-                  SWIFT
-                </div>
-                <div className="text-[9px] font-medium text-theme-text-dim mt-1.5 max-w-[130px] leading-tight">
-                  Smart Waste Integrated Fleet Tracking
-                </div>
+          <div className="flex items-center gap-2.5 w-full">
+            <a href="/" className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 shrink-0 shadow-sm">
+                <svg className="w-5.5 h-5.5 text-emerald-600" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2L2 22h9l1-8h9L12 2z" />
+                </svg>
               </div>
-            )}
+              {!sidebarCollapsed && (
+                <div className="flex flex-col select-none min-w-0">
+                  <div className="text-sm font-black text-theme-text tracking-tight uppercase leading-none">
+                    SWIFT
+                  </div>
+                  <div className="text-[8px] font-bold text-theme-text-dim mt-1.5 leading-tight truncate">
+                    Smart Waste Integrated
+                  </div>
+                  <div className="text-[8px] font-bold text-theme-text-dim leading-none truncate">
+                    Fleet Tracking
+                  </div>
+                </div>
+              )}
+            </a>
           </div>
           {!sidebarCollapsed && (
             <button
@@ -433,12 +434,12 @@ export default function Sidebar() {
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors duration-150 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isCurrentPath
-                        ? "border-l-[3px] border-[#DC2626] bg-theme-elevated text-theme-accent font-medium"
+                        ? "border-l-[3px] border-[#10B981] bg-theme-elevated text-theme-accent font-medium"
                         : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated"
                       }`}
                   >
                     <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
-                      <category.icon className="w-4 h-4 text-red-500" />
+                      <category.icon className="w-4 h-4 text-emerald-500" />
                     </span>
                     <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                   </Link>
@@ -448,21 +449,21 @@ export default function Sidebar() {
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg transition-colors duration-150 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isActive || isParentActive
-                        ? "border-l-[3px] border-[#DC2626] bg-theme-elevated text-theme-accent font-medium"
+                        ? "border-l-[3px] border-[#10B981] bg-theme-elevated text-theme-accent font-medium"
                         : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated"
                       }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
-                        <category.icon className={`w-4 h-4 ${isActive || isParentActive ? "text-[#DC2626]" : "text-red-500"}`} />
+                        <category.icon className={`w-4 h-4 ${isActive || isParentActive ? "text-[#10B981]" : "text-emerald-500"}`} />
                       </span>
                       <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                     </div>
                     {hasChildren && !sidebarCollapsed && (
-                      <ChevronRight className={`w-3 h-3 transition-transform duration-200 lg:block hidden ${isActive ? "rotate-90 text-[#DC2626]" : (isParentActive ? "text-[#DC2626]" : "text-theme-text-dim")}`} />
+                      <ChevronRight className={`w-3 h-3 transition-transform duration-200 lg:block hidden ${isActive ? "rotate-90 text-[#10B981]" : (isParentActive ? "text-[#10B981]" : "text-theme-text-dim")}`} />
                     )}
                     {hasChildren && sidebarCollapsed && (
-                      <ChevronRight className={`w-3 h-3 transition-transform duration-200 lg:hidden block ${isActive ? "rotate-90 text-[#DC2626]" : (isParentActive ? "text-[#DC2626]" : "text-theme-text-dim")}`} />
+                      <ChevronRight className={`w-3 h-3 transition-transform duration-200 lg:hidden block ${isActive ? "rotate-90 text-[#10B981]" : (isParentActive ? "text-[#10B981]" : "text-theme-text-dim")}`} />
                     )}
                   </button>
                 )}
@@ -498,7 +499,7 @@ export default function Sidebar() {
           />
           {!sidebarCollapsed && (
             <div className="min-w-0">
-              <div className="text-[8px] font-extrabold text-[#ef4444] uppercase tracking-widest leading-none">Powered by</div>
+              <div className="text-[8px] font-extrabold text-[#10B981] uppercase tracking-widest leading-none">Powered by</div>
               <div className="text-[11px] font-black text-theme-text mt-1 truncate tracking-tight">Vibrant Visions</div>
             </div>
           )}
@@ -506,7 +507,7 @@ export default function Sidebar() {
 
         {/* Footer */}
         <div className={`px-3 py-3 border-t border-theme-border flex items-center gap-2 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-red-500 text-white text-[10px] font-bold shrink-0 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 text-white text-[10px] font-bold shrink-0 flex items-center justify-center">
             AD
           </div>
           <div className={`min-w-0 transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
@@ -577,7 +578,7 @@ export default function Sidebar() {
                             setActiveCategory(null);
                           }}
                           className={`text-[11px] font-medium transition-colors block ${
-                            path === sub.href ? "text-[#DC2626] font-semibold" : "text-theme-text hover:text-theme-accent"
+                            path === sub.href ? "text-[#10B981] font-semibold" : "text-theme-text hover:text-theme-accent"
                           }`}
                         >
                           {sub.label}
@@ -602,7 +603,7 @@ export default function Sidebar() {
                               }}
                               className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
                                 ${path === item.href
-                                  ? "text-[#DC2626] font-semibold"
+                                  ? "text-[#10B981] font-semibold"
                                   : "text-theme-text-dim hover:text-theme-text"
                                 }`}
                             >

@@ -9,7 +9,7 @@ export function Card({ children, hoverable = false, className = "", ...props }: 
   return (
     <div
       className={`bg-theme-card border border-theme-border shadow-sm rounded-[16px] overflow-hidden ${
-        hoverable ? "hover:shadow-md hover:-translate-y-0.5 hover:border-[#ef4444]/60 transition-all duration-200" : ""
+        hoverable ? "hover:shadow-md hover:-translate-y-0.5 hover:border-[#10B981]/60 transition-all duration-200" : ""
       } ${className}`}
       {...props}
     >

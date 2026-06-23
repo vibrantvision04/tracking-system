@@ -28,7 +28,7 @@ No routes, API calls, business logic, form handlers, or feature behavior shall c
     - Use the `Object.fromEntries` + `Array.from` pattern from the design document
     - _Requirements: 1.2_
 
-  - [~] 1.3 Write property test for spacing scale
+  - [ ] 1.3 Write property test for spacing scale
     - **Property 1: Spacing scale follows the 4 px base unit formula**
     - Create `src/design-system/__tests__/spacing.test.ts` using `fast-check` + `vitest`
     - Assert `spacing[k] === k * 0.25 + "rem"` for every integer k in [0, 16]
@@ -70,7 +70,7 @@ No routes, API calls, business logic, form handlers, or feature behavior shall c
     - Hover transition: `transition-colors duration-150`
     - _Requirements: 5.1–5.9_
 
-  - [~] 4.2 Write property tests for Button component
+  - [ ] 4.2 Write property tests for Button component
     - Create `src/components/ui/__tests__/Button.test.tsx`
     - **Property 2: Button renders without throwing for any variant string** — use `fc.string()` to generate arbitrary variant values
     - **Property 3: Button applies variant-specific classes for all valid variants** — use `fc.constantFrom` over the six valid variant names
@@ -82,7 +82,7 @@ No routes, API calls, business logic, form handlers, or feature behavior shall c
     - Update sub-component padding: `CardHeader` `p-4`/`p-5` with `border-b border-theme-border`; `CardContent` `p-4`/`p-5`; `CardFooter` `p-4` with `border-t border-theme-border bg-theme-elevated`
     - _Requirements: 6.1–6.6_
 
-  - [~] 4.4 Write property test for AppCard hoverable prop
+  - [ ] 4.4 Write property test for AppCard hoverable prop
     - Create `src/components/ui/__tests__/Card.test.tsx`
     - **Property 7: AppCard hoverable prop controls elevation classes** — use `fc.boolean()` and assert presence/absence of hover shadow and translate classes
     - **Validates: Requirements 6.3**
@@ -94,7 +94,7 @@ No routes, API calls, business logic, form handlers, or feature behavior shall c
     - Remove all hardcoded hex values; use only CSS variable tokens
     - _Requirements: 11.1–11.6_
 
-  - [~] 4.6 Write property test for Input error propagation
+  - [ ] 4.6 Write property test for Input error propagation
     - Create `src/components/ui/__tests__/Input.test.tsx`
     - **Property 4: Input error prop propagates to rendered output** — use `fc.string({ minLength: 1 })`, assert error text node present and red border class on input element
     - **Validates: Requirements 11.5**
@@ -107,7 +107,7 @@ No routes, API calls, business logic, form handlers, or feature behavior shall c
     - Remove the dark `bg-theme-base` override on the select element itself
     - _Requirements: 9.1–9.6_
 
-  - [~] 4.8 Write property test for AppSelect error propagation
+  - [ ] 4.8 Write property test for AppSelect error propagation
     - Create `src/components/ui/__tests__/Select.test.tsx`
     - **Property 5: Select error prop propagates to rendered output** — use `fc.string({ minLength: 1 })`, assert error text node present and red border class on select element
     - **Validates: Requirements 9.6**
@@ -145,7 +145,7 @@ No routes, API calls, business logic, form handlers, or feature behavior shall c
     - Extract pure `paginationSummary(n, itemsPerPage, currentPage)` helper function from Table.tsx for testability
     - _Requirements: 7.1–7.10_
 
-  - [~] 6.3 Write property test for DataTable pagination summary
+  - [ ] 6.3 Write property test for DataTable pagination summary
     - Create `src/components/shared/__tests__/Table.test.tsx`
     - **Property 6: DataTable pagination entry count is correct for any dataset size** — use `fc.integer` for `n` and `itemsPerPage`, derive valid `currentPage`, assert "Showing X to Y of n entries" output
     - **Validates: Requirements 7.8**
@@ -231,30 +231,30 @@ No routes, API calls, business logic, form handlers, or feature behavior shall c
     - If any VSWM CRUD page overrides Button variants or card styling locally, remove those overrides and defer to `CrudDirectory`
     - _Requirements: 19.1–19.8_
 
-- [~] 9. Checkpoint — Screen migrations complete
+- [ ] 9. Checkpoint — Screen migrations complete
   - Run `tsc --noEmit` and `vitest --run` and confirm all tests pass. Ask the user if questions arise.
 
-- [~] 10. Icon standardization sweep
-  - [~] 10.1 Audit and remove duplicate inline SVGs
+- [ ] 10. Icon standardization sweep
+  - [ ] 10.1 Audit and remove duplicate inline SVGs
     - Search all component files for inline `<svg>` elements that duplicate a Lucide icon
     - Replace each with the corresponding `lucide-react` import (e.g., `import { Truck } from 'lucide-react'`)
     - Do not change any icon that has no Lucide equivalent — leave in place
     - _Requirements: 12.1–12.5_
 
-- [~] 11. UI Audit and documentation
-  - [~] 11.1 Write `src/design-system/UI_AUDIT_REPORT.md`
+- [ ] 11. UI Audit and documentation
+  - [ ] 11.1 Write `src/design-system/UI_AUDIT_REPORT.md`
     - Enumerate all components and files that had hardcoded hex colors (before migration)
     - List all components that used non-standard spacing
     - List all pages that mixed multiple card or table styles
     - List all icon usages that were outside Lucide React
     - _Requirements: 23.1_
 
-  - [~] 11.2 Write `src/design-system/MIGRATION_SUMMARY.md`
+  - [ ] 11.2 Write `src/design-system/MIGRATION_SUMMARY.md`
     - List every file modified, every component created or refactored, and every screen affected
     - Note design decisions made (e.g., white background for selects, left-border active indicator, success variant for CRUD submit)
     - _Requirements: 23.2_
 
-- [-] 12. Final checkpoint — Full build verification
+- [ ] 12. Final checkpoint — Full build verification
   - Run `tsc --noEmit` and confirm zero TypeScript errors introduced by the redesign
   - Run `vitest --run` and confirm all property tests and unit tests pass
   - Ensure all test files created in tasks 1.3, 4.2, 4.4, 4.6, 4.8, 6.3 are passing

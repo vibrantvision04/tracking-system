@@ -186,14 +186,14 @@ export default function HomePage() {
             <CoverageChart 
               title="D2D Coverage" 
               percentage={computedD2D} 
-              color="#ef4444" 
+              color="#10B981" 
               subtitle={d2dActiveShiftName} 
               onClick={() => setIsDrawerOpen(true)}
             />
             <CoverageChart 
               title="Open Depot Coverage" 
               percentage={openDepotDashboard?.kpis?.coverage_percentage ?? 0} 
-              color="#ef4444" 
+              color="#10B981" 
               subtitle={openDepotDashboard?.active_shift?.shift_name || "No Active Shift"} 
               onClick={() => setIsOpenDepotDrawerOpen(true)}
             />

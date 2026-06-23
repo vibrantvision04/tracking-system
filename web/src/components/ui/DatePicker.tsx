@@ -31,7 +31,7 @@ export function DatePicker({
       <input
         type={type}
         id={generatedId}
-        className={`w-full h-9 bg-white text-gray-900 border border-gray-300 rounded-[8px] px-3 focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 transition-all duration-150 ${
+        className={`w-full h-9 bg-white text-gray-900 border border-gray-300 rounded-[8px] px-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/30 transition-all duration-150 ${
           error ? 'border-[#EF4444]' : ''
         } ${className}`}
         {...props}

@@ -30,7 +30,7 @@ export default function Input({
       <input
         type={type}
         id={generatedId}
-        className={`w-full bg-(--color-theme-background-base) border border-theme-border rounded-[12px] px-3 py-2 text-theme-text placeholder:text-theme-text-dim focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 transition-all duration-150 ${
+        className={`w-full bg-(--color-theme-background-base) border border-theme-border rounded-[12px] px-3 py-2 text-theme-text placeholder:text-theme-text-dim focus:outline-none focus:ring-2 focus:ring-[#10B981]/30 transition-all duration-150 ${
           error
             ? "border-[#EF4444] focus:ring-[#EF4444]/20"
             : ""

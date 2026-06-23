@@ -7,6 +7,8 @@
 import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { api, post, put, del } from "@/lib/api";
+import Table from "@/components/shared/Table";
+import Select from "@/components/ui/Select";
 
 const RegionMap = dynamic(() => import("@/components/RegionMap"), { ssr: false });
 
@@ -56,14 +58,7 @@ export default function RegionManager() {
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 30;
-
-  // Reset page when filter changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filterText]);
+  // Pagination states removed. Handled by reusable Table component.
 
   const loadData = async () => {
     try {
@@ -385,14 +380,11 @@ export default function RegionManager() {
 
       {/* Region Type */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
-          Region Type<span className="text-red-500">*</span>
-        </label>
-        <select
+        <Select
+          label="Region Type"
           required
           value={form.region_type_id}
           onChange={(e) => setForm({ ...form, region_type_id: e.target.value })}
-          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold cursor-pointer"
         >
           <option value="">Select</option>
           {regionTypes.map((t) => (
@@ -400,19 +392,15 @@ export default function RegionManager() {
               {t.title}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {/* Parent Region */}
       <div className="space-y-1">
-        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
-          Parent Region<span className="text-red-500">*</span>
-        </label>
-        <select
-          required
+        <Select
+          label="Parent Region"
           value={form.parent_id}
           onChange={(e) => setForm({ ...form, parent_id: e.target.value })}
-          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold cursor-pointer"
         >
           <option value="">Select</option>
           {regions
@@ -422,7 +410,7 @@ export default function RegionManager() {
                 {r.region_name}
               </option>
             ))}
-        </select>
+        </Select>
       </div>
 
       {/* Wards Assignment Multi-Select for Zones */}
@@ -565,10 +553,8 @@ export default function RegionManager() {
     );
   });
 
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedRegions = filteredRegions.slice(startIndex, endIndex);
-  const totalPages = Math.ceil(filteredRegions.length / itemsPerPage);
+  // Pagination endpoints sliced. Handled inside Table.
+  const startIndex = 0;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden relative select-none">
@@ -716,8 +702,8 @@ export default function RegionManager() {
                 </div>
 
                 {/* Table listing */}
-                <div className="bg-theme-surface rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-                  <div className="p-4 border-b border-slate-100 flex justify-end">
+                <div className="bg-theme-surface rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col p-4">
+                  <div className="flex justify-end mb-4">
                     <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-80 select-none">
                       <input
                         type="text"
@@ -735,139 +721,60 @@ export default function RegionManager() {
                     </form>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-theme-surface border-b border-slate-100 text-theme-text-dim uppercase font-black tracking-wider">
-                          <th className="py-3.5 px-6 w-20">S. No.</th>
-                          <th className="py-3.5 px-6">Name</th>
-                          <th className="py-3.5 px-6">Code</th>
-                          <th className="py-3.5 px-6">Region Type</th>
-                          <th className="py-3.5 px-6">Parent Region</th>
-                          <th className="py-3.5 px-6 w-28 text-center">Fill Color</th>
-                          <th className="py-3.5 px-6 w-32 text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-theme-text">
-                        {paginatedRegions.map((reg, index) => (
-                          <tr key={reg.id} className="hover:bg-theme-surface/50 transition-colors">
-                            <td className="py-3.5 px-6 font-mono text-theme-text-dim">{startIndex + index + 1}</td>
-                            <td className="py-3.5 px-6 text-theme-text font-bold">{reg.region_name}</td>
-                            <td className="py-3.5 px-6">{reg.region_code || <span className="text-theme-text font-medium">—</span>}</td>
-                            <td className="py-3.5 px-6">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-theme-surface border border-theme-border text-theme-text-dim font-bold uppercase tracking-wider">
-                                {reg.region_type_title}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-6 text-theme-text-dim">
-                              {reg.parent_region_name || <span className="text-theme-text font-medium">—</span>}
-                            </td>
-                            <td className="py-3.5 px-6 text-center">
-                              <div className="inline-flex items-center gap-1.5">
-                                <span
-                                  className="w-3.5 h-3.5 rounded border border-theme-border shadow-sm"
-                                  style={{ backgroundColor: reg.color || "#fba339" }}
-                                />
-                                <span className="text-[10px] font-mono text-theme-text-dim uppercase">
-                                  {reg.color || "#fba339"}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-6 text-center">
-                              <div className="inline-flex gap-2">
-                                <button
-                                  onClick={() => handleEditClick(reg)}
-                                  className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-theme-accent hover:bg-theme-surface-hover hover:border-theme-border transition-all"
-                                  title="Edit Region on Map"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(reg.id)}
-                                  className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all"
-                                  title="Delete Region"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        {filteredRegions.length === 0 && (
-                          <tr>
-                            <td colSpan={7} className="text-center py-10 text-theme-text-dim font-medium">
-                              No regions configured.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="bg-theme-surface border-t border-theme-border px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <div className="text-theme-text-dim text-xs font-bold">
-                      Showing {filteredRegions.length > 0 ? startIndex + 1 : 0} to{" "}
-                      {Math.min(endIndex, filteredRegions.length)} of {filteredRegions.length} total
-                    </div>
-
-                    {totalPages > 1 && (
-                      <div className="inline-flex gap-1">
-                        <button
-                          type="button"
-                          disabled={currentPage === 1}
-                          onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                          className="px-2.5 py-1 bg-theme-surface hover:bg-theme-surface border border-theme-border rounded text-[10px] font-extrabold text-theme-text-dim disabled:opacity-40 transition-all select-none"
-                        >
-                          Prev
-                        </button>
-
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                          const isAdjacent = Math.abs(page - currentPage) <= 1 || page === 1 || page === totalPages;
-                          const showEllipsis = Math.abs(page - currentPage) === 2 && page !== 1 && page !== totalPages;
-
-                          if (showEllipsis) {
-                            return (
-                              <span key={page} className="w-6 h-6 flex items-center justify-center text-[10px] text-theme-text-dim font-bold select-none">
-                                ...
-                              </span>
-                            );
-                          }
-
-                          if (!isAdjacent) {
-                            return null;
-                          }
-
-                          return (
+                  <Table
+                    headers={["S. No.", "Name", "Code", "Region Type", "Parent Region", "Fill Color", "Action"]}
+                    itemsPerPage={30}
+                    emptyState="No regions configured."
+                  >
+                    {filteredRegions.map((reg, index) => (
+                      <tr key={reg.id} className="hover:bg-theme-surface/50 transition-colors">
+                        <td className="py-3.5 px-6 font-mono text-theme-text-dim">{index + 1}</td>
+                        <td className="py-3.5 px-6 text-theme-text font-bold">{reg.region_name}</td>
+                        <td className="py-3.5 px-6">{reg.region_code || <span className="text-theme-text font-medium">—</span>}</td>
+                        <td className="py-3.5 px-6">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-theme-surface border border-theme-border text-theme-text-dim font-bold uppercase tracking-wider">
+                            {reg.region_type_title}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-6 text-theme-text-dim">
+                          {reg.parent_region_name || <span className="text-theme-text font-medium">—</span>}
+                        </td>
+                        <td className="py-3.5 px-6 text-center">
+                          <div className="inline-flex items-center gap-1.5">
+                            <span
+                              className="w-3.5 h-3.5 rounded border border-theme-border shadow-sm"
+                              style={{ backgroundColor: reg.color || "#fba339" }}
+                            />
+                            <span className="text-[10px] font-mono text-theme-text-dim uppercase">
+                              {reg.color || "#fba339"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-6 text-center">
+                          <div className="inline-flex gap-2">
                             <button
-                              key={page}
-                              type="button"
-                              onClick={() => setCurrentPage(page)}
-                              className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-extrabold transition-all select-none
-                                ${currentPage === page
-                                  ? "bg-theme-accent text-white shadow-sm"
-                                  : "bg-theme-surface hover:bg-theme-surface border border-theme-border text-theme-text-dim"
-                                }`}
+                              onClick={() => handleEditClick(reg)}
+                              className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-theme-accent hover:bg-theme-surface-hover hover:border-theme-border transition-all cursor-pointer"
+                              title="Edit Region on Map"
                             >
-                              {page}
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
                             </button>
-                          );
-                        })}
-
-                        <button
-                          type="button"
-                          disabled={currentPage === totalPages}
-                          onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                          className="px-2.5 py-1 bg-theme-surface hover:bg-theme-surface border border-theme-border rounded text-[10px] font-extrabold text-theme-text-dim disabled:opacity-40 transition-all select-none"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                            <button
+                              onClick={() => handleDelete(reg.id)}
+                              className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all cursor-pointer"
+                              title="Delete Region"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </Table>
                 </div>
 
               </div>
