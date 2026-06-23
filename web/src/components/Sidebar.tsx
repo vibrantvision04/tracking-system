@@ -31,18 +31,12 @@ const navData = [
       { label: "Vehicle List", href: "/vehicles" },
       { label: "Vehicle Type", href: "/vswm/vehicle-type" },
       { label: "Vehicle Master Data", href: "/vswm/vehicle-make" },
-      { label: "Vehicle Group", href: "/vswm/vehicle-groups" },
       { label: "Capacity Type", href: "/vswm/capacity-type" },
-      { label: "Fuel Rate", href: "/vswm/fuel-rate" },
-      { label: "Contractors", href: "/vswm/contractors" },
       {
         label: "Assignments",
         children: [
-          { label: "GPS Device To Vehicle", href: "/vswm/gpsdevice-vehicle" },
           { label: "Vehicle To Region", href: "/vswm/vehicle-region" },
           { label: "Vehicle To Department", href: "/vswm/vehicle-department" },
-          { label: "Vehicle To Groups", href: "/vswm/vehicle-groups-mapping" },
-          { label: "Fuel To Vehicle", href: "/vswm/vehicle-fuel" },
         ],
       },
       {
@@ -93,13 +87,10 @@ const navData = [
       { label: "Open Depot", href: "/vswm/open-depot" },
       { label: "Fuel Station", href: "/vswm/fuel-station" },
       { label: "Fuel Companies", href: "/vswm/fuel-company" },
-      { label: "Fuel Type", href: "/vswm/fuel-type" },
-      { label: "Upload Fuel Transactions", href: "/vswm/upload-fuel-transaction" },
       {
         label: "Depute",
         children: [
           { label: "Incharge at TS", href: "/vswm/incharge-transferstation" },
-          { label: "Incharge at Fuel Station", href: "/vswm/incharge-fuelstation" },
         ],
       },
     ],

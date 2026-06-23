@@ -178,20 +178,17 @@ export default function VehiclePurposePage() {
         {/* Stats Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {[
-            { label: "Total Categories", value: purposes.length},
-            { label: "Active Nodes", value: purposes.filter((p) => p.is_active).length  },
+            { label: "Total Categories", value: purposes.length },
+            { label: "Active Nodes", value: purposes.filter((p) => p.is_active).length },
             { label: "Inactive Nodes", value: purposes.filter((p) => !p.is_active).length },
           ].map((stat) => (
             <div
               key={stat.label}
-              className="bg-theme-surface border border-theme-border rounded-xl px-5 py-4 flex items-center gap-4 shadow-sm hover:shadow transition"
+              className="bg-theme-surface border border-theme-border rounded-xl px-5 py-4 shadow-sm hover:shadow transition"
             >
-              <span className="text-2xl">{stat.icon}</span>
-              <div>
-                <div className="text-xl font-extrabold text-theme-text leading-none">{stat.value}</div>
-                <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mt-1.5">
-                  {stat.label}
-                </div>
+              <div className="text-xl font-extrabold text-theme-text leading-none">{stat.value}</div>
+              <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mt-1.5">
+                {stat.label}
               </div>
             </div>
           ))}
