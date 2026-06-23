@@ -61,9 +61,10 @@ if (typeof document !== "undefined" && !document.getElementById("lm-pulse")) {
 interface Props { 
   vehicles: Vehicle[];
   showMenu?: boolean;
+  centerOnVehicleImei?: string;
 }
 
-export default function LiveMap({ vehicles, showMenu = true }: Props) {
+export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const markers = useRef<Record<string, L.Marker>>({});
   // Cache last rendered icon key (color+emoji) per IMEI — skip icon rebuild when unchanged
@@ -798,6 +799,20 @@ export default function LiveMap({ vehicles, showMenu = true }: Props) {
 
   const showRegistrationNoRef = useRef(showRegistrationNo);
   useEffect(() => { showRegistrationNoRef.current = showRegistrationNo; }, [showRegistrationNo]);
+
+  useEffect(() => {
+    if (!centerOnVehicleImei || !mapRef.current) return;
+    const marker = markers.current[centerOnVehicleImei];
+    if (marker) {
+      mapRef.current.setView(marker.getLatLng(), 16, { animate: true });
+      marker.openPopup();
+    } else {
+      const v = vehicles.find(vv => vv.gps_device?.imei === centerOnVehicleImei);
+      if (v && v.last_lat && v.last_lng) {
+        mapRef.current.setView([v.last_lat, v.last_lng], 16, { animate: true });
+      }
+    }
+  }, [centerOnVehicleImei, vehicles]);
 
   // ─── WebSocket for real-time GPS ───
   useEffect(() => {

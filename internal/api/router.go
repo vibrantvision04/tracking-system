@@ -157,6 +157,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Get("/reports/alert-detail", h.GetAlertDetailReport)
 		r.Get("/reports/lane-monitoring", h.GetLaneMonitoringReport)
 		r.Get("/reports/active-vehicle-summary", h.GetActiveVehicleSummaryReport)
+		r.Get("/reports/active-vehicle-summary-by-ward", h.GetActiveVehicleSummaryByWardReport)
 		r.Get("/reports/geofence-event", h.GetGeofenceEventReport)
 		r.Get("/reports/ward-geofence", h.GetWardGeofenceReport)
 		r.Get("/reports/gts-trips", h.GetGTSTripReport)

@@ -1,40 +1,39 @@
 import React from 'react';
 import { Nfc } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
 
 export default function RFIDCoverageCard({ percentage = 85 }: { percentage?: number }) {
   return (
-    <Card hoverable className="p-6 flex flex-col h-full justify-center relative overflow-hidden">
-      <div className="flex items-center gap-3.5 mb-5 z-10">
-        <div className="p-2.5 bg-[#10B981]/10 text-[#10B981] rounded-full border border-[#10B981]/20 flex items-center justify-center shrink-0">
-          <Nfc size={18} />
+    <div className="p-5 rounded-2xl border border-slate-200/60 bg-gradient-to-br from-white/95 to-slate-50/50 flex flex-col h-full justify-between shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 group relative overflow-hidden">
+      <div className="flex items-center justify-between gap-3 mb-3.5 z-10">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+          RFID Tag Coverage
+        </h3>
+        <div className="w-9 h-9 rounded-xl border border-emerald-200/40 bg-emerald-100/70 text-emerald-600 flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110 shadow-sm">
+          <Nfc size={16} />
         </div>
-        <h3 className="text-xs font-bold text-theme-text-dim uppercase tracking-wider leading-none">RFID Tag Coverage</h3>
       </div>
       
-      <div className="flex items-end gap-2 mb-3 z-10">
-        <span className="text-4xl font-extrabold text-theme-text leading-none">{percentage}%</span>
-        <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1">Scanned Today</span>
-      </div>
+      <div className="z-10 mt-auto flex flex-col">
+        <div className="flex items-baseline gap-2 mb-3.5">
+          <span className="text-3xl font-black text-slate-800 tracking-tight leading-none font-sans">
+            {percentage}%
+          </span>
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">
+            Bins Monitored
+          </span>
+        </div>
 
-      <div className="w-full bg-theme-elevated rounded-full h-2.5 mb-1 overflow-hidden z-10">
-        <div 
-          className="bg-[#10B981] h-2.5 rounded-full transition-all duration-1000 ease-out" 
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-
-      {/* Subtle red wave decoration at the bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none opacity-20 select-none overflow-hidden">
-        <svg viewBox="0 0 120 28" className="w-full h-full text-[#10B981]" fill="none" preserveAspectRatio="none">
-          <path 
-            d="M0 18 C 30 18, 40 4, 70 4 C 100 4, 110 22, 120 22" 
-            stroke="currentColor" 
-            strokeWidth="2" 
-            strokeLinecap="round"
+        <div className="w-full bg-slate-100/80 rounded-full h-3 overflow-hidden border border-slate-200/20 p-[2px]">
+          <div 
+            className="bg-gradient-to-r from-emerald-400 to-[#10B981] h-full rounded-full transition-all duration-1000 ease-out shadow-sm" 
+            style={{ width: `${percentage}%` }}
           />
-        </svg>
+        </div>
       </div>
-    </Card>
+
+      {/* Decorative gradient overlay */}
+      <div className="absolute -bottom-10 -right-10 w-24 h-24 rounded-full filter blur-xl opacity-10 transition-opacity duration-300 group-hover:opacity-20 pointer-events-none bg-emerald-500" />
+    </div>
   );
 }
+

@@ -1,6 +1,5 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Card } from '@/components/ui/Card';
 
 interface CoverageChartProps {
   title: string;
@@ -10,43 +9,66 @@ interface CoverageChartProps {
   onClick?: () => void;
 }
 
-export default function CoverageChart({ title, percentage, color = '#3b82f6', subtitle, onClick }: CoverageChartProps) {
+export default function CoverageChart({ 
+  title, 
+  percentage, 
+  color = '#10B981', 
+  subtitle, 
+  onClick 
+}: CoverageChartProps) {
+  
   const data = [
     { name: 'Covered', value: percentage },
     { name: 'Remaining', value: Math.max(0, 100 - percentage) },
   ];
 
+  // Derive gradient coordinates depending on color
+  const gradientId = `grad-${title.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
+
   return (
-    <Card
-      hoverable
+    <div
       onClick={onClick}
-      className={`p-6 flex flex-col h-full ${onClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
+      className={`p-5 rounded-2xl border border-slate-200/60 bg-gradient-to-br from-white/95 to-slate-50/50 flex flex-col h-full shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 group ${
+        onClick ? 'cursor-pointer active:scale-[0.99] hover:border-emerald-300' : ''
+      }`}
     >
-      <h3 className="text-sm font-semibold text-theme-text-dim uppercase tracking-wider mb-2">{title}</h3>
-      <div className="flex-1 relative min-h-[140px]">
+      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 leading-none">{title}</h3>
+      <div className="flex-1 relative min-h-[145px] flex items-center justify-center">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#10B981" />
+                <stop offset="100%" stopColor="#059669" />
+              </linearGradient>
+            </defs>
             <Pie
               data={data}
               cx="50%"
               cy="50%"
-              innerRadius="65%"
-              outerRadius="85%"
+              innerRadius="70%"
+              outerRadius="90%"
               startAngle={90}
               endAngle={-270}
               dataKey="value"
               stroke="none"
             >
-              <Cell key="cell-0" fill={color} />
-              <Cell key="cell-1" fill="var(--color-theme-elevated, #f1f5f9)" />
+              <Cell key="cell-0" fill={`url(#${gradientId})`} />
+              <Cell key="cell-1" fill="#f1f5f9" />
             </Pie>
           </PieChart>
         </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-3xl font-extrabold text-theme-text">{percentage}%</span>
-          {subtitle && <span className="text-[10px] font-semibold text-theme-text-dim uppercase mt-1 tracking-wider">{subtitle}</span>}
+        
+        {/* Central visual indicator */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
+          <span className="text-3xl font-black text-slate-800 font-sans tracking-tight leading-none">{percentage}%</span>
+          {subtitle && (
+            <span className="text-[9px] font-extrabold text-slate-400 uppercase mt-2 tracking-wider max-w-[80%] text-center truncate">
+              {subtitle}
+            </span>
+          )}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }

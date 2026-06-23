@@ -8,6 +8,19 @@ import { FilterBar } from "@/components/shared/FilterBar";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 import Button from "@/components/ui/Button";
+import {
+  Play,
+  Pause,
+  Square,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Calendar,
+  Layers,
+  Gauge,
+  Activity
+} from "lucide-react";
 
 interface StoppagePoint {
   startIndex: number;
@@ -626,6 +639,9 @@ export default function PlaybackPage() {
   const [playing, setPlaying] = useState(false);
   const [stoppages, setStoppages] = useState<StoppagePoint[]>([]);
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
+  const [activeRightTab, setActiveRightTab] = useState<"checkpoints" | "stoppages">("checkpoints");
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState<boolean>(false);
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState<boolean>(false);
 
   const assignedRouteColorRef = useRef<string>("#f97316");
   const box = useRef<HTMLDivElement>(null);
@@ -2928,279 +2944,353 @@ export default function PlaybackPage() {
       `}} />
 
       {/* Sub-header / Playback Title with Green Line */}
-      <div className="bg-theme-surface px-6 py-2 border-b border-theme-border shrink-0">
-        <h2 className="text-base font-bold text-theme-text">Playback</h2>
-        <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-theme-text">Playback</h2>
+          <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+        </div>
       </div>
 
-      {/* HORIZONTAL CONTROLS PANEL */}
-      <section className="bg-theme-surface border-b border-theme-border px-6 py-3.5 z-10 shrink-0 w-full flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3.5 w-full">
+      {/* Map and Floating Panels Area */}
+      <div className="flex-1 relative overflow-hidden">
+        
+        {/* Leaflet Map takes full size and serves as the background */}
+        <div ref={box} className="absolute inset-0 z-0 bg-theme-base w-full h-full" />
 
-          {/* Date Picker */}
-          <div className="min-w-[130px]">
-            <DatePicker
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setRouteIdParam(null);
-              }}
-              className="w-full bg-white border border-slate-200 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium shadow-sm"
-            />
+        {/* Left Panel: Collapsible Configuration & Telemetry */}
+        <div className={`absolute top-4 left-4 z-[1000] h-[calc(100%-32px)] w-80 flex transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          leftPanelCollapsed ? '-translate-x-[calc(100%-12px)]' : 'translate-x-0'
+        }`}>
+          {/* Main Card */}
+          <div className="w-80 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-2xl p-4 flex flex-col h-full">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🚚</span>
+                <h3 className="font-extrabold text-slate-800 tracking-tight uppercase text-[11px]">Configure Playback</h3>
+              </div>
+            </div>
+
+            {/* Scrollable Filters */}
+            <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar min-h-0 space-y-4 text-slate-800">
+              {/* Search Filters */}
+              <div className="space-y-3.5">
+                {/* Date Picker */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" /> Date
+                  </label>
+                  <DatePicker
+                    type="date"
+                    value={date}
+                    onChange={(e) => {
+                      setDate(e.target.value);
+                      setRouteIdParam(null);
+                    }}
+                    className="w-full bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-750 focus:border-emerald-500 outline-none transition cursor-pointer font-medium shadow-sm"
+                  />
+                </div>
+
+                {/* Select Zone */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Zone</label>
+                  <SearchableSelect
+                    value={selectedZoneId}
+                    onChange={(val) => {
+                      setSelectedZoneId(val);
+                      setSelectedWardId("");
+                      setSelectedImei("");
+                      setRouteIdParam(null);
+                      setSelectedRouteId("");
+                    }}
+                    options={zoneOptions}
+                    placeholder="Select Zone"
+                    className="w-full text-slate-800"
+                  />
+                </div>
+
+                {/* Select Ward */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ward</label>
+                  <SearchableSelect
+                    value={selectedWardId}
+                    onChange={(val) => {
+                      setSelectedWardId(val);
+                      setSelectedImei("");
+                      setRouteIdParam(null);
+                      setSelectedRouteId("");
+                    }}
+                    options={wardOptions}
+                    placeholder="Select Ward"
+                    className="w-full text-slate-800"
+                  />
+                </div>
+
+                {/* Select Shift */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Shift</label>
+                  <SearchableSelect
+                    value={selectedShift}
+                    onChange={(val) => {
+                      setSelectedShift(val);
+                      setRouteIdParam(null);
+                      if (selectedImei) {
+                        resolveRouteAndSyncFilters(selectedImei, val);
+                      }
+                    }}
+                    options={shiftOptions}
+                    placeholder="Select Shift"
+                    className="w-full text-slate-800"
+                  />
+                </div>
+
+                {/* Select Vehicle */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Vehicle</label>
+                  <SearchableSelect
+                    value={selectedImei}
+                    onChange={handleVehicleSelect}
+                    options={vehicleOptions}
+                    placeholder="Select Vehicle"
+                    className="w-full text-slate-800"
+                  />
+                </div>
+              </div>
+
+              {/* Telemetry and Stats Section (Visible only when vehicle loaded) */}
+              {selectedImei && points.length > 0 && (
+                <div className="border-t border-slate-100 pt-4 space-y-3.5">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Telemetry & Snapping
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 text-slate-600 font-mono text-[11px] bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">GPS Points</span>
+                      <span className="font-bold text-slate-700 text-sm">{totalGpsPoints}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Confidence</span>
+                      <span className="font-bold text-violet-600 text-sm">
+                        {aiConfidence !== null ? `${Math.round(aiConfidence)}%` : "N/A"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Stoppages</span>
+                      <span className="font-bold text-rose-500 text-sm">{stoppages.length}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Snapped</span>
+                      <span className="font-bold text-emerald-600 text-sm">{snappedPointsCount}</span>
+                    </div>
+                    <div className="flex flex-col col-span-2 border-t border-slate-200/55 pt-1.5">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Corridor</span>
+                      <span className="font-bold text-slate-700 text-xs truncate">{activeCorridor}</span>
+                    </div>
+                  </div>
+
+                  {/* Toggle switches for Snapping settings */}
+                  <div className="space-y-2.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer select-none">
+                      <span className="font-semibold text-slate-700">AI Route Snapping</span>
+                      <input
+                        type="checkbox"
+                        checked={aiRouteCorrectionActive}
+                        onChange={(e) => setAiRouteCorrectionActive(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer select-none">
+                      <span className="font-semibold text-slate-700">Aggressive Snapping</span>
+                      <input
+                        type="checkbox"
+                        checked={aggressiveSnapping}
+                        onChange={(e) => setAggressiveSnapping(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Select Zone */}
-          <div className="min-w-[150px]">
-            <SearchableSelect
-              value={selectedZoneId}
-              onChange={(val) => {
-                setSelectedZoneId(val);
-                setSelectedWardId("");
-                setSelectedImei("");
-                setRouteIdParam(null);
-                setSelectedRouteId("");
-              }}
-              options={zoneOptions}
-              placeholder="Select Zone"
-              className="w-full"
-            />
-          </div>
-
-          {/* Select Ward */}
-          <div className="min-w-[150px]">
-            <SearchableSelect
-              value={selectedWardId}
-              onChange={(val) => {
-                setSelectedWardId(val);
-                setSelectedImei("");
-                setRouteIdParam(null);
-                setSelectedRouteId("");
-              }}
-              options={wardOptions}
-              placeholder="Select Ward"
-              className="w-full"
-            />
-          </div>
-
-          {/* Select Shift */}
-          <div className="min-w-[150px]">
-            <SearchableSelect
-              value={selectedShift}
-              onChange={(val) => {
-                setSelectedShift(val);
-                setRouteIdParam(null);
-                if (selectedImei) {
-                  resolveRouteAndSyncFilters(selectedImei, val);
-                }
-              }}
-              options={shiftOptions}
-              placeholder="Select Shift"
-              className="w-full"
-            />
-          </div>
-
-          {/* Select Vehicle */}
-          <div className="min-w-[170px]">
-            <SearchableSelect
-              value={selectedImei}
-              onChange={handleVehicleSelect}
-              options={vehicleOptions}
-              placeholder="Select Vehicle"
-              className="w-full"
-            />
-          </div>
-
-
-
-          {/* Speed Selector */}
-          <div className="min-w-[80px]">
-            <select
-              value={speedMultiplier}
-              onChange={(e) => setSpeedMultiplier(Number(e.target.value))}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-800 focus:border-emerald-500 outline-none transition cursor-pointer font-bold"
-            >
-              <option value={1}>1X</option>
-              <option value={2}>2X</option>
-              <option value={4}>4X</option>
-              <option value={8}>8X</option>
-              <option value={16}>16X</option>
-              <option value={32}>32X</option>
-              <option value={64}>64X</option>
-            </select>
-          </div>
-
-
-
-          {/* Playback Controls Row */}
+          {/* Toggle Handle */}
           <button
-            type="button"
-            disabled={!selectedImei}
-            onClick={() => {
-              if (points.length === 0) {
-                loadRoute(true);
-              } else {
-                const nextPlaying = !playing;
-                setPlaying(nextPlaying);
-                if (!nextPlaying && intervalRef.current) {
-                  clearTimeout(intervalRef.current);
-                  intervalRef.current = null;
-                }
-              }
-            }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${!selectedImei
-              ? "bg-slate-700 cursor-not-allowed shadow-none"
-              : "bg-[#22c55e] hover:bg-[#16a34a] active:scale-95 shadow-[#22c55e]/20 cursor-pointer hover:shadow-lg"
-              }`}
-            title={!selectedImei ? "Please select a vehicle first" : playing ? "Pause Playback" : "Start Playback"}
+            onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
+            className="self-center -mr-3.5 w-7 h-14 bg-white hover:bg-slate-50 border border-slate-200/80 shadow-lg rounded-r-xl flex items-center justify-center text-slate-500 hover:text-slate-800 transition z-10 focus:outline-none"
           >
-            {playing ? (
-              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-            ) : (
-              <svg className="w-3.5 h-3.5 fill-current translate-x-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-            )}
-          </button>
-
-          {/* Stop Button */}
-          <button
-            type="button"
-            disabled={points.length === 0}
-            onClick={handleStop}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${points.length === 0
-              ? "bg-slate-700 text-slate-500 cursor-not-allowed shadow-none"
-              : "bg-[#ef4444] hover:bg-[#dc2626] active:scale-95 shadow-[#ef4444]/20 cursor-pointer hover:shadow-lg"
-              }`}
-            title="Show Full Route / Stop Playback"
-          >
-            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-              <rect x="5" y="5" width="14" height="14" rx="2" />
-            </svg>
-          </button>
-
-          {/* Reset Button */}
-          <button
-            type="button"
-            onClick={handleReset}
-            className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white flex items-center justify-center shadow-md shadow-blue-500/20 transition-all shrink-0 cursor-pointer hover:shadow-lg"
-            title="Reset Filters and Playback"
-          >
-            <svg className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="2.5" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-            </svg>
+            {leftPanelCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
         </div>
 
-        {/* Playback Progress timeline scrub slider - Always visible */}
-        <div className="w-full flex items-center gap-3 mt-1">
-          <span className="text-xs font-semibold font-mono text-theme-text w-14 shrink-0 text-left">
-            {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[idx]?.time) : "00:00:00"}
-          </span>
-          <input
-            type="range"
-            min={0}
-            max={playbackSteps.length > 0 ? playbackSteps.length - 1 : 100}
-            value={playbackSteps.length > 0 ? idx : 0}
-            disabled={playbackSteps.length === 0}
-            onChange={(e) => {
-              if (playbackSteps.length > 0) {
-                setPlaying(false);
-                if (intervalRef.current) {
-                  clearTimeout(intervalRef.current);
-                  intervalRef.current = null;
-                }
-                setIdx(Number(e.target.value));
-              }
-            }}
-            className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-200 accent-[#10B981] appearance-none outline-none"
-          />
-          <span className="text-xs font-semibold font-mono text-theme-text w-14 shrink-0 text-right">
-            {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[playbackSteps.length - 1]?.time) : "00:00:00"}
-          </span>
-        </div>
-      </section>
-
-      {/* Split map layout */}
-      <div className="flex-1 relative flex flex-col md:flex-row overflow-hidden">
-
-        {/* Leaflet Map takes full size */}
-        <div ref={box} className="flex-1 w-full h-full z-0 bg-theme-base" />
-
-        {/* Floating AI Confidence Badge */}
-        {aiConfidence !== null && (
-          <div className="absolute bottom-16 left-4 z-[1000] bg-violet-600/90 backdrop-blur text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-2xl border border-violet-400/30 flex items-center gap-2 select-none pointer-events-none animate-fade-in">
-            <span className="text-base animate-pulse">🧠</span>
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-wider text-violet-200 font-bold">Viterbi Alignment</span>
-              <span className="text-sm font-black font-mono">AI Confidence: {Math.round(aiConfidence)}%</span>
-            </div>
-          </div>
-        )}
-
-        {/* Floating Snapping Diagnostics Overlay */}
-        {selectedImei && (
-          <div className="absolute top-3 left-4 z-[1000] bg-slate-900/90 backdrop-blur-md text-white p-3.5 rounded-xl text-xs shadow-2xl border border-slate-700/50 flex flex-col gap-2 w-60 select-none animate-fade-in font-sans">
-            <div className="flex items-center justify-between border-b border-slate-700/40 pb-1.5">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm">⚙️</span>
-                <span className="font-bold text-slate-200 uppercase tracking-wider text-[9px]">Snapping Diagnostics</span>
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                aiRouteCorrectionActive
-                  ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
-                  : aggressiveSnapping
-                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                    : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-              }`}>
-                {aiRouteCorrectionActive ? "AI Mode" : aggressiveSnapping ? "Aggressive" : "Default Mode"}
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-1 text-slate-300 font-mono text-[11px]">
-              <div className="flex justify-between">
-                <span>Active Mode:</span>
-                <span className="font-bold text-white">
-                  {aiRouteCorrectionActive ? "AI Mode" : aggressiveSnapping ? "Aggressive" : "Default"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Corridor:</span>
-                <span className="font-bold text-white">
-                  {activeCorridor}
-                </span>
-              </div>
-              <div className="flex justify-between border-t border-slate-800 pt-1.5 mt-0.5">
-                <span>Total GPS Points:</span>
-                <span className="font-bold text-white">{totalGpsPoints}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Snapped Points:</span>
-                <span className="font-bold text-emerald-400">
-                  {snappedPointsCount}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Raw Points:</span>
-                <span className="font-bold text-rose-400">
-                  {rawPointsCount}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Custom Orange Map Indication Button matching screenshot */}
-        <div className={`absolute top-3 z-[1000] flex flex-col items-end transition-all duration-300 ${stoppages.length > 0 ? 'right-[280px]' : 'right-4'
+        {/* Right Panel: Collapsible tabbed Checkpoints & Stoppages */}
+        {(checkpoints.length > 0 || stoppages.length > 0) && (
+          <div className={`absolute top-4 right-4 z-[1000] h-[calc(100%-32px)] w-80 flex transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            rightPanelCollapsed ? 'translate-x-[calc(100%-12px)]' : 'translate-x-0'
           }`}>
+            {/* Toggle Handle */}
+            <button
+              onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
+              className="self-center -ml-3.5 w-7 h-14 bg-white hover:bg-slate-50 border border-slate-200/80 shadow-lg rounded-l-xl flex items-center justify-center text-slate-500 hover:text-slate-800 transition z-10 focus:outline-none"
+            >
+              {rightPanelCollapsed ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+
+            {/* Main Card */}
+            <div className="w-80 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-2xl p-4 flex flex-col h-full text-slate-800">
+              {/* Tab Selector */}
+              <div className="flex border-b border-slate-100 pb-2 mb-3 gap-1 shrink-0">
+                <button
+                  onClick={() => setActiveRightTab("checkpoints")}
+                  className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition ${
+                    activeRightTab === "checkpoints"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-100/50"
+                      : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  📍 Checkpoints ({checkpoints.filter(cp => cp.visited).length}/{checkpoints.length})
+                </button>
+                <button
+                  onClick={() => setActiveRightTab("stoppages")}
+                  className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition ${
+                    activeRightTab === "stoppages"
+                      ? "bg-rose-50 text-rose-700 border border-rose-100/50"
+                      : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  🛑 Stoppages ({stoppages.length})
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar min-h-0">
+                {activeRightTab === "checkpoints" ? (
+                  checkpoints.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                      <span className="text-2xl mb-2">📍</span>
+                      <p className="text-xs">No checkpoints loaded</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {checkpoints
+                        .filter(cp => {
+                          if (cp.visited && !showCoveredCheckpoints) return false;
+                          if (!cp.visited && !showUncoveredCheckpoints) return false;
+                          return true;
+                        })
+                        .sort((a, b) => a.sequence_order - b.sequence_order)
+                        .map((cp, i) => (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              const map = mapRef.current;
+                              if (!map) return;
+                              map.panTo([cp.latitude, cp.longitude]);
+                              const marker = checkpointMarkersMapRef.current[cp.id];
+                              if (marker) {
+                                if (!map.hasLayer(marker)) {
+                                  marker.addTo(map);
+                                  checkpointMarkersRef.current.push(marker);
+                                }
+                                marker.openPopup();
+                                const el = marker.getElement();
+                                if (el) {
+                                  const child = el.firstElementChild;
+                                  if (child) {
+                                    child.classList.add("highlight-pulse");
+                                    setTimeout(() => child.classList.remove("highlight-pulse"), 1500);
+                                  }
+                                }
+                              }
+                            }}
+                            className={`w-full text-left p-3 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${
+                              cp.visited
+                                ? 'bg-[#f0fdf4]/50 hover:bg-[#f0fdf4] border-[#dcfce7] hover:border-[#bbf7d0]'
+                                : 'bg-rose-50/25 hover:bg-rose-50 border-rose-100 hover:border-rose-200'
+                            }`}
+                          >
+                            <div className="space-y-1 max-w-[70%] text-left">
+                              <span className={`font-extrabold block truncate ${cp.visited ? 'text-[#16a34a]' : 'text-rose-500'}`}>
+                                #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
+                              </span>
+                              <span className="text-[10px] text-slate-400 block font-normal">
+                                Radius: {cp.radius_meters || 100}m
+                              </span>
+                              {!cp.visited && cp.reason && (
+                                <span className="text-[9.5px] text-rose-650 font-semibold block mt-1.5 leading-tight italic bg-rose-50/70 border border-rose-100 px-1.5 py-0.5 rounded">
+                                  ⚠️ {cp.reason}
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 shrink-0 ${
+                              cp.visited
+                                ? 'bg-[#dcfce7] text-[#15803d] group-hover:bg-[#bbf7d0]'
+                                : 'bg-rose-100 text-rose-600 group-hover:bg-rose-200'
+                            }`}>
+                              {cp.visited ? 'HIT' : 'MISSED'}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )
+                ) : (
+                  stoppages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                      <span className="text-2xl mb-2">🛑</span>
+                      <p className="text-xs">No stoppages detected</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {stoppages
+                        .filter(s => {
+                          const mins = Math.max(1, Math.round(s.durationSeconds / 60));
+                          const isMajor = mins >= 10;
+                          if (isMajor && !showMajorStoppages) return false;
+                          if (!isMajor && !showMiniStoppages) return false;
+                          return true;
+                        })
+                        .map((s, i) => (
+                          <button
+                            key={i}
+                            onClick={() => jumpToKeyframe(s.startIndex)}
+                            className="w-full text-left p-3 bg-slate-50 hover:bg-rose-50 border border-slate-100 hover:border-rose-200 rounded-xl text-xs transition flex items-center justify-between group active:scale-98"
+                          >
+                            <div className="space-y-1">
+                              <span className="font-extrabold text-rose-500 block">Stoppage #{i + 1}</span>
+                              <span className="text-[10px] text-slate-400 block font-normal">
+                                ⏱. {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-black bg-rose-100 text-rose-600 group-hover:bg-rose-200 px-2 py-0.5 rounded-lg transition duration-200">
+                              {formatStoppageDuration(s.durationSeconds)}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Map Indication Dropdown positioning */}
+        <div className={`absolute top-4 z-[1000] flex flex-col items-end transition-all duration-300 ${
+          (checkpoints.length > 0 || stoppages.length > 0) && !rightPanelCollapsed
+            ? 'right-[346px]'
+            : 'right-4'
+        }`}>
           <div
             onClick={() => setShowMapIndicationMenu(!showMapIndicationMenu)}
-            className="bg-[#f59e0b] hover:bg-amber-600 text-white px-3 py-1.5 text-xs font-bold uppercase rounded shadow-md tracking-wider flex items-center gap-1 cursor-pointer transition select-none"
+            className="bg-[#f59e0b] hover:bg-amber-600 text-white px-3.5 py-2 text-xs font-bold uppercase rounded-xl shadow-lg tracking-wider flex items-center gap-1.5 cursor-pointer transition select-none border border-amber-400/20"
           >
-            <span>Map Indication</span>
+            <Layers className="w-3.5 h-3.5" />
+            <span>Map Layers</span>
           </div>
 
           {showMapIndicationMenu && (
-            <div className="mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl p-3 w-64 flex flex-col gap-2 z-[1000]">
+            <div className="mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 w-64 flex flex-col gap-2.5 z-[1000] animate-fade-in text-slate-800">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1.5">Map Layers</span>
 
               <div className="flex flex-col gap-1">
@@ -3221,7 +3311,7 @@ export default function PlaybackPage() {
                         type="checkbox"
                         checked={showCoveredCheckpoints}
                         onChange={(e) => setShowCoveredCheckpoints(e.target.checked)}
-                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                       />
                       <span>Covered Lane Points (Hit)</span>
                     </label>
@@ -3230,7 +3320,7 @@ export default function PlaybackPage() {
                         type="checkbox"
                         checked={showUncoveredCheckpoints}
                         onChange={(e) => setShowUncoveredCheckpoints(e.target.checked)}
-                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                       />
                       <span>Uncovered Lane Points (Missed)</span>
                     </label>
@@ -3318,8 +3408,6 @@ export default function PlaybackPage() {
                 <span>Workshops</span>
               </label>
 
-
-
               <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none py-0.5 hover:text-slate-900 font-semibold">
                 <input
                   type="checkbox"
@@ -3348,7 +3436,7 @@ export default function PlaybackPage() {
                         type="checkbox"
                         checked={showMajorStoppages}
                         onChange={(e) => setShowMajorStoppages(e.target.checked)}
-                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                       />
                       <span>Major Stops (≥ 10 mins)</span>
                     </label>
@@ -3357,7 +3445,7 @@ export default function PlaybackPage() {
                         type="checkbox"
                         checked={showMiniStoppages}
                         onChange={(e) => setShowMiniStoppages(e.target.checked)}
-                        className="rounded text-emerald-600 focus:ring-0 w-3 h-3"
+                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
                       />
                       <span>Mini Stops (&lt; 10 mins)</span>
                     </label>
@@ -3368,137 +3456,153 @@ export default function PlaybackPage() {
           )}
         </div>
 
-        {/* Floating checkpoints sidebar if checkpoints exist */}
-        {checkpoints.length > 0 && (
-          <div className={`absolute top-4 left-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl ${checkpointsCollapsed ? 'max-h-12 overflow-hidden pb-0' : 'max-h-[calc(100%-32px)]'} flex flex-col transition-all duration-300`}>
-            <h3
-              onClick={() => setCheckpointsCollapsed(!checkpointsCollapsed)}
-              className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center justify-between shrink-0 border-b border-slate-100 pb-2 cursor-pointer select-none"
-            >
-              <span className="flex items-center gap-1.5">
-                📍 Checkpoints ({checkpoints.filter(cp => cp.visited).length}/{checkpoints.length} Hit)
-              </span>
-              <span className="text-slate-400 text-sm font-semibold transition-transform">
-                {checkpointsCollapsed ? "▲" : "▼"}
-              </span>
-            </h3>
-            {!checkpointsCollapsed && (
-              <div className="space-y-2 flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
-                {checkpoints
-                  .filter(cp => {
-                    if (cp.visited && !showCoveredCheckpoints) return false;
-                    if (!cp.visited && !showUncoveredCheckpoints) return false;
-                    return true;
-                  })
-                  .sort((a, b) => a.sequence_order - b.sequence_order)
-                  .map((cp, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        const map = mapRef.current;
-                        if (!map) return;
-                        map.panTo([cp.latitude, cp.longitude]);
-                        const marker = checkpointMarkersMapRef.current[cp.id];
-                        if (marker) {
-                          if (!map.hasLayer(marker)) {
-                            marker.addTo(map);
-                            checkpointMarkersRef.current.push(marker);
-                          }
-                          marker.openPopup();
-                          const el = marker.getElement();
-                          if (el) {
-                            const child = el.firstElementChild;
-                            if (child) {
-                              child.classList.add("highlight-pulse");
-                              setTimeout(() => child.classList.remove("highlight-pulse"), 1500);
-                            }
-                          }
-                        }
-                      }}
-                      className={`w-full text-left p-2.5 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${cp.visited
-                        ? 'bg-[#f0fdf4]/50 hover:bg-[#f0fdf4] border-[#dcfce7] hover:border-[#bbf7d0]'
-                        : 'bg-rose-50/30 hover:bg-rose-50/70 border-rose-100 hover:border-rose-200'
-                        }`}
-                    >
-                      <div className="space-y-0.5 max-w-[70%]">
-                        <span className={`font-extrabold block truncate ${cp.visited ? 'text-[#16a34a]' : 'text-rose-500'}`}>
-                          #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
-                        </span>
-                        <span className="text-[9px] text-slate-400 block font-normal">
-                          Radius: {cp.radius_meters || 100}m
-                        </span>
-                        {!cp.visited && cp.reason && (
-                          <span className="text-[9.5px] text-rose-600 font-semibold block mt-1.5 leading-tight italic bg-rose-50/70 border border-rose-100 px-1.5 py-0.5 rounded">
-                            ⚠️ {cp.reason}
-                          </span>
-                        )}
-                      </div>
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 ${cp.visited
-                        ? 'bg-[#dcfce7] text-[#15803d] group-hover:bg-[#bbf7d0]'
-                        : 'bg-rose-100 text-rose-600 group-hover:bg-rose-200'
-                        }`}>
-                        {cp.visited ? 'HIT' : 'MISSED'}
-                      </span>
-                    </button>
-                  ))}
-              </div>
-            )}
+        {/* Floating AI Confidence Badge */}
+        {aiConfidence !== null && (
+          <div className={`absolute bottom-32 z-[1000] bg-violet-600/90 backdrop-blur text-white px-3.5 py-2.5 rounded-xl text-xs font-black shadow-2xl border border-violet-400/30 flex items-center gap-2 select-none pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            leftPanelCollapsed ? 'left-4' : 'left-[336px]'
+          }`}>
+            <span className="text-base animate-pulse">🧠</span>
+            <div className="flex flex-col">
+              <span className="text-[9px] uppercase tracking-wider text-violet-200 font-bold">Viterbi Alignment</span>
+              <span className="text-xs font-black font-mono">AI Confidence: {Math.round(aiConfidence)}%</span>
+            </div>
           </div>
         )}
 
-        {/* Floating stoppages sidebar if stoppages exist */}
-        {stoppages.length > 0 && (
-          <div className={`absolute top-4 right-4 z-[1000] w-64 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-4 shadow-2xl ${stoppagesCollapsed ? 'max-h-12 overflow-hidden pb-0' : 'max-h-[calc(100%-32px)]'} flex flex-col transition-all duration-300`}>
-            <h3
-              onClick={() => setStoppagesCollapsed(!stoppagesCollapsed)}
-              className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3 flex items-center justify-between shrink-0 border-b border-slate-100 pb-2 cursor-pointer select-none"
-            >
-              <span className="flex items-center gap-1.5">
-                🛑 Stoppages ({
-                  stoppages.filter(s => {
-                    const mins = Math.max(1, Math.round(s.durationSeconds / 60));
-                    const isMajor = mins >= 10;
-                    if (isMajor && !showMajorStoppages) return false;
-                    if (!isMajor && !showMiniStoppages) return false;
-                    return true;
-                  }).length
-                })
-              </span>
-              <span className="text-slate-400 text-sm font-semibold transition-transform">
-                {stoppagesCollapsed ? "▲" : "▼"}
-              </span>
-            </h3>
-            {!stoppagesCollapsed && (
-              <div className="space-y-2 flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
-                {stoppages
-                  .filter(s => {
-                    const mins = Math.max(1, Math.round(s.durationSeconds / 60));
-                    const isMajor = mins >= 10;
-                    if (isMajor && !showMajorStoppages) return false;
-                    if (!isMajor && !showMiniStoppages) return false;
-                    return true;
-                  })
-                  .map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => jumpToKeyframe(s.startIndex)}
-                      className="w-full text-left p-2.5 bg-slate-50 hover:bg-red-50 border border-slate-100 hover:border-red-200 rounded-xl text-xs transition flex items-center justify-between group active:scale-98"
-                    >
-                      <div className="space-y-0.5">
-                        <span className="font-extrabold text-red-500 block">Stoppage #{i + 1}</span>
-                        <span className="text-[10px] text-slate-400">
-                          {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-black bg-red-100 text-red-600 group-hover:bg-red-200 px-2 py-0.5 rounded-lg transition duration-200">
-                        {formatStoppageDuration(s.durationSeconds)}
-                      </span>
-                    </button>
-                  ))}
+        {/* Dark Media Player Floating Deck at Bottom Center */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-2xl bg-slate-900/95 backdrop-blur-md border border-slate-800 text-white rounded-2xl shadow-2xl p-4 flex flex-col gap-3 transition-all duration-300">
+          {/* Timeline slider row */}
+          <div className="w-full flex items-center gap-3">
+            <span className="text-xs font-semibold font-mono text-slate-400 w-16 shrink-0 text-left">
+              {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[idx]?.time) : "00:00:00"}
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={playbackSteps.length > 0 ? playbackSteps.length - 1 : 100}
+              value={playbackSteps.length > 0 ? idx : 0}
+              disabled={playbackSteps.length === 0}
+              onChange={(e) => {
+                if (playbackSteps.length > 0) {
+                  setPlaying(false);
+                  if (intervalRef.current) {
+                    clearTimeout(intervalRef.current);
+                    intervalRef.current = null;
+                  }
+                  setIdx(Number(e.target.value));
+                }
+              }}
+              className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-800 accent-[#10B981] appearance-none outline-none focus:outline-none"
+              style={{
+                background: `linear-gradient(to right, #10B981 0%, #10B981 ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #1e293b ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #1e293b 100%)`
+              }}
+            />
+            <span className="text-xs font-semibold font-mono text-slate-400 w-16 shrink-0 text-right">
+              {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[playbackSteps.length - 1]?.time) : "00:00:00"}
+            </span>
+          </div>
+
+          {/* Controls and Telemetry Row */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Left Group: Controls */}
+            <div className="flex items-center gap-2">
+              {/* Play/Pause */}
+              <button
+                type="button"
+                disabled={!selectedImei}
+                onClick={() => {
+                  if (points.length === 0) {
+                    loadRoute(true);
+                  } else {
+                    const nextPlaying = !playing;
+                    setPlaying(nextPlaying);
+                    if (!nextPlaying && intervalRef.current) {
+                      clearTimeout(intervalRef.current);
+                      intervalRef.current = null;
+                    }
+                  }
+                }}
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 focus:outline-none ${!selectedImei
+                  ? "bg-slate-800 text-slate-600 cursor-not-allowed"
+                  : "bg-emerald-50 hover:bg-emerald-600 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
+                  }`}
+                title={!selectedImei ? "Please select a vehicle first" : playing ? "Pause Playback" : "Start Playback"}
+              >
+                {playing ? (
+                  <Pause className="w-4 h-4 fill-current" />
+                ) : (
+                  <Play className="w-4 h-4 fill-current translate-x-0.5" />
+                )}
+              </button>
+
+              {/* Stop */}
+              <button
+                type="button"
+                disabled={points.length === 0}
+                onClick={handleStop}
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 focus:outline-none ${points.length === 0
+                  ? "bg-slate-800 text-slate-600 cursor-not-allowed"
+                  : "bg-rose-500 hover:bg-rose-600 active:scale-95 shadow-rose-500/20 cursor-pointer hover:shadow-lg"
+                  }`}
+                title="Stop Playback"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+              </button>
+
+              {/* Reset */}
+              <button
+                type="button"
+                onClick={handleReset}
+                className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center shadow-md transition-all shrink-0 cursor-pointer focus:outline-none"
+                title="Reset filters and data"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Speed Multiplier Select */}
+              <div className="relative">
+                <select
+                  value={speedMultiplier}
+                  onChange={(e) => setSpeedMultiplier(Number(e.target.value))}
+                  className="bg-slate-800 border border-slate-700 text-slate-200 pl-3 pr-8 py-1.5 rounded-xl text-xs focus:border-emerald-500 outline-none transition cursor-pointer font-bold appearance-none select-none"
+                >
+                  <option value={1}>1X</option>
+                  <option value={2}>2X</option>
+                  <option value={4}>4X</option>
+                  <option value={8}>8X</option>
+                  <option value={16}>16X</option>
+                  <option value={32}>32X</option>
+                  <option value={64}>64X</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Right Group: Live Telemetry Values */}
+            {selectedImei && playbackSteps.length > 0 && currentStep && (
+              <div className="flex items-center gap-3.5 text-xs font-mono">
+                {/* Speed indicator */}
+                <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/50">
+                  <Gauge className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-slate-400">Speed:</span>
+                  <span className="font-bold text-white">{Math.round(currentStep.speed)} km/h</span>
+                </div>
+
+                {/* Ignition indicator */}
+                <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/50">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-slate-400">Ignition:</span>
+                  <span className={`inline-flex items-center gap-1.5 font-bold ${currentStep.ignition ? "text-emerald-400" : "text-rose-400"}`}>
+                    <span className={`w-2 h-2 rounded-full ${currentStep.ignition ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
+                    {currentStep.ignition ? "ON" : "OFF"}
+                  </span>
+                </div>
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

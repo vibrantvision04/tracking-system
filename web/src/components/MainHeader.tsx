@@ -1,21 +1,34 @@
+"use client";
 import React from "react";
+import { useStore } from "@/lib/store";
+import { Menu } from "lucide-react";
 
 export default function MainHeader() {
+  const setSidebarOpen = useStore((state) => state.setSidebarOpen);
+  const sidebarOpen = useStore((state) => state.sidebarOpen);
+
   return (
     <header className="bg-theme-surface border-b border-theme-border h-16 shrink-0 flex items-center justify-between px-6 shadow-sm z-[9999] sticky top-0 select-none print:hidden w-full">
       <div className="flex items-center gap-3.5">
-        <a href="/">
+        <button 
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="w-10 h-10 flex items-center justify-center text-theme-text-dim hover:text-theme-text rounded-lg hover:bg-theme-elevated transition-colors"
+          title="Toggle Navigation Menu"
+        >
+          <Menu className="w-5.5 h-5.5 text-emerald-600" />
+        </button>
+        <a href="/" className="flex items-center gap-2 shrink-0">
           <img 
             src="/Jaipur_Municipal_Corporation_Logo.png" 
             alt="Jaipur Municipal Corporation Logo" 
             className="h-12 w-[62px] object-contain shrink-0 hover:scale-105 transition-transform duration-200"
           />
         </a>
-        <div className="flex flex-col">
-          <h1 className="text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase">
+        <div className="flex flex-col min-w-0">
+          <h1 className="text-xs sm:text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase truncate">
             VSWM - NAGAR NIGAM JAIPUR
           </h1>
-          <span className="text-[9px] font-bold text-theme-text-dim uppercase tracking-widest mt-1">
+          <span className="text-[8px] sm:text-[9px] font-bold text-theme-text-dim uppercase tracking-widest mt-1 truncate">
             INTEGRATED SOLID WASTE MANAGEMENT SYSTEM
           </span>
         </div>
