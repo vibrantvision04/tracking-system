@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, API_URL } from "@/lib/api";
 import Table from "@/components/shared/Table";
 import Select from "@/components/ui/Select";
+import { useConfirm } from "@/context/ConfirmContext";
 
 interface Exception {
   vehicle_reg_no?: string;
@@ -19,6 +20,7 @@ interface Exception {
 }
 
 export default function UltimateDailyReportPage() {
+  const confirm = useConfirm();
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [exceptions, setExceptions] = useState<Record<string, Exception>>({});
   const [loading, setLoading] = useState(false);
@@ -123,7 +125,12 @@ export default function UltimateDailyReportPage() {
   };
 
   const handleDeleteException = async (vehicleRegNo: string) => {
-    if (!confirm(`Delete exception for ${vehicleRegNo}?`)) return;
+    const isConfirmed = await confirm({
+      title: "Delete Exception",
+      message: `Delete exception for ${vehicleRegNo}?`,
+      variant: "danger"
+    });
+    if (!isConfirmed) return;
     try {
       await api(`/api/ultimate-reports/exceptions?date=${date}&vehicle_reg_no=${encodeURIComponent(vehicleRegNo)}`, {
         method: "DELETE"

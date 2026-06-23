@@ -378,7 +378,7 @@ export default function RouteShiftVehicle() {
               <div key="action" className="text-center w-32 text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">Action</div>,
             ]}
             isLoading={loading}
-            itemsPerPage={20}
+            itemsPerPage={10}
             emptyState={
               <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
                 <span className="text-3xl">📭</span>

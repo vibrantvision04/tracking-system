@@ -12,6 +12,7 @@ interface TableProps {
   itemsPerPage?: number;
   paginate?: boolean;
   dense?: boolean;
+  nested?: boolean;
 }
 
 export function paginationSummary(n: number, itemsPerPage: number, currentPage: number): string {
@@ -27,9 +28,10 @@ export default function Table({
   emptyState,
   children,
   className = "",
-  itemsPerPage = 20,
+  itemsPerPage = 10,
   paginate = true,
   dense = false,
+  nested = false,
 }: TableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const childrenArray = React.Children.toArray(children);
@@ -48,30 +50,33 @@ export default function Table({
     : childrenArray;
 
   return (
-    <div className={`w-full overflow-hidden flex flex-col rounded-xl border border-theme-border bg-theme-surface shadow-sm ${className}`}>
+    <div className={nested 
+      ? `w-full overflow-hidden flex flex-col ${className}`
+      : `w-full overflow-hidden flex flex-col rounded-2xl border border-slate-200/60 bg-gradient-to-br from-white/95 to-slate-50/50 shadow-sm ${className}`
+    }>
       <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-left border-collapse [&>tbody>tr:nth-child(odd)]:bg-[#FAF9F5] [&>tbody>tr:nth-child(even)]:bg-white">
-          <thead className="sticky top-0 z-10 bg-theme-card">
-            <tr className="border-b border-theme-border select-none">
+          <thead className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur-md">
+            <tr className="border-b border-slate-200/60 select-none">
               {headers.map((header, idx) => (
                 <th
                   key={idx}
                   className={`${
-                    dense ? "px-2 py-2.5 text-[10px] font-bold" : "px-5 py-3.5 text-xs font-semibold"
-                  } uppercase tracking-wider text-theme-text-dim`}
+                    dense ? "px-2 py-2.5 text-[9px] font-black" : "px-5 py-3.5 text-[10px] font-black"
+                  } uppercase tracking-widest text-slate-400`}
                 >
                   {header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-theme-border/50 text-theme-text">
+          <tbody className="divide-y divide-slate-100 text-slate-750">
             {isLoading ? (
               <tr>
                 <td colSpan={headers.length} className="px-5 py-12 text-center">
                   <div className="flex flex-col items-center justify-center">
-                    <div className="w-8 h-8 border-2 border-theme-border border-t-theme-accent rounded-full animate-spin mx-auto mb-3" />
-                    <p className="text-sm text-theme-text-dim">Loading records...</p>
+                    <div className="w-7 h-7 border-2 border-slate-200 border-t-emerald-500 rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-xs font-semibold text-slate-400">Loading records...</p>
                   </div>
                 </td>
               </tr>
@@ -79,10 +84,10 @@ export default function Table({
               <tr>
                 <td colSpan={headers.length} className="px-5 py-12 text-center">
                   {emptyState || (
-                    <div className="flex flex-col items-center justify-center">
-                      <Inbox className="h-10 w-10 text-theme-text-dim mx-auto mb-3" />
-                      <p className="text-sm font-semibold text-theme-text">No records found</p>
-                      <p className="text-xs text-theme-text-dim mt-1">Try adjusting your filters or adding new records</p>
+                    <div className="flex flex-col items-center justify-center py-6">
+                      <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                      <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No records found</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Try adjusting your filters or adding new records</p>
                     </div>
                   )}
                 </td>
@@ -92,7 +97,7 @@ export default function Table({
                 if (!React.isValidElement(child)) return child;
                 const existingClass: string = (child.props as { className?: string }).className ?? '';
                 return React.cloneElement(child as React.ReactElement<{ className?: string }>, {
-                  className: `${existingClass} ${dense ? "text-xs" : "text-sm"} hover:bg-theme-elevated transition-colors duration-150`.trim(),
+                  className: `${existingClass} ${dense ? "text-[11px]" : "text-xs"} hover:bg-slate-50 transition-colors duration-150`.trim(),
                 });
               })
             )}
@@ -102,15 +107,15 @@ export default function Table({
 
       {/* Pagination Controls */}
       {paginate && totalPages > 1 && (
-        <div className="border-t border-theme-border px-5 py-3 flex items-center justify-between bg-theme-base/30">
-          <span className="text-xs text-theme-text-dim">
+        <div className="border-t border-slate-100 px-5 py-3.5 flex items-center justify-between bg-slate-50/50">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             {paginationSummary(totalItems, itemsPerPage, currentPage)}
           </span>
-          <div className="flex gap-1">
+          <div className="flex gap-1.5">
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-2.5 py-1.5 rounded-md border border-theme-border bg-theme-surface text-theme-text text-[11px] font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-theme-base transition-colors"
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 text-[10px] font-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
             >
               Prev
             </button>
@@ -129,10 +134,10 @@ export default function Table({
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-medium transition-colors ${
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black transition-colors cursor-pointer ${
                       currentPage === pageNum
-                        ? "bg-theme-accent text-white"
-                        : "text-theme-text hover:bg-theme-border/50"
+                        ? "bg-[#10B981] text-white shadow-sm shadow-emerald-500/20"
+                        : "text-slate-500 hover:bg-slate-200/50"
                     }`}
                   >
                     {pageNum}
@@ -143,7 +148,7 @@ export default function Table({
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-2.5 py-1.5 rounded-md border border-theme-border bg-theme-surface text-theme-text text-[11px] font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-theme-base transition-colors"
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 text-[10px] font-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
             >
               Next
             </button>

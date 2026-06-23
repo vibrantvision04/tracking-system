@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, post, put, del } from "@/lib/api";
 import { toast } from "react-toastify";
+import { Pencil, Truck, FolderArchive, CheckCircle, Lock } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
@@ -98,16 +99,16 @@ export default function VehiclePurposePage() {
   };
 
   // ─── Color badge per type keyword ──────────────────────────────────────────
-  const getBadgeStyle = (n: string) => {
+  const getDotColor = (n: string) => {
     const u = n.toLowerCase();
-    if (u.includes("d2d") || u.includes("door"))    return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-    if (u.includes("bulk") || u.includes("dry"))    return "bg-amber-500/10 text-amber-400 border-amber-500/20";
-    if (u.includes("wet"))                           return "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
-    if (u.includes("electric"))                      return "bg-violet-500/10 text-violet-400 border-violet-500/20";
-    if (u.includes("garden") || u.includes("irrig")) return "bg-green-500/10 text-green-400 border-green-500/20";
-    if (u.includes("inert") || u.includes("landfill")) return "bg-orange-500/10 text-orange-400 border-orange-500/20";
-    if (u.includes("commercial") || u.includes("transfer")) return "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
-    return "bg-slate-500/10 text-theme-text-dim border-theme-border/40";
+    if (u.includes("d2d") || u.includes("door"))    return "bg-[#10B981]";
+    if (u.includes("bulk") || u.includes("dry"))    return "bg-[#F59E0B]";
+    if (u.includes("wet"))                           return "bg-[#06B6D4]";
+    if (u.includes("electric"))                      return "bg-[#8B5CF6]";
+    if (u.includes("garden") || u.includes("irrig")) return "bg-[#22C55E]";
+    if (u.includes("inert") || u.includes("landfill")) return "bg-[#F97316]";
+    if (u.includes("commercial") || u.includes("transfer")) return "bg-[#6366F1]";
+    return "bg-[#64748B]";
   };
 
   return (
@@ -138,7 +139,7 @@ export default function VehiclePurposePage() {
         {formOpen && (
           <Card className="animate-fade-in">
             <CardHeader>
-              <CardTitle>{editingItem ? "✏️ Edit Collection Type" : "🚚 Create New Collection Type"}</CardTitle>
+              <CardTitle>{editingItem ? "Edit Collection Type" : "Create New Collection Type"}</CardTitle>
               <CardDescription>Setup operational keyword groupings used in geofence assignment policies.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -177,9 +178,9 @@ export default function VehiclePurposePage() {
         {/* Stats Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {[
-            { label: "Total Categories", value: purposes.length, icon: "🗃️" },
-            { label: "Active Nodes", value: purposes.filter((p) => p.is_active).length, icon: "✅" },
-            { label: "Inactive Nodes", value: purposes.filter((p) => !p.is_active).length, icon: "🔒" },
+            { label: "Total Categories", value: purposes.length},
+            { label: "Active Nodes", value: purposes.filter((p) => p.is_active).length  },
+            { label: "Inactive Nodes", value: purposes.filter((p) => !p.is_active).length },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -235,16 +236,16 @@ export default function VehiclePurposePage() {
                     {idx + 1}
                   </td>
                   <td className="py-3.5 px-5">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border ${getBadgeStyle(vp.name)}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
-                      {vp.name}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${getDotColor(vp.name)}`} />
+                      <span className="font-bold text-theme-text text-xs">{vp.name}</span>
+                    </div>
                   </td>
                   <td className="py-3.5 px-5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                       vp.is_active 
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
-                        : "bg-theme-base text-theme-text-dim border border-theme-border"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200/50" 
+                        : "bg-slate-50 text-slate-500 border-slate-200/50"
                     }`}>
                       {vp.is_active ? "Active" : "Inactive"}
                     </span>

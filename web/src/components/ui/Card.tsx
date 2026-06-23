@@ -8,8 +8,8 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Card({ children, hoverable = false, className = "", ...props }: CardProps) {
   return (
     <div
-      className={`bg-theme-card border border-theme-border shadow-sm rounded-[16px] overflow-hidden ${
-        hoverable ? "hover:shadow-md hover:-translate-y-0.5 hover:border-[#10B981]/60 transition-all duration-200" : ""
+      className={`bg-gradient-to-br from-white/95 to-slate-50/50 border border-slate-200/60 shadow-sm rounded-2xl overflow-hidden transition-all duration-300 ${
+        hoverable ? "hover:shadow-lg hover:-translate-y-0.5 hover:border-[#10B981]/60 hover:shadow-emerald-500/5" : ""
       } ${className}`}
       {...props}
     >

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from 'react';
+import { useConfirm } from '@/context/ConfirmContext';
 
 interface DeleteButtonProps {
   onDelete: () => Promise<void> | void;
@@ -14,11 +15,17 @@ export default function DeleteButton({
   className = "",
   variant = 'icon'
 }: DeleteButtonProps) {
+  const confirm = useConfirm();
   const [deleting, setDeleting] = useState(false);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(confirmMessage)) return;
+    const isConfirmed = await confirm({
+      title: "Delete Confirmation",
+      message: confirmMessage,
+      variant: "danger"
+    });
+    if (!isConfirmed) return;
 
     setDeleting(true);
     try {

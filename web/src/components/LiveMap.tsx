@@ -62,9 +62,17 @@ interface Props {
   vehicles: Vehicle[];
   showMenu?: boolean;
   centerOnVehicleImei?: string;
+  showRegistrationNo?: boolean;
+  boundariesOnly?: boolean;
 }
 
-export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei }: Props) {
+export default function LiveMap({ 
+  vehicles, 
+  showMenu = true, 
+  centerOnVehicleImei, 
+  showRegistrationNo: showRegistrationNoProp,
+  boundariesOnly = false 
+}: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const markers = useRef<Record<string, L.Marker>>({});
   // Cache last rendered icon key (color+emoji) per IMEI — skip icon rebuild when unchanged
@@ -80,7 +88,9 @@ export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei
   const [selectedVehicleType, setSelectedVehicleType] = useState<string>("all");
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
   const [hasInitializedVehicles, setHasInitializedVehicles] = useState(false);
-  const [showRegistrationNo, setShowRegistrationNo] = useState(false);
+  const [showRegistrationNoState, setShowRegistrationNoState] = useState(false);
+  const showRegistrationNo = showRegistrationNoProp !== undefined ? showRegistrationNoProp : showRegistrationNoState;
+  const setShowRegistrationNo = showRegistrationNoProp !== undefined ? () => {} : setShowRegistrationNoState;
 
   const [livePos, setLivePos] = useState<Record<string, LivePosition>>({});
   const [statuses, setStatuses] = useState<Record<string, string>>({});
@@ -251,12 +261,28 @@ export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei
     
     // Initialize Layer groups
     wardsLayerRef.current = L.layerGroup().addTo(m);
-    transferStationsLayerRef.current = L.layerGroup().addTo(m);
-    parkingSpotsLayerRef.current = L.layerGroup().addTo(m);
-    fuelStationsLayerRef.current = L.layerGroup().addTo(m);
-    workshopsLayerRef.current = L.layerGroup().addTo(m);
-    const openDepotsLayer = L.layerGroup().addTo(m);
-    populateOpenDepotLayer(L, openDepotsLayer);
+    
+    let overlayLayers: Record<string, L.LayerGroup> = {
+      "Ward Boundaries": wardsLayerRef.current,
+    };
+
+    if (!boundariesOnly) {
+      transferStationsLayerRef.current = L.layerGroup().addTo(m);
+      parkingSpotsLayerRef.current = L.layerGroup().addTo(m);
+      fuelStationsLayerRef.current = L.layerGroup().addTo(m);
+      workshopsLayerRef.current = L.layerGroup().addTo(m);
+      const openDepotsLayer = L.layerGroup().addTo(m);
+      populateOpenDepotLayer(L, openDepotsLayer);
+      
+      overlayLayers = {
+        ...overlayLayers,
+        "Transfer Stations": transferStationsLayerRef.current,
+        "Parking Spots": parkingSpotsLayerRef.current,
+        "Fuel Stations": fuelStationsLayerRef.current,
+        "Workshops": workshopsLayerRef.current,
+        "Open Depots": openDepotsLayer,
+      };
+    }
     
     // Add zoom control manually in the bottom right corner
     L.control.zoom({ position: 'bottomright' }).addTo(m);
@@ -265,14 +291,7 @@ export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei
       "Google Maps (Default)": googleMapLayer,
       "Google Satellite + Labels": googleHybridLayer,
       "Dark Map": darkLayer
-    }, {
-      "Ward Boundaries": wardsLayerRef.current,
-      "Transfer Stations": transferStationsLayerRef.current,
-      "Parking Spots": parkingSpotsLayerRef.current,
-      "Fuel Stations": fuelStationsLayerRef.current,
-      "Workshops": workshopsLayerRef.current,
-      "Open Depots": openDepotsLayer,
-    }, { position: 'topright' }).addTo(m);
+    }, overlayLayers, { position: 'topright' }).addTo(m);
     
     mapRef.current = m;
     return () => { 
@@ -292,6 +311,7 @@ export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei
 
   // ─── Render Facilities (Parking Spots, Transfer Stations) ───
   useEffect(() => {
+    if (boundariesOnly) return;
     if (parkingSpotsLayerRef.current) parkingSpotsLayerRef.current.clearLayers();
     if (transferStationsLayerRef.current) transferStationsLayerRef.current.clearLayers();
     if (fuelStationsLayerRef.current) fuelStationsLayerRef.current.clearLayers();
@@ -683,7 +703,7 @@ export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei
 
   // ─── Marker Management (Filtered & Live Position Synced) ───
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || boundariesOnly) return;
     
     // 1. Apply Zone, Ward, Vehicle Type filters
     const filteredByFilters = vehicles.filter((v) => {
@@ -816,6 +836,7 @@ export default function LiveMap({ vehicles, showMenu = true, centerOnVehicleImei
 
   // ─── WebSocket for real-time GPS ───
   useEffect(() => {
+    if (boundariesOnly) return;
     let ws: WebSocket | null = null;
     let reconnect: ReturnType<typeof setTimeout>;
     let isMounted = true;

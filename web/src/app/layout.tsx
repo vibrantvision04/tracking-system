@@ -4,6 +4,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import MainHeader from "@/components/MainHeader";
 import { ToastContainer } from "react-toastify";
+import { ConfirmProvider } from "@/context/ConfirmContext";
 
 import "react-toastify/dist/ReactToastify.css";
 
@@ -24,25 +25,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className={`${inter.className} antialiased`} suppressHydrationWarning>
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-            <MainHeader />
-            <main className="flex-1 flex flex-col min-h-0 bg-[var(--bg-dark)]">{children}</main>
+        <ConfirmProvider>
+          <div className="flex h-screen overflow-hidden">
+            <Sidebar />
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+              <MainHeader />
+              <main className="flex-1 flex flex-col min-h-0 bg-[var(--bg-dark)]">{children}</main>
+            </div>
           </div>
-        </div>
-        <ToastContainer
-          position="bottom-right"
-          autoClose={5000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="dark"
-        />
+          <ToastContainer
+            position="bottom-right"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="dark"
+          />
+        </ConfirmProvider>
       </body>
     </html>
   );

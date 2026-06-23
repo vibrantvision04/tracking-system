@@ -112,7 +112,7 @@ export default function Select({
       {label && (
         <label
           htmlFor={generatedId}
-          className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider block"
+          className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1 leading-none select-none"
         >
           {label}
         </label>

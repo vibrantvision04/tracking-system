@@ -21,7 +21,7 @@ export default function Input({
       {label && (
         <label
           htmlFor={generatedId}
-          className="text-xs font-semibold uppercase tracking-wider text-theme-text-dim block mb-1.5"
+          className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1 leading-none select-none"
         >
           {label}
         </label>

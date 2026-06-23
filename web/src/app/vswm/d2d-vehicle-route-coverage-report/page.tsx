@@ -255,7 +255,7 @@ export default function D2DRouteCoverageReport() {
             <span key="inorder" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Inorder % Covered</span>,
           ]}
           isLoading={loading}
-          itemsPerPage={50}
+          itemsPerPage={10}
           emptyState={
             <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-theme-text-dim/60">
               <span className="text-3xl">📭</span>

@@ -7,8 +7,16 @@
 import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { api, post, put, del } from "@/lib/api";
+import PageHeader from "@/components/shared/PageHeader";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import TextArea from "@/components/ui/TextArea";
+import Button from "@/components/ui/Button";
+import DeleteButton from "@/components/ui/DeleteButton";
+import EditButton from "@/components/ui/EditButton";
 import Table from "@/components/shared/Table";
 import Select from "@/components/ui/Select";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const RegionMap = dynamic(() => import("@/components/RegionMap"), { ssr: false });
 
@@ -33,6 +41,7 @@ interface Region {
 }
 
 export default function RegionManager() {
+  const confirm = useConfirm();
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionTypes, setRegionTypes] = useState<RegionType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,7 +222,12 @@ export default function RegionManager() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this region?")) return;
+    const isConfirmed = await confirm({
+      title: "Delete Region",
+      message: "Are you sure you want to delete this region?",
+      variant: "danger"
+    });
+    if (!isConfirmed) return;
     try {
       const res: any = await del(`/api/regions/${id}`);
       if (res.success) {
@@ -350,68 +364,54 @@ export default function RegionManager() {
   const renderFormFields = () => (
     <>
       {/* Name */}
-      <div className="space-y-1">
-        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
-          Name<span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          required
-          placeholder="Enter Region Name"
-          value={form.region_name}
-          onChange={(e) => setForm({ ...form, region_name: e.target.value })}
-          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold"
-        />
-      </div>
+      <Input
+        label="Name *"
+        type="text"
+        required
+        placeholder="Enter Region Name"
+        value={form.region_name}
+        onChange={(e) => setForm({ ...form, region_name: e.target.value })}
+      />
 
       {/* Code */}
-      <div className="space-y-1">
-        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
-          Code
-        </label>
-        <input
-          type="text"
-          placeholder="Enter Region Code"
-          value={form.region_code}
-          onChange={(e) => setForm({ ...form, region_code: e.target.value })}
-          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold"
-        />
-      </div>
+      <Input
+        label="Code"
+        type="text"
+        placeholder="Enter Region Code"
+        value={form.region_code}
+        onChange={(e) => setForm({ ...form, region_code: e.target.value })}
+      />
 
       {/* Region Type */}
-      <div className="space-y-1">
-        <Select
-          label="Region Type"
-          required
-          value={form.region_type_id}
-          onChange={(e) => setForm({ ...form, region_type_id: e.target.value })}
-        >
-          <option value="">Select</option>
-          {regionTypes.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.title}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <Select
+        label="Region Type"
+        required
+        value={form.region_type_id}
+        onChange={(e) => setForm({ ...form, region_type_id: e.target.value })}
+      >
+        <option value="">Select</option>
+        {regionTypes.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.title}
+          </option>
+        ))}
+      </Select>
 
       {/* Parent Region */}
-      <div className="space-y-1">
-        <Select
-          label="Parent Region"
-          value={form.parent_id}
-          onChange={(e) => setForm({ ...form, parent_id: e.target.value })}
-        >
-          <option value="">Select</option>
-          {regions
-            .filter((r) => !editingRegion || r.id !== editingRegion.id)
-            .map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.region_name}
-              </option>
-            ))}
-        </Select>
-      </div>
+      <Select
+        label="Parent Region"
+        value={form.parent_id}
+        onChange={(e) => setForm({ ...form, parent_id: e.target.value })}
+      >
+        <option value="">Select</option>
+        {regions
+          .filter((r) => !editingRegion || r.id !== editingRegion.id)
+          .map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.region_name}
+            </option>
+          ))}
+      </Select>
 
       {/* Wards Assignment Multi-Select for Zones */}
       {Number(form.region_type_id) === 2 && (
@@ -422,12 +422,11 @@ export default function RegionManager() {
             </label>
           </div>
           <div className="bg-theme-surface border border-theme-border rounded-xl p-3 space-y-2 shadow-inner">
-            <input
+            <Input
               type="text"
               placeholder="Filter Wards..."
               value={wardSearch}
               onChange={(e) => setWardSearch(e.target.value)}
-              className="w-full bg-theme-surface border border-theme-border rounded-lg px-2.5 py-1.5 text-xs text-theme-text placeholder:text-theme-text-dim focus:border-emerald-500 outline-none transition font-semibold"
             />
             <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1 pr-1">
               {regions
@@ -463,24 +462,19 @@ export default function RegionManager() {
       )}
 
       {/* Estimated Population */}
-      <div className="space-y-1">
-        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
-          Est. Population<span className="text-red-500">*</span>
-        </label>
-        <input
-          type="number"
-          required
-          min="0"
-          placeholder="Enter est. population"
-          value={form.estimated_population || ""}
-          onChange={(e) => setForm({ ...form, estimated_population: Number(e.target.value) })}
-          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-semibold"
-        />
-      </div>
+      <Input
+        label="Est. Population *"
+        type="number"
+        required
+        min="0"
+        placeholder="Enter est. population"
+        value={form.estimated_population || ""}
+        onChange={(e) => setForm({ ...form, estimated_population: Number(e.target.value) })}
+      />
 
       {/* Color Selector */}
-      <div className="space-y-1">
-        <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
+      <div className="space-y-1.5 w-full">
+        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1 leading-none select-none">
           Border / Fill Color
         </label>
         <div className="flex gap-2">
@@ -488,13 +482,13 @@ export default function RegionManager() {
             type="color"
             value={form.color}
             onChange={(e) => setForm({ ...form, color: e.target.value })}
-            className="w-9 h-[34px] p-0.5 bg-theme-surface border border-theme-border rounded-lg cursor-pointer"
+            className="w-12 h-[38px] p-0.5 bg-theme-surface border border-theme-border rounded-[12px] cursor-pointer"
           />
           <input
             type="text"
             value={form.color}
             onChange={(e) => setForm({ ...form, color: e.target.value })}
-            className="flex-1 bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text outline-none focus:bg-theme-surface focus:border-emerald-500 transition-all font-mono font-semibold"
+            className="flex-1 bg-theme-surface border border-theme-border rounded-[12px] px-3 py-2 text-xs text-theme-text outline-none focus:bg-theme-surface focus:ring-2 focus:ring-[#10B981]/30 transition-all font-mono font-semibold"
           />
         </div>
       </div>
@@ -506,18 +500,13 @@ export default function RegionManager() {
         </span>
 
         {/* GeoJSON box */}
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-theme-text-dim uppercase tracking-wider block">
-            GEOJSON/KML<span className="text-red-500">*</span>
-          </label>
-          <textarea
-            placeholder="Enter JSON coordinates"
-            rows={3}
-            value={form.geojson}
-            onChange={(e) => setForm({ ...form, geojson: e.target.value })}
-            className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim focus:bg-theme-surface focus:border-emerald-500 outline-none transition-all font-mono font-semibold resize-none custom-scrollbar"
-          />
-        </div>
+        <TextArea
+          label="GEOJSON / KML *"
+          placeholder="Enter JSON coordinates"
+          rows={3}
+          value={form.geojson}
+          onChange={(e) => setForm({ ...form, geojson: e.target.value })}
+        />
 
         {/* Drag & drop upload */}
         <div className="space-y-1">
@@ -557,14 +546,14 @@ export default function RegionManager() {
   const startIndex = 0;
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden relative select-none">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden relative select-none font-sans">
       {formOpen && isDrawing ? (
         /* ─── CASE A.1: Full-Screen Interactive Editing Map Layout (Drawing Active) ─── */
         <div className="flex-1 w-full h-full relative overflow-hidden flex flex-col">
           {/* Header over map */}
           <header className="h-14 bg-theme-surface/90 backdrop-blur-md px-6 flex items-center justify-between border-b border-theme-border shrink-0 shadow-sm z-[11]">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-theme-accent text-white font-bold text-[11px] shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-theme-accent text-white font-bold text-[11px] shrink-0 flex items-center justify-center">
                 JN
               </div>
               <h1 className="text-xs font-black text-theme-text uppercase tracking-wider leading-none">
@@ -572,7 +561,7 @@ export default function RegionManager() {
               </h1>
             </div>
             <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider bg-slate-100 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-theme-surface-hover0 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               GIS Canvas Active
             </div>
           </header>
@@ -592,45 +581,40 @@ export default function RegionManager() {
         </div>
       ) : (
         /* ─── CASES WITH STANDARD HEADER ─── */
-        <>
+        <div className="flex-grow overflow-y-auto p-6 lg:p-8 custom-scrollbar space-y-6 flex flex-col h-full">
           {formOpen ? (
             /* ─── CASE A.2: Split-Screen Form (Form Card Left, Map Card Right) ─── */
-            <div className="flex-grow overflow-y-auto p-6 md:p-8 custom-scrollbar">
-              <div className="max-w-7xl mx-auto space-y-6">
-                
-                {/* Form Title & Breadcrumb */}
-                <div className="flex justify-between items-center border-b border-theme-border pb-4">
-                  <div>
-                    <h2 className="text-xl font-black text-theme-text tracking-tight">
-                      {editingRegion ? "Edit Region" : "Create Region"}
-                    </h2>
-                    <div className="h-1 bg-theme-accent w-10 mt-1.5 rounded-full" />
-                  </div>
-                  
-                  <button
-                    type="button"
-                    onClick={handleCloseForm}
-                    className="bg-[#e4e8f0] hover:bg-[#d8dce6] text-theme-text font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm"
-                  >
+            <div className="max-w-7xl mx-auto w-full space-y-6 flex-grow flex flex-col">
+              <PageHeader
+                title={editingRegion ? "Edit Region" : "Create Region"}
+                description="Define name, parent hierarchy, population, and draw the region coordinates."
+                breadcrumbs={[
+                  { label: "Regions & Wards", href: "/zones" },
+                  { label: editingRegion ? "Edit" : "New" }
+                ]}
+                actions={
+                  <Button onClick={handleCloseForm} variant="secondary" size="sm">
                     Back to List
-                  </button>
-                </div>
+                  </Button>
+                }
+              />
 
-                {/* Side-by-Side split content */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-                  {/* Form Card (Left) */}
-                  <div className="bg-theme-surface rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+              {/* Side-by-Side split content */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch flex-grow">
+                {/* Form Card (Left) */}
+                <Card className="flex flex-col justify-between h-full">
+                  <CardHeader>
+                    <CardTitle>Region Details</CardTitle>
+                    <CardDescription>Enter demographic information and configure geo boundaries.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-grow flex flex-col justify-between space-y-6">
                     <div>
-                      <h3 className="text-sm font-black text-theme-text uppercase tracking-wider mb-4">
-                        Region Details
-                      </h3>
-
                       {message && (
                         <div
-                          className={`p-3 rounded-lg mb-4 text-xs font-bold ${
+                          className={`p-3 rounded-[12px] mb-4 text-xs font-bold ${
                             message.type === "success"
-                              ? "bg-theme-surface-hover text-theme-accent border border-emerald-100"
-                              : "bg-red-50 text-red-600 border border-red-100"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                              : "bg-red-50 text-red-700 border border-red-100"
                           }`}
                         >
                           {message.text}
@@ -643,144 +627,128 @@ export default function RegionManager() {
                     </div>
 
                     {/* Submissions Row */}
-                    <div className="flex gap-2.5 pt-4 border-t border-slate-100 mt-6">
-                      <button
+                    <div className="flex gap-2.5 pt-4 border-t border-slate-100">
+                      <Button
                         type="button"
-                        disabled={loading}
+                        loading={loading}
+                        loadingText="Submitting..."
                         onClick={handleSubmit}
-                        className="flex-1 bg-theme-accent text-white font-bold text-xs py-2.5 rounded-lg transition-all shadow-md shadow-emerald-600/10 disabled:opacity-50"
+                        className="flex-1 font-bold text-xs"
                       >
-                        {loading ? "Submitting..." : "Submit"}
-                      </button>
-                      <button
+                        Submit
+                      </Button>
+                      <Button
                         type="button"
                         onClick={handleCloseForm}
-                        className="bg-slate-100 hover:bg-slate-200 text-theme-text-dim font-bold text-xs px-5 py-2.5 rounded-lg transition-all"
+                        variant="secondary"
+                        className="font-bold text-xs"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  {/* Map Card (Right) */}
-                  <div className="bg-theme-surface rounded-2xl border border-slate-100 p-2 shadow-sm flex flex-col relative min-h-[500px]">
-                    <div className="flex-1 w-full h-full rounded-xl overflow-hidden relative">
-                      <RegionMap
-                        geoJSON={form.geojson}
-                        color={form.color}
-                        onChangeGeoJSON={(val) => setForm((prev) => ({ ...prev, geojson: val }))}
-                        regions={regions}
-                        isDrawing={isDrawing}
-                        setIsDrawing={setIsDrawing}
-                        editingRegionId={editingRegion?.id}
-                      />
-                    </div>
+                {/* Map Card (Right) */}
+                <Card className="p-2 flex flex-col relative min-h-[500px] h-full">
+                  <div className="flex-1 w-full h-full rounded-[12px] overflow-hidden relative">
+                    <RegionMap
+                      geoJSON={form.geojson}
+                      color={form.color}
+                      onChangeGeoJSON={(val) => setForm((prev) => ({ ...prev, geojson: val }))}
+                      regions={regions}
+                      isDrawing={isDrawing}
+                      setIsDrawing={setIsDrawing}
+                      editingRegionId={editingRegion?.id}
+                    />
                   </div>
-                </div>
-
+                </Card>
               </div>
             </div>
           ) : (
             /* ─── CASE B: Table List ─── */
-            <div className="flex-grow overflow-y-auto p-6 md:p-8 custom-scrollbar space-y-6">
-              <div className="max-w-7xl mx-auto space-y-6">
-                
-                {/* Section Title */}
-                <div className="flex flex-wrap gap-4 justify-between items-center border-b border-theme-border pb-4 shrink-0">
-                  <div>
-                    <h2 className="text-xl font-black text-theme-text tracking-tight">Region</h2>
-                    <div className="h-1 bg-theme-accent w-10 mt-1.5 rounded-full" />
-                  </div>
+            <div className="max-w-7xl mx-auto w-full space-y-6 flex-grow flex flex-col">
+              <PageHeader
+                title="Region & Ward Boundaries"
+                description="Manage administrative levels (Zones, Wards, Sectors) and map their geographic coordinates."
+                breadcrumbs={[
+                  { label: "Settings" },
+                  { label: "Regions & Wards" }
+                ]}
+                actions={
+                  <Button onClick={handleAddClick} size="sm">
+                    + Add Region
+                  </Button>
+                }
+              />
 
-                  <button
-                    type="button"
-                    onClick={handleAddClick}
-                    className="bg-[#e4e8f0] hover:bg-[#d8dce6] text-theme-text font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm"
-                  >
-                    Add Region
-                  </button>
+              {/* Table listing */}
+              <Card className="flex flex-col p-4 flex-grow">
+                <div className="flex justify-end mb-4">
+                  <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-80 select-none">
+                    <Input
+                      type="text"
+                      placeholder="Type to filter..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      className="shrink-0 font-bold text-xs"
+                    >
+                      Search
+                    </Button>
+                  </form>
                 </div>
 
-                {/* Table listing */}
-                <div className="bg-theme-surface rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col p-4">
-                  <div className="flex justify-end mb-4">
-                    <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-80 select-none">
-                      <input
-                        type="text"
-                        placeholder="Type to filter..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="flex-1 bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs text-theme-text placeholder:text-theme-text-dim outline-none focus:bg-theme-surface focus:border-emerald-500 font-semibold"
-                      />
-                      <button
-                        type="submit"
-                        className="bg-amber-500 hover:bg-amber-600 text-theme-text font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm shrink-0"
-                      >
-                        Search
-                      </button>
-                    </form>
-                  </div>
-
-                  <Table
-                    headers={["S. No.", "Name", "Code", "Region Type", "Parent Region", "Fill Color", "Action"]}
-                    itemsPerPage={30}
-                    emptyState="No regions configured."
-                  >
-                    {filteredRegions.map((reg, index) => (
-                      <tr key={reg.id} className="hover:bg-theme-surface/50 transition-colors">
-                        <td className="py-3.5 px-6 font-mono text-theme-text-dim">{index + 1}</td>
-                        <td className="py-3.5 px-6 text-theme-text font-bold">{reg.region_name}</td>
-                        <td className="py-3.5 px-6">{reg.region_code || <span className="text-theme-text font-medium">—</span>}</td>
-                        <td className="py-3.5 px-6">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-theme-surface border border-theme-border text-theme-text-dim font-bold uppercase tracking-wider">
-                            {reg.region_type_title}
+                <Table
+                  headers={["S. No.", "Name", "Code", "Region Type", "Parent Region", "Fill Color", "Action"]}
+                  emptyState="No regions configured."
+                >
+                  {filteredRegions.map((reg, index) => (
+                    <tr key={reg.id} className="hover:bg-theme-surface-hover/50 transition-colors">
+                      <td className="py-3 px-4 font-mono text-theme-text-dim text-xs">{index + 1}</td>
+                      <td className="py-3 px-4 text-theme-text font-bold text-xs">{reg.region_name}</td>
+                      <td className="py-3 px-4 text-xs font-semibold text-slate-500">{reg.region_code || <span className="text-theme-text-dim">—</span>}</td>
+                      <td className="py-3 px-4 text-xs">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] bg-slate-100 border border-slate-200 text-slate-650 font-black uppercase tracking-wider">
+                          {reg.region_type_title}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-theme-text-dim text-xs font-semibold">
+                        {reg.parent_region_name || <span className="text-slate-300 font-normal">—</span>}
+                      </td>
+                      <td className="py-3 px-4 text-center text-xs">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span
+                            className="w-3.5 h-3.5 rounded border border-theme-border shadow-sm"
+                            style={{ backgroundColor: reg.color || "#fba339" }}
+                          />
+                          <span className="text-[10px] font-mono text-theme-text-dim uppercase">
+                            {reg.color || "#fba339"}
                           </span>
-                        </td>
-                        <td className="py-3.5 px-6 text-theme-text-dim">
-                          {reg.parent_region_name || <span className="text-theme-text font-medium">—</span>}
-                        </td>
-                        <td className="py-3.5 px-6 text-center">
-                          <div className="inline-flex items-center gap-1.5">
-                            <span
-                              className="w-3.5 h-3.5 rounded border border-theme-border shadow-sm"
-                              style={{ backgroundColor: reg.color || "#fba339" }}
-                            />
-                            <span className="text-[10px] font-mono text-theme-text-dim uppercase">
-                              {reg.color || "#fba339"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-6 text-center">
-                          <div className="inline-flex gap-2">
-                            <button
-                              onClick={() => handleEditClick(reg)}
-                              className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-theme-accent hover:bg-theme-surface-hover hover:border-theme-border transition-all cursor-pointer"
-                              title="Edit Region on Map"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleDelete(reg.id)}
-                              className="p-1.5 border border-theme-border rounded-md text-theme-text-dim hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all cursor-pointer"
-                              title="Delete Region"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </Table>
-                </div>
-
-              </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="inline-flex gap-2">
+                          <EditButton
+                            onClick={() => handleEditClick(reg)}
+                            title="Edit Region on Map"
+                          />
+                          <DeleteButton
+                            onDelete={() => handleDelete(reg.id)}
+                            confirmMessage="Are you sure you want to delete this region?"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </Table>
+              </Card>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

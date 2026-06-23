@@ -80,11 +80,11 @@ export default function VehicleMakePage() {
     if (editingItem) {
       const updated = makes.map(m => m.id === editingItem.id ? { ...m, name, model, mileage, tareWeight, fuelType } : m);
       saveMakes(updated);
-      toast.success("Vehicle Make updated successfully!");
+      toast.success("Vehicle Master Data updated successfully!");
     } else {
       const newMake: VehicleMake = { id: Date.now(), name, model, mileage, tareWeight, fuelType };
       saveMakes([newMake, ...makes]);
-      toast.success("Vehicle Make created successfully!");
+      toast.success("Vehicle Master Data created successfully!");
     }
     closeForm();
   };
@@ -92,7 +92,7 @@ export default function VehicleMakePage() {
   const handleDelete = async (m: VehicleMake) => {
     const updated = makes.filter(mk => mk.id !== m.id);
     saveMakes(updated);
-    toast.success("Vehicle Make deleted successfully!");
+    toast.success("Vehicle Master Data deleted successfully!");
   };
 
   const fuelBadgeColor = (fuel: string) => {
@@ -108,12 +108,12 @@ export default function VehicleMakePage() {
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-6 lg:p-8">
 
       <PageHeader
-        title="Vehicle Make Management"
+        title="Vehicle Master Data"
         description="Manage manufacturer brands, models, mileage specs, tare weights, and fuel types."
-        breadcrumbs={[{ label: "VSWM", href: "/vswm/shift" }, { label: "Vehicle Makes" }]}
+        breadcrumbs={[{ label: "VSWM", href: "/vswm/shift" }, { label: "Vehicle Master Data" }]}
         actions={
           <Button onClick={formOpen ? closeForm : openAdd} variant={formOpen ? "secondary" : "primary"}>
-            {formOpen ? "Close" : "+ Add Make"}
+            {formOpen ? "Close" : "+ Add Master Data"}
           </Button>
         }
       />
@@ -123,7 +123,7 @@ export default function VehicleMakePage() {
         {formOpen && (
           <Card className="animate-fade-in">
             <CardHeader>
-              <CardTitle>{editingItem ? "✏️ Edit Vehicle Make" : "Create New Vehicle Make"}</CardTitle>
+              <CardTitle>{editingItem ? "Edit Vehicle Master Data" : "Create New Vehicle Master Data"}</CardTitle>
               <CardDescription>Specify manufacturer, model, mileage, weight, and fuel information.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -153,7 +153,7 @@ export default function VehicleMakePage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between py-4">
-            <div><CardTitle>Existing Vehicle Makes</CardTitle><CardDescription>All registered manufacturers and model specifications.</CardDescription></div>
+            <div><CardTitle>Existing Vehicle Master Data</CardTitle><CardDescription>All registered manufacturers and model specifications.</CardDescription></div>
             <span className="text-[10px] px-2.5 py-1 bg-theme-base text-theme-accent rounded-full border border-theme-border font-bold">{makes.length} total</span>
           </CardHeader>
           <CardContent className="p-0">

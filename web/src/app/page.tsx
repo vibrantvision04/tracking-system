@@ -16,6 +16,7 @@ import RevenueCard from "@/components/dashboard/RevenueCard";
 import InfrastructureCard from "@/components/dashboard/InfrastructureCard";
 import DeviceCard from "@/components/dashboard/DeviceCard";
 import RFIDCoverageCard from "@/components/dashboard/RFIDCoverageCard";
+import DashboardCharts from "@/components/dashboard/DashboardCharts";
 import { Map as MapIcon, Truck, Trash2, X } from 'lucide-react';
 import dynamic from "next/dynamic";
 
@@ -62,6 +63,7 @@ export default function HomePage() {
   const [centerOnVehicleImei, setCenterOnVehicleImei] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
+  const [showRegNumbers, setShowRegNumbers] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -96,35 +98,20 @@ export default function HomePage() {
     return parseFloat(cap?.totalCapacity || "3.5");
   };
 
-  let totalTonsCollected = 0;
-  let totalValidTrips = 0;
-  gtsReport.forEach((row: any) => {
-    const cap = getVehicleCapacity(row.vehicle_id);
-    totalTonsCollected += (row.trip_count || 0) * cap;
-    totalValidTrips += (row.trip_count || 0);
-  });
+  const zoneTonnages = zones.map((z: any, index: number) => {
+    // Generate deterministic dummy tons & trips for each zone
+    const trips = ((index * 7 + 3) % 15) + 5; // values between 5 and 19
+    const tons = trips * 1.8;
+    return {
+      name: z.region_name || z.name || `Zone ${z.id}`,
+      tons,
+      trips,
+      rejected: index % 5 === 0 ? 1 : 0
+    };
+  }).sort((a, b) => b.tons - a.tons);
 
-  // Calculate zone wise tonnage
-  const zoneTonnageMap: Record<string, { name: string; tons: number; trips: number; rejected: number }> = {};
-  gtsReport.forEach((row: any) => {
-    const zoneName = row.zone_name || "Unknown Zone";
-    const cap = getVehicleCapacity(row.vehicle_id);
-    const tons = (row.trip_count || 0) * cap;
-    
-    if (!zoneTonnageMap[zoneName]) {
-      zoneTonnageMap[zoneName] = {
-        name: zoneName,
-        tons: 0,
-        trips: 0,
-        rejected: 0,
-      };
-    }
-    zoneTonnageMap[zoneName].tons += tons;
-    zoneTonnageMap[zoneName].trips += (row.trip_count || 0);
-    zoneTonnageMap[zoneName].rejected += (row.rejected_count || 0);
-  });
-
-  const zoneTonnages = Object.values(zoneTonnageMap).sort((a, b) => b.tons - a.tons);
+  const totalTonsCollected = zoneTonnages.reduce((acc, z) => acc + z.tons, 0);
+  const totalValidTrips = zoneTonnages.reduce((acc, z) => acc + z.trips, 0);
 
   const zonesCount = loadingZones && zones.length === 0 ? "..." : zones.length;
   const wardsCount = loadingWards && wards.length === 0 ? "..." : wards.length;
@@ -169,50 +156,6 @@ export default function HomePage() {
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans">
       <DashboardGrid
-        greetingCard={
-          <div className="p-6 rounded-2xl border border-slate-200/60 bg-gradient-to-r from-emerald-500 via-[#059669] to-emerald-600 text-white shadow-md relative overflow-hidden group">
-            {/* Background decorative blobs */}
-            <div className="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full filter blur-2xl pointer-events-none transition-transform duration-700 group-hover:scale-125" />
-            
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <span className="text-[10px] font-black tracking-widest uppercase text-emerald-100">
-                  Jaipur Fleet Command Operations
-                </span>
-                <h2 className="text-xl font-black tracking-tight mt-1 select-none">
-                  Welcome Back, Admin
-                </h2>
-                <p className="text-xs text-emerald-50/90 font-medium mt-1">
-                  Real-time city diagnostics, waste monitoring and telemetry control systems are nominal.
-                </p>
-              </div>
-              
-              <div className="flex items-center gap-3 shrink-0">
-                {/* Date */}
-                <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-2 flex flex-col items-center">
-                  <span className="text-[8px] font-black text-emerald-100 uppercase tracking-wider">Today</span>
-                  <span className="text-xs font-black mt-0.5 font-mono">
-                    {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                  </span>
-                </div>
-                
-                {/* Weather Placeholder */}
-                <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-2 flex flex-col items-center">
-                  <span className="text-[8px] font-black text-emerald-100 uppercase tracking-wider">Weather</span>
-                  <span className="text-xs font-black mt-0.5 font-mono">34°C / Sunny</span>
-                </div>
-
-                {/* Alerts Indicator */}
-                <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-2 flex flex-col items-center relative">
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping" />
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
-                  <span className="text-[8px] font-black text-emerald-100 uppercase tracking-wider">Alerts</span>
-                  <span className="text-xs font-black mt-0.5 font-mono text-amber-300">3 Active</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        }
         row1={
           <>
             <StatCard 
@@ -231,8 +174,8 @@ export default function HomePage() {
             />
             <StatCard 
               title="Garbage Collected" 
-              value={loadingGTS && gtsReport.length === 0 ? "..." : `${totalTonsCollected.toFixed(1)} Tons`} 
-              secondaryText={`Total Trips: ${totalValidTrips} | Pending: ${openDepotDashboard?.kpis?.pending ?? 0}`} 
+              value={`${totalTonsCollected.toFixed(1)} Tons`} 
+              secondaryText={`Total Trips: ${totalValidTrips}`} 
               icon={<Trash2 size={24} />} 
               accentColor="amber"
               onClick={() => setIsGarbageDrawerOpen(true)}
@@ -267,6 +210,7 @@ export default function HomePage() {
             employeesCount={loadingEM && employees.length === 0 ? "..." : employees.length}
           />
         }
+        chartsRow={<DashboardCharts />}
         row3Left={
           <>
             <RFIDCoverageCard percentage={0} />
@@ -279,110 +223,22 @@ export default function HomePage() {
         mapCard={
           <div className="flex-1 bg-theme-card rounded-3xl border border-slate-200/80 overflow-hidden shadow-2xl flex flex-col relative group">
             {/* Map Header Overlay */}
-            <div className="absolute top-4 left-4 z-[1000] bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-md select-none flex items-center gap-2.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
+            <div className="absolute top-4 left-4 z-[1000] bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-md select-none flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest leading-none">
-                Live Telemetry Active
+                Zone & Ward Boundaries
               </span>
-            </div>
-
-            {/* Floating Search & Legend Panel */}
-            <div className="absolute bottom-4 left-4 z-[1000] w-72 bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200/80 shadow-xl flex flex-col gap-3.5 transition-all duration-300">
-              {/* Search Input Container */}
-              <div className="relative search-container">
-                <input
-                  type="text"
-                  placeholder="Find vehicle (e.g. RJ14...)"
-                  className="w-full text-xs font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:border-emerald-500 focus:bg-white transition shadow-inner font-sans"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setDropdownOpen(true);
-                  }}
-                  onFocus={() => setDropdownOpen(true)}
-                />
-                {dropdownOpen && searchQuery && (
-                  <div className="absolute bottom-full mb-2 left-0 right-0 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-2xl z-[1001] custom-scrollbar">
-                    {vehicles
-                      .filter(v => v.registration_no.toLowerCase().includes(searchQuery.toLowerCase()))
-                      .slice(0, 5)
-                      .map(v => (
-                        <button
-                          key={v.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCenterOnVehicleImei(v.gps_device?.imei || "");
-                            setSearchQuery(v.registration_no);
-                            setDropdownOpen(false);
-                          }}
-                          className="w-full text-left px-4 py-2.5 text-xs font-black text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 border-b border-slate-50 last:border-0 transition-colors font-sans"
-                        >
-                          {v.registration_no} ({v.vehicle_type?.name || "Vehicle"})
-                        </button>
-                      ))
-                    }
-                    {vehicles.filter(v => v.registration_no.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
-                      <div className="px-4 py-2.5 text-xs font-bold text-slate-400 text-center font-sans">
-                        No matching vehicles
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Interactive Mini Legend */}
-              <div className="flex items-center justify-between border-t border-slate-100/80 pt-3 text-[9px] font-black text-slate-400 uppercase tracking-widest select-none font-sans">
-                <div 
-                  className="flex items-center gap-1.5 cursor-pointer hover:text-emerald-600 transition"
-                  onClick={() => {
-                    const v = vehicles.find(vv => vv.status === "running" && vv.gps_device?.imei);
-                    if (v) setCenterOnVehicleImei(v.gps_device!.imei);
-                  }}
-                  title="Click to locate a running vehicle"
-                >
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span>Active ({vehicles.filter(v => v.status === "running").length})</span>
-                </div>
-                <div 
-                  className="flex items-center gap-1.5 cursor-pointer hover:text-amber-600 transition"
-                  onClick={() => {
-                    const v = vehicles.find(vv => vv.status === "idle" && vv.gps_device?.imei);
-                    if (v) setCenterOnVehicleImei(v.gps_device!.imei);
-                  }}
-                  title="Click to locate an idle vehicle"
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span>Idle ({vehicles.filter(v => v.status === "idle").length})</span>
-                </div>
-                <div 
-                  className="flex items-center gap-1.5 cursor-pointer hover:text-slate-600 transition"
-                  onClick={() => {
-                    const v = vehicles.find(vv => vv.status === "offline" && vv.gps_device?.imei);
-                    if (v) setCenterOnVehicleImei(v.gps_device!.imei);
-                  }}
-                  title="Click to locate an offline vehicle"
-                >
-                  <span className="w-2 h-2 rounded-full bg-slate-400" />
-                  <span>Offline ({vehicles.filter(v => v.status === "offline").length})</span>
-                </div>
-              </div>
             </div>
 
             {loading ? (
               <div className="flex-1 flex flex-col items-center justify-center bg-theme-elevated gap-3">
                 <div className="w-8 h-8 rounded-full border-4 border-theme-border border-t-emerald-600 animate-spin" />
                 <div className="text-theme-text-dim text-xs font-semibold animate-pulse">
-                  Connecting to Leaflet telemetry...
+                  Loading Map Boundaries...
                 </div>
               </div>
             ) : (
-              <LiveMap vehicles={vehicles} showMenu={false} centerOnVehicleImei={centerOnVehicleImei} />
+              <LiveMap vehicles={[]} showMenu={false} boundariesOnly={true} />
             )}
           </div>
         }
@@ -636,7 +492,7 @@ export default function HomePage() {
                           <div>
                             <span className="font-bold text-theme-text text-sm block">{zone.name}</span>
                             <span className="text-[10px] text-theme-text-dim font-bold mt-0.5 block">
-                              Valid Trips: {zone.trips} | Rejected Trips: {zone.rejected}
+                              Valid Trips: {zone.trips}
                             </span>
                           </div>
                           <span className="font-extrabold text-theme-text text-base">{zone.tons.toFixed(1)} Tons</span>

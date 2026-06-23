@@ -111,7 +111,6 @@ export default function VehicleDepartmentPage() {
   };
 
   const handleDelete = async (id: number, vehicleReg: string, deptName: string) => {
-    if (!confirm(`Are you sure you want to remove the association for "${vehicleReg}" mapped to "${deptName}"?`)) return;
     try {
       const res = await del<{ success: boolean }>(`/api/vehicle-departments/${id}`);
       if (res.success) { toast.success("Mapping deleted successfully!"); fetchData(); } else toast.error("Failed to delete mapping");

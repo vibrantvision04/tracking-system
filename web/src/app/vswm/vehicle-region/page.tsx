@@ -126,7 +126,6 @@ export default function VehicleRegionPage() {
   };
 
   const handleDelete = async (id: number, vehicleName: string, zoneName: string) => {
-    if (!confirm(`Are you sure you want to remove the association for "${vehicleName}" mapped to "${zoneName}"?`)) return;
     try {
       const res = await del<{ success: boolean }>(`/api/vehicle-regions/${id}`);
       if (res.success) { toast.success("Mapping deleted successfully!"); fetchData(); } else toast.error("Failed to delete mapping");

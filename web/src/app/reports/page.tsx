@@ -6,6 +6,7 @@ import FilterBar from "@/components/shared/FilterBar";
 import Table from "@/components/shared/Table";
 import { DatePicker } from "@/components/ui/DatePicker";
 import Button from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 interface MovementReport {
   id: number;
@@ -109,25 +110,14 @@ const TimeInputBox = ({ value, onUp, onDown }: { value: string; onUp: () => void
 
 const TABLE_HEADERS = [
   "S. NO.",
-  "DATE",
-  "VEHICLE(S) RTO",
-  "VEHICLE TYPE",
-  "ZONE",
-  "WARD",
-  "START POINT",
-  "END POINT",
-  "START TIME",
-  "END TIME",
-  "ACTIVE HOURS",
-  "TOTAL DISTANCE (KM)",
-  "AVERAGE SPEED (KM/H)",
-  "ACTUAL IGNITION ON DURATION",
-  "TOTAL IGNITION ON DURATION",
-  "TOTAL STOPPAGE DURATION",
-  "TOTAL IDLE DURATION",
-  "MINOR STOPPAGES",
-  "MAJOR STOPPAGES",
-  "TOTAL STOPPAGES",
+  "VEHICLE DETAILS",
+  "ZONE / WARD",
+  "START / END COORDINATES",
+  "TIMELINE",
+  "DISTANCE & SPEED",
+  "IGNITION DURATION",
+  "STOPPAGE & IDLE",
+  "STOPPAGES BREAKDOWN",
 ];
 
 export default function ReportsPage() {
@@ -428,64 +418,81 @@ export default function ReportsPage() {
             </FilterBar>
           </div>
 
-          {/* Table */}
-          <Table
-            headers={TABLE_HEADERS}
-            isLoading={loading}
-            paginate={false}
-            dense={true}
-            emptyState={
-              <p className="text-sm text-theme-text-dim">No reports found for this date.</p>
-            }
-          >
-            {reports.map((r, i) => (
-              <tr key={`${r.id}-${i}`}>
-                <td className="px-2 py-2 text-xs">{(page - 1) * limit + i + 1}</td>
-                <td className="px-2 py-2 text-xs whitespace-nowrap">{r.report_date ? new Date(r.report_date).toLocaleDateString() : "-"}</td>
-                <td className="px-2 py-2 text-xs font-bold text-theme-text whitespace-nowrap">{r.registration_no}</td>
-                <td className="px-2 py-2 text-xs">{r.vehicle_type || "Vehicle"}</td>
-                <td className="px-2 py-2 text-xs">{r.zone || "-"}</td>
-                <td className="px-2 py-2 text-xs">{r.ward || "-"}</td>
-                <td className="px-2 py-2 text-xs text-[#06B6D4] font-mono whitespace-nowrap">{formatCoord(r.start_point)}</td>
-                <td className="px-2 py-2 text-xs text-[#06B6D4] font-mono whitespace-nowrap">{formatCoord(r.end_point)}</td>
-                <td className="px-2 py-2 text-xs whitespace-nowrap">{formatTime(r.start_time)}</td>
-                <td className="px-2 py-2 text-xs whitespace-nowrap">{formatTime(r.end_time)}</td>
-                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_active_duration)}</td>
-                <td className="px-2 py-2 text-xs font-mono font-bold text-theme-text text-center">{r.total_distance.toFixed(2)}</td>
-                <td className="px-2 py-2 text-xs font-mono text-center">{r.average_speed.toFixed(1)}</td>
-                <td className="px-2 py-2 text-xs font-mono font-bold text-center text-[#06B6D4]">{formatDuration(r.actual_ignition_on_duration)}</td>
-                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_ignition_on_duration)}</td>
-                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_stoppage_duration)}</td>
-                <td className="px-2 py-2 text-xs font-mono">{formatDuration(r.total_idle_duration)}</td>
-                <td className="px-2 py-2 text-xs font-semibold text-center text-theme-text-dim">{r.minor_stoppages}</td>
-                <td className="px-2 py-2 text-xs font-semibold text-center text-theme-text-dim">{r.major_stoppages}</td>
-                <td className="px-2 py-2 text-xs font-bold text-center text-[#06B6D4]">{r.stoppages_count}</td>
-              </tr>
-            ))}
-          </Table>
+          {/* Table Container Card */}
+          <Card className="p-0 flex flex-col overflow-hidden border border-theme-border shadow-sm rounded-2xl bg-theme-surface">
+            <Table
+              headers={TABLE_HEADERS}
+              isLoading={loading}
+              paginate={false}
+              dense={true}
+              nested={true}
+              emptyState={
+                <p className="text-sm text-theme-text-dim">No reports found for this date.</p>
+              }
+            >
+              {reports.map((r, i) => (
+                <tr key={`${r.id}-${i}`} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="px-4 py-3 text-xs text-theme-text-dim font-medium">{(page - 1) * limit + i + 1}</td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="font-bold text-theme-text">{r.registration_no}</div>
+                    <div className="text-[10px] text-theme-text-dim mt-0.5 font-medium">{r.vehicle_type || "Vehicle"}</div>
+                    <div className="text-[10px] text-theme-text-dim/70 mt-0.5">{r.report_date ? new Date(r.report_date).toLocaleDateString() : "-"}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="font-semibold text-theme-text">{r.zone || "-"}</div>
+                    <div className="text-[10px] text-theme-text-dim mt-0.5">{r.ward || "-"}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="text-[#06B6D4] font-mono text-[10.5px]">Start: {formatCoord(r.start_point)}</div>
+                    <div className="text-[#06B6D4] font-mono text-[10.5px] mt-0.5">End: {formatCoord(r.end_point)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="font-medium text-theme-text">{formatTime(r.start_time)} - {formatTime(r.end_time)}</div>
+                    <div className="text-[10.5px] text-theme-text-dim mt-0.5 font-mono">Active: {formatDuration(r.total_active_duration)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="font-bold text-theme-text font-mono">{r.total_distance.toFixed(2)} KM</div>
+                    <div className="text-[10px] text-theme-text-dim mt-0.5 font-mono">Avg: {r.average_speed.toFixed(1)} KM/H</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="font-bold text-[#06B6D4] font-mono">Act: {formatDuration(r.actual_ignition_on_duration)}</div>
+                    <div className="text-[10px] text-theme-text-dim mt-0.5 font-mono">Tot: {formatDuration(r.total_ignition_on_duration)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="font-medium text-theme-text font-mono">Stop: {formatDuration(r.total_stoppage_duration)}</div>
+                    <div className="text-[10px] text-theme-text-dim mt-0.5 font-mono">Idle: {formatDuration(r.total_idle_duration)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="font-bold text-[#06B6D4]">{r.stoppages_count} Total</div>
+                    <div className="text-[10px] text-theme-text-dim mt-0.5 font-mono">{r.minor_stoppages} Min / {r.major_stoppages} Maj</div>
+                  </td>
+                </tr>
+              ))}
+            </Table>
 
-          {/* Server-side Pagination */}
-          <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between bg-theme-surface rounded-b-xl mt-0">
-            <div className="text-xs text-theme-text-dim">
-              Page <span className="font-medium text-theme-text">{page}</span> of <span className="font-medium text-theme-text">{totalPages}</span>
+            {/* Server-side Pagination */}
+            <div className="px-5 py-3.5 border-t border-theme-border flex items-center justify-between bg-theme-surface rounded-b-2xl">
+              <div className="text-xs text-theme-text-dim font-medium">
+                Page <span className="font-bold text-theme-text">{page}</span> of <span className="font-bold text-theme-text">{totalPages}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1 || loading}
+                  className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-semibold bg-theme-card hover:bg-theme-elevated text-theme-text disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm cursor-pointer"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages || loading}
+                  className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-semibold bg-theme-card hover:bg-theme-elevated text-theme-text disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1 || loading}
-                className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-medium bg-theme-card hover:bg-theme-elevated text-theme-text disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages || loading}
-                className="px-3 py-1.5 border border-theme-border rounded-lg text-xs font-medium bg-theme-card hover:bg-theme-elevated text-theme-text disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          </Card>
 
         </div>
       </div>

@@ -326,20 +326,20 @@ export default function VehiclesPage() {
                     <td className="py-3.5 px-5 text-theme-text-dim font-mono text-[11px]">{v.chassis_no || "—"}</td>
                     <td className="py-3.5 px-5">
                       {v.vehicle_type?.name ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-750 border border-indigo-100 uppercase tracking-widest">
                           {v.vehicle_type.name}
                         </span>
                       ) : (
-                        <span className="text-theme-text-dim">—</span>
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="py-3.5 px-5 text-theme-text font-medium">{makeStr}</td>
-                    <td className="py-3.5 px-5 text-theme-text font-medium">{capStr}</td>
+                    <td className="py-3.5 px-5 text-slate-700 font-medium">{makeStr}</td>
+                    <td className="py-3.5 px-5 text-slate-700 font-medium">{capStr}</td>
                     <td className="py-3.5 px-5 font-mono text-[11px]">
                       {v.gps_device ? (
-                        <span className="text-theme-accent font-semibold">{v.gps_device.imei}</span>
+                        <span className="text-emerald-600 font-bold tracking-tight">{v.gps_device.imei}</span>
                       ) : (
-                        <span className="text-theme-text-dim">None</span>
+                        <span className="text-slate-400">None</span>
                       )}
                     </td>
                     <td className="py-3.5 px-5 text-right">

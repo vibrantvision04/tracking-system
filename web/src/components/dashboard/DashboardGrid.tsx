@@ -5,13 +5,14 @@ interface DashboardGridProps {
   row1: React.ReactNode; // KPI Cards
   row2Left: React.ReactNode; // Coverage Charts
   row2Right: React.ReactNode; // Infrastructure
+  chartsRow?: React.ReactNode; // Charts / Graphs
   row3Left: React.ReactNode; // RFID & Revenue
   row3Right: React.ReactNode; // Devices
   mapCard: React.ReactNode; // Geofence Map
 }
 
 export default function DashboardGrid({
-  greetingCard, row1, row2Left, row2Right, row3Left, row3Right, mapCard
+  greetingCard, row1, row2Left, row2Right, chartsRow, row3Left, row3Right, mapCard
 }: DashboardGridProps) {
   return (
     <div className="flex-1 flex flex-col xl:flex-row min-h-0 relative bg-theme-base">
@@ -36,6 +37,13 @@ export default function DashboardGrid({
               {row2Right}
             </div>
           </div>
+
+          {/* Charts Row */}
+          {chartsRow && (
+            <div className="w-full">
+              {chartsRow}
+            </div>
+          )}
 
           {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">

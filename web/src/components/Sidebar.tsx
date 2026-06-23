@@ -30,7 +30,7 @@ const navData = [
     children: [
       { label: "Vehicle List", href: "/vehicles" },
       { label: "Vehicle Type", href: "/vswm/vehicle-type" },
-      { label: "Vehicle Make", href: "/vswm/vehicle-make" },
+      { label: "Vehicle Master Data", href: "/vswm/vehicle-make" },
       { label: "Vehicle Group", href: "/vswm/vehicle-groups" },
       { label: "Capacity Type", href: "/vswm/capacity-type" },
       { label: "Fuel Rate", href: "/vswm/fuel-rate" },
@@ -56,19 +56,8 @@ const navData = [
   {
     label: "GPS Devices",
     icon: Cpu,
-    children: [
-      { label: "GPS Device List", href: "/devices" },
-      { label: "GPS Device Type", href: "/vswm/gps-device-type" },
-      { label: "POS Device", href: "/vswm/pos-device" },
-      { label: "Weigh Bridge", href: "/vswm/weigh-bridge" },
-      {
-        label: "Assignments",
-        children: [
-          { label: "POS Device To Fuelstation", href: "/vswm/posdevice-fuelstation" },
-          { label: "WeighBridge to TS", href: "/vswm/weighbridge-transferstation" },
-        ],
-      },
-    ],
+    href: "/devices" 
+
   },
   {
     label: "Regions & Routes",
