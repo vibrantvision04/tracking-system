@@ -7,6 +7,8 @@ import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
 import StatCard from "@/components/shared/StatCard";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 import dynamic from "next/dynamic";
 
 const CleaningMap = dynamic(() => import("@/components/CleaningMap"), { ssr: false });
@@ -234,32 +236,32 @@ export default function OpenDepotCleaningReportPage() {
   stats.coverage = stats.total > 0 ? Math.round((resolvedCount / stats.total) * 100) : 0;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 overflow-hidden font-sans w-full">
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
       {/* Sub-header with Title & Action Exports */}
-      <div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-slate-700">Open Depot Cleaning Report</h2>
-          <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+          <h2 className="text-base font-bold text-theme-text">Open Depot Cleaning Report</h2>
+          <div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
         </div>
         <div className="flex gap-2 print:hidden">
           <Button
             onClick={() => window.print()}
             variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700"
+            className="px-3 py-1.5 text-xs font-semibold"
           >
             PDF
           </Button>
           <Button
             onClick={() => handleExport("csv")}
             variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700"
+            className="px-3 py-1.5 text-xs font-semibold"
           >
             CSV
           </Button>
           <Button
             onClick={() => handleExport("excel")}
             variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700"
+            className="px-3 py-1.5 text-xs font-semibold"
           >
             Excel
           </Button>
@@ -268,130 +270,112 @@ export default function OpenDepotCleaningReportPage() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
         {/* Filter Card Panel */}
-        <Card className="border border-slate-200 bg-white rounded-xl shadow-sm print:hidden">
+        <Card hoverable className="print:hidden">
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
               {/* Zone */}
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Zone
                 </span>
-                <select
+                <SearchableSelect
                   value={filters.zone_id}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, zone_id: e.target.value, open_depot_id: "" }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-                >
-                  <option value="">All Zones</option>
-                  {zones.map((z) => (
-                    <option key={z.id} value={z.id}>
-                      {z.region_name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFilters((prev) => ({ ...prev, zone_id: val, open_depot_id: "" }))}
+                  options={[
+                    { value: "", label: "All Zones" },
+                    ...zones.map((z) => ({ value: z.id.toString(), label: z.region_name }))
+                  ]}
+                  placeholder="All Zones"
+                />
               </div>
 
               {/* Ward */}
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Ward
                 </span>
-                <select
+                <SearchableSelect
                   value={filters.ward_id}
                   disabled={!filters.zone_id}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, ward_id: e.target.value, open_depot_id: "" }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer disabled:opacity-50"
-                >
-                  <option value="">All Wards</option>
-                  {filteredWards.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.region_name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFilters((prev) => ({ ...prev, ward_id: val, open_depot_id: "" }))}
+                  options={[
+                    { value: "", label: "All Wards" },
+                    ...filteredWards.map((w) => ({ value: w.id.toString(), label: w.region_name }))
+                  ]}
+                  placeholder="All Wards"
+                />
               </div>
 
               {/* Open Depot */}
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Open Depot
                 </span>
-                <select
+                <SearchableSelect
                   value={filters.open_depot_id}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, open_depot_id: e.target.value }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-                >
-                  <option value="">All Depots</option>
-                  {filteredDepotsForFilter.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFilters((prev) => ({ ...prev, open_depot_id: val }))}
+                  options={[
+                    { value: "", label: "All Depots" },
+                    ...filteredDepotsForFilter.map((d) => ({ value: d.id.toString(), label: d.name }))
+                  ]}
+                  placeholder="All Depots"
+                />
               </div>
 
               {/* Status */}
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Status
                 </span>
-                <select
+                <SearchableSelect
                   value={filters.approval_status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, approval_status: e.target.value }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="APPROVED_COMPLETE">Approved Complete</option>
-                  <option value="APPROVED_PARTIAL">Approved Partial</option>
-                  <option value="REJECTED">Rejected</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="NOT_COVERED">Not Covered</option>
-                </select>
-              </div>
-
-              {/* Date */}
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Date
-                </span>
-                <input
-                  type="date"
-                  value={filters.date}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px]"
+                  onChange={(val) => setFilters((prev) => ({ ...prev, approval_status: val }))}
+                  options={[
+                    { value: "", label: "All Statuses" },
+                    { value: "APPROVED_COMPLETE", label: "Approved Complete" },
+                    { value: "APPROVED_PARTIAL", label: "Approved Partial" },
+                    { value: "REJECTED", label: "Rejected" },
+                    { value: "PENDING", label: "Pending" },
+                    { value: "NOT_COVERED", label: "Not Covered" }
+                  ]}
+                  placeholder="All Statuses"
                 />
               </div>
 
+              {/* Date */}
+              <DatePicker
+                label="Date"
+                value={filters.date}
+                onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
+              />
+
               {/* Shift */}
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Shift
                 </span>
-                <select
+                <SearchableSelect
                   value={filters.shift_id}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, shift_id: e.target.value }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-                >
-                  {filters.date < new Date().toISOString().split("T")[0] ? (
-                    <option value="">Select Shift *</option>
-                  ) : (
-                    <option value="">Active Shift (Auto)</option>
-                  )}
-                  {shifts.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.shift_name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFilters((prev) => ({ ...prev, shift_id: val }))}
+                  options={[
+                    { 
+                      value: "", 
+                      label: filters.date < new Date().toISOString().split("T")[0] ? "Select Shift *" : "Active Shift (Auto)" 
+                    },
+                    ...shifts.map((s) => ({ value: s.id.toString(), label: s.shift_name }))
+                  ]}
+                  placeholder={filters.date < new Date().toISOString().split("T")[0] ? "Select Shift *" : "Active Shift (Auto)"}
+                />
               </div>
             </div>
 
-            <div className="flex justify-start pt-4 border-t border-slate-100">
+            <div className="flex justify-start pt-4 border-t border-theme-border/60">
               <Button
                 onClick={loadReport}
-                variant="accent"
+                variant="success"
                 loading={loading}
                 loadingText="Loading..."
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-lg text-xs transition"
+                className="font-semibold px-6 py-2.5 rounded-lg text-xs"
               >
                 Load
               </Button>
@@ -405,27 +389,27 @@ export default function OpenDepotCleaningReportPage() {
             <StatCard
               title="Approved Complete"
               value={stats.approvedComplete}
-              icon={<span className="text-emerald-600 font-bold">✓</span>}
+              icon={<span className="text-emerald-400 font-bold">✓</span>}
             />
             <StatCard
               title="Approved Partial"
               value={stats.approvedPartial}
-              icon={<span className="text-yellow-605 font-bold">⚡</span>}
+              icon={<span className="text-yellow-400 font-bold">⚡</span>}
             />
             <StatCard
               title="Rejected"
               value={stats.rejected}
-              icon={<span className="text-rose-600 font-bold">✗</span>}
+              icon={<span className="text-rose-400 font-bold">✗</span>}
             />
             <StatCard
               title="Pending"
               value={stats.pending}
-              icon={<span className="text-orange-600 font-bold">🕒</span>}
+              icon={<span className="text-orange-400 font-bold">🕒</span>}
             />
             <StatCard
               title="Not Covered"
               value={stats.notCovered}
-              icon={<span className="text-slate-650 font-bold">■</span>}
+              icon={<span className="text-theme-text-dim font-bold">■</span>}
             />
             <StatCard
               title="Overall Coverage"
@@ -436,33 +420,33 @@ export default function OpenDepotCleaningReportPage() {
         )}
 
         {/* Results Table Card */}
-        <Card className="border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
+        <Card hoverable className="overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
           <CardContent className="p-0 flex-1 flex flex-col justify-between overflow-hidden">
             <div className="flex-1 overflow-x-auto">
               <Table
                 headers={[
-                  <div key="photo" className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Photo</div>,
-                  <span key="depot" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Open Depot</span>,
-                  <span key="zw" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Zone / Ward</span>,
-                  <span key="sh" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Shift</span>,
-                  <span key="ub" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Uploaded By</span>,
-                  <span key="ut" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Upload Time</span>,
-                  <span key="ga" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Geofence (Distance)</span>,
-                  <span key="as" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Approval Status</span>,
-                  <span key="jp" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Jhalli Patti</span>,
-                  <span key="ad" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Audit Details</span>,
-                  <div key="action" className="text-right pr-4 w-24 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Action</div>,
+                  <div key="photo" className="text-center w-16 text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Photo</div>,
+                  <span key="depot" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Open Depot</span>,
+                  <span key="zw" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Zone / Ward</span>,
+                  <span key="sh" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Shift</span>,
+                  <span key="ub" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Uploaded By</span>,
+                  <span key="ut" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Upload Time</span>,
+                  <span key="ga" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Geofence (Distance)</span>,
+                  <span key="as" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Approval Status</span>,
+                  <span key="jp" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Jhalli Patti</span>,
+                  <span key="ad" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Audit Details</span>,
+                  <div key="action" className="text-right pr-4 w-24 text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Action</div>,
                 ]}
                 isLoading={loading}
                 emptyState={
                   !hasLoaded ? (
-                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-theme-text-dim/60">
                       <span className="text-3xl">📊</span>
                       <span className="text-[11px] font-semibold uppercase tracking-wider">Report Not Loaded</span>
                       <span className="text-[10px]">Select filters and click "Load" to fetch cleaning logs.</span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-theme-text-dim/60">
                       <span className="text-3xl">📭</span>
                       <span className="text-[11px] font-semibold uppercase tracking-wider">No records found</span>
                       <span className="text-[10px]">Try adjusting your filters or dates.</span>
@@ -471,40 +455,40 @@ export default function OpenDepotCleaningReportPage() {
                 }
               >
                 {reportData.map((item) => (
-                  <tr key={item.id || item.open_depot_id} className="hover:bg-slate-50/50 border-b border-slate-100 transition-colors print:border-black">
+                  <tr key={item.id || item.open_depot_id} className="border-b border-theme-border/30 transition-colors print:border-black">
                     <td className="py-3 px-5 text-center">
                       {item.image_url ? (
                         <img
                           src={item.image_url}
                           alt="Cleaning proof"
                           onClick={() => setViewItem(item)}
-                          className="w-12 h-12 rounded-lg object-cover cursor-pointer border border-slate-200 hover:scale-105 transition duration-300 shadow-sm mx-auto"
+                          className="w-12 h-12 rounded-lg object-cover cursor-pointer border border-theme-border/50 hover:scale-105 transition duration-300 shadow-sm mx-auto"
                           title="Click to view details"
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 font-bold text-[10px] mx-auto select-none">
+                        <div className="w-12 h-12 rounded-lg bg-theme-base/50 border border-theme-border/50 flex items-center justify-center text-theme-text-dim/60 font-bold text-[10px] mx-auto select-none">
                           N/A
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-5 font-bold text-slate-850 text-[12px] print:text-black">
+                    <td className="py-3 px-5 font-bold text-theme-text text-[12px] print:text-black">
                       {item.open_depot_name}
                     </td>
-                    <td className="py-3 px-5 text-[12px] text-slate-605">
+                    <td className="py-3 px-5 text-[12px] text-theme-text-dim">
                       <span className="block font-semibold">{item.zone_name}</span>
-                      <span className="block text-[10px] text-slate-400 mt-0.5">{item.ward_name}</span>
+                      <span className="block text-[10px] text-theme-text-dim/70 mt-0.5">{item.ward_name}</span>
                     </td>
-                    <td className="py-3 px-5 text-[12px] text-slate-700 font-medium whitespace-nowrap">
+                    <td className="py-3 px-5 text-[12px] text-theme-text font-medium whitespace-nowrap">
                       {item.shift_name ? (
-                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-650 text-[10px] uppercase font-bold">
+                        <span className="px-2 py-0.5 rounded bg-theme-base border border-theme-border text-theme-text-dim text-[10px] uppercase font-bold">
                           {item.shift_name}
                         </span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-theme-text-dim/50">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-5 font-semibold text-slate-700 text-[12px]">{item.uploaded_by || "—"}</td>
-                    <td className="py-3 px-5 text-[11px] text-slate-400">
+                    <td className="py-3 px-5 font-semibold text-theme-text text-[12px]">{item.uploaded_by || "—"}</td>
+                    <td className="py-3 px-5 text-[11px] text-theme-text-dim">
                       {item.upload_time && item.upload_time !== "0001-01-01T00:00:00Z" && item.upload_time !== "0001-01-01T05:30:00+05:30"
                         ? new Date(item.upload_time).toLocaleString()
                         : "—"}
@@ -514,30 +498,30 @@ export default function OpenDepotCleaningReportPage() {
                         <>
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
                             item.verification_status === "VALID"
-                              ? "bg-emerald-500/10 text-emerald-600"
-                              : "bg-rose-500/10 text-rose-600"
+                              ? "bg-emerald-500/10 text-emerald-450"
+                              : "bg-rose-500/10 text-rose-450"
                           }`}>
                             {item.verification_status === "VALID" ? "VALID LOCATION" : "OUTSIDE GEOFENCE"}
                           </span>
-                          <span className="block text-[10px] text-slate-400 mt-1">
+                          <span className="block text-[10px] text-theme-text-dim/70 mt-1">
                             Distance: {item.distance_from_depot.toFixed(1)}m
                           </span>
                         </>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-theme-text-dim/50">—</span>
                       )}
                     </td>
                     <td className="py-3 px-5 text-[12px]">
                       <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-sm ${
                         item.approval_status === "APPROVED_COMPLETE"
-                          ? "bg-emerald-600 text-white"
+                          ? "bg-emerald-650 text-white"
                           : item.approval_status === "APPROVED_PARTIAL"
                           ? "bg-yellow-500 text-black"
                           : item.approval_status === "REJECTED"
-                          ? "bg-rose-600 text-white"
+                          ? "bg-rose-650 text-white"
                           : item.approval_status === "PENDING"
-                          ? "bg-orange-500 text-white"
-                          : "bg-slate-900 text-white" // NOT_COVERED
+                          ? "bg-orange-550 text-white"
+                          : "bg-theme-surface border border-theme-border text-theme-text-dim" // NOT_COVERED
                       }`}>
                         {item.approval_status === "APPROVED_COMPLETE"
                           ? "APPROVED COMPLETE"
@@ -552,36 +536,36 @@ export default function OpenDepotCleaningReportPage() {
                     </td>
                     <td className="py-3 px-5 text-[12px]">
                       {item.jhalli_patti_used === null ? (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-theme-text-dim/50">—</span>
                       ) : item.jhalli_patti_used ? (
-                        <span className="inline-block bg-teal-500/10 text-teal-600 px-2 py-0.5 rounded-full font-bold text-[9px]">
+                        <span className="inline-block bg-teal-500/10 text-teal-400 px-2 py-0.5 rounded-full font-bold text-[9px]">
                           ✓ Yes
                         </span>
                       ) : (
-                        <span className="inline-block bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full font-bold text-[9px]">
+                        <span className="inline-block bg-theme-base text-theme-text-dim px-2 py-0.5 rounded-full font-bold text-[9px] border border-theme-border/60">
                           ✗ No
                         </span>
                       )}
                     </td>
                     <td className="py-3 px-5 max-w-[200px] truncate text-[11px]">
                       {item.approval_status !== "PENDING" && item.approval_status !== "NOT_COVERED" ? (
-                        <div className="space-y-0.5 text-slate-600">
-                          <span className="block font-semibold">Audited by: {item.approved_by || "Admin"}</span>
+                        <div className="space-y-0.5 text-theme-text-dim">
+                          <span className="block font-semibold">Audited by: <span className="text-theme-text">{item.approved_by || "Admin"}</span></span>
                           {item.approved_time && (
-                            <span className="block text-slate-400">
+                            <span className="block text-theme-text-dim/60">
                               On: {new Date(item.approved_time).toLocaleDateString()}
                             </span>
                           )}
                           {item.remarks && (
-                            <span className="block text-rose-500 italic font-semibold max-w-[180px] truncate" title={item.remarks}>
+                            <span className="block text-rose-400 italic font-semibold max-w-[180px] truncate" title={item.remarks}>
                               "{item.remarks}"
                             </span>
                           )}
                         </div>
                       ) : item.approval_status === "PENDING" ? (
-                        <span className="text-slate-400 italic">Awaiting review</span>
+                        <span className="text-theme-text-dim/50 italic">Awaiting review</span>
                       ) : (
-                        <span className="text-slate-400 italic">—</span>
+                        <span className="text-theme-text-dim/50 italic">—</span>
                       )}
                     </td>
                     <td className="py-3 px-5 text-right print:hidden">
@@ -599,7 +583,7 @@ export default function OpenDepotCleaningReportPage() {
             </div>
 
             {/* Total Count Footer */}
-            <div className="bg-slate-100 border-t border-slate-200 px-5 py-3 text-xs font-bold text-slate-500 select-none uppercase tracking-wider shrink-0">
+            <div className="bg-theme-surface border-t border-theme-border px-5 py-3 text-xs font-bold text-theme-text-dim select-none uppercase tracking-wider shrink-0">
               {reportData.length} total records listed
             </div>
           </CardContent>

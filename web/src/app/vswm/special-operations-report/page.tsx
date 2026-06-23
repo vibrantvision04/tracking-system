@@ -7,6 +7,8 @@ import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
 import StatCard from "@/components/shared/StatCard";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 import PageHeader from "@/components/shared/PageHeader";
 
 interface SpecialOpsRow {
@@ -151,25 +153,25 @@ export default function SpecialOperationsReportPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 overflow-hidden font-sans w-full">
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
       {/* Sub-header with Title & Action Exports */}
-      <div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-slate-700">Special Operations Report</h2>
-          <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+          <h2 className="text-base font-bold text-theme-text">Special Operations Report</h2>
+          <div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
         </div>
         <div className="flex gap-2 print:hidden">
           <Button
             onClick={() => window.print()}
             variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700"
+            className="px-3 py-1.5 text-xs font-semibold"
           >
             PDF
           </Button>
           <Button
             onClick={handleExportCSV}
             variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700"
+            className="px-3 py-1.5 text-xs font-semibold"
           >
             CSV
           </Button>
@@ -178,53 +180,43 @@ export default function SpecialOperationsReportPage() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
         {/* Filter Card Panel */}
-        <Card className="border border-slate-200 bg-white rounded-xl shadow-sm print:hidden">
+        <Card hoverable className="print:hidden">
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               {/* Date */}
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Date
-                </span>
-                <input
-                  type="date"
-                  value={filters.date}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px]"
-                />
-              </div>
+              <DatePicker
+                label="Date"
+                value={filters.date}
+                onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
+              />
 
               {/* Shift */}
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Shift
                 </span>
-                <select
+                <SearchableSelect
                   value={filters.shift_id}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, shift_id: e.target.value }))}
-                  className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px] cursor-pointer"
-                >
-                  {filters.date < new Date().toISOString().split("T")[0] ? (
-                    <option value="">Select Shift *</option>
-                  ) : (
-                    <option value="">Active Shift (Auto)</option>
-                  )}
-                  {shifts.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.shift_name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFilters((prev) => ({ ...prev, shift_id: val }))}
+                  options={[
+                    { 
+                      value: "", 
+                      label: filters.date < new Date().toISOString().split("T")[0] ? "Select Shift *" : "Active Shift (Auto)" 
+                    },
+                    ...shifts.map((s) => ({ value: s.id.toString(), label: s.shift_name }))
+                  ]}
+                  placeholder={filters.date < new Date().toISOString().split("T")[0] ? "Select Shift *" : "Active Shift (Auto)"}
+                />
               </div>
 
               {/* Load Button */}
               <div className="flex items-end">
                 <Button
                   onClick={loadReport}
-                  variant="accent"
+                  variant="success"
                   loading={loading}
                   loadingText="Loading..."
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold w-full py-2.5 rounded-lg text-xs transition min-h-[38px]"
+                  className="font-semibold w-full py-2.5 rounded-lg text-xs min-h-[38px]"
                 >
                   Load Report
                 </Button>
@@ -239,60 +231,60 @@ export default function SpecialOperationsReportPage() {
             <StatCard
               title="Average Route Coverage"
               value={averageCoverage !== null ? `${averageCoverage}%` : "N/A"}
-              icon={<span className="text-emerald-600 font-bold">%</span>}
+              icon={<span className="text-emerald-400 font-bold">%</span>}
             />
             <StatCard
               title="Total Distance"
               value={`${totalDistance.toFixed(2)} km`}
-              icon={<span className="text-indigo-600 font-bold">KM</span>}
+              icon={<span className="text-indigo-400 font-bold">KM</span>}
             />
             <StatCard
               title="Active Vehicles"
               value={`${activeVehicles} / ${data.length}`}
-              icon={<span className="text-teal-600 font-bold">🚛</span>}
+              icon={<span className="text-teal-400 font-bold">🚛</span>}
             />
             <StatCard
               title="Total Trips"
               value={totalTrips}
-              icon={<span className="text-amber-600 font-bold">🔄</span>}
+              icon={<span className="text-amber-400 font-bold">🔄</span>}
             />
           </div>
         )}
 
         {/* Results Table Card */}
-        <Card className="border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
+        <Card hoverable className="overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
           <CardContent className="p-0 flex-1 flex flex-col justify-between overflow-hidden">
             {hasLoaded && activeShiftName && (
-              <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span className="font-semibold text-slate-700">Active Shift: {activeShiftName}</span>
+              <div className="px-5 py-3.5 bg-theme-surface border-b border-theme-border flex items-center justify-between text-xs text-theme-text-dim">
+                <span className="font-semibold text-theme-text">Active Shift: {activeShiftName}</span>
                 <span className="font-mono">Date: {filters.date}</span>
               </div>
             )}
             <div className="flex-1 overflow-x-auto">
               <Table
                 headers={[
-                  <div key="s" className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">S. No.</div>,
-                  <span key="reg" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Vehicle No</span>,
-                  <span key="type" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Vehicle Type</span>,
-                  <span key="route" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Assigned Route</span>,
-                  <span key="cov" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider text-center block">Coverage</span>,
-                  <span key="dist" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Distance</span>,
-                  <span key="trips" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider text-center block">Trips</span>,
-                  <span key="run" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Running</span>,
-                  <span key="idle" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Idle</span>,
-                  <span key="eng" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Engine Hours</span>,
-                  <span key="summ" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Summary</span>,
+                  <div key="s" className="text-center w-16 text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">S. No.</div>,
+                  <span key="reg" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Vehicle No</span>,
+                  <span key="type" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Vehicle Type</span>,
+                  <span key="route" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Assigned Route</span>,
+                  <span key="cov" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider text-center block">Coverage</span>,
+                  <span key="dist" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Distance</span>,
+                  <span key="trips" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider text-center block">Trips</span>,
+                  <span key="run" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Running</span>,
+                  <span key="idle" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Idle</span>,
+                  <span key="eng" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Engine Hours</span>,
+                  <span key="summ" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Summary</span>,
                 ]}
                 isLoading={loading}
                 emptyState={
                   !hasLoaded ? (
-                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-theme-text-dim/60">
                       <span className="text-3xl">📊</span>
                       <span className="text-[11px] font-semibold uppercase tracking-wider">Report Not Loaded</span>
                       <span className="text-[10px]">Select filters and click "Load Report" to fetch logs.</span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-theme-text-dim/60">
                       <span className="text-3xl">📭</span>
                       <span className="text-[11px] font-semibold uppercase tracking-wider">No records found</span>
                       <span className="text-[10px]">Try adjusting your filters or dates.</span>
@@ -303,49 +295,49 @@ export default function SpecialOperationsReportPage() {
                 {data.map((row, idx) => (
                   <tr
                     key={row.vehicle_id}
-                    className="hover:bg-slate-50/50 border-b border-slate-100 transition-colors print:border-black"
+                    className="border-b border-theme-border/30 transition-colors print:border-black"
                   >
-                    <td className="py-3 px-5 text-center text-slate-400 font-mono text-[11px] print:text-black">
+                    <td className="py-3 px-5 text-center text-theme-text-dim font-mono text-[11px] print:text-black">
                       {idx + 1}
                     </td>
-                    <td className="py-3 px-5 font-bold text-slate-850 text-[12px] print:text-black">
+                    <td className="py-3 px-5 font-bold text-theme-text text-[12px] print:text-black">
                       {row.registration_no}
                     </td>
-                    <td className="py-3 px-5 text-[12px] text-slate-500">{row.vehicle_type}</td>
-                    <td className="py-3 px-5 text-[12px] font-semibold text-slate-700">
+                    <td className="py-3 px-5 text-[12px] text-theme-text-dim">{row.vehicle_type}</td>
+                    <td className="py-3 px-5 text-[12px] font-semibold text-theme-text">
                       {row.route_name}
                     </td>
                     <td className="py-3 px-5 text-center">
                       {row.covered_percentage !== null ? (
                         <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-sm ${
                           row.covered_percentage >= 80
-                            ? "bg-emerald-600 text-white"
+                            ? "bg-emerald-650 text-white"
                             : row.covered_percentage >= 50
                             ? "bg-yellow-500 text-black"
-                            : "bg-rose-600 text-white"
+                            : "bg-rose-655 text-white"
                         }`}>
                           {row.covered_percentage}%
                         </span>
                       ) : (
-                        <span className="text-slate-400 font-bold text-[10px] uppercase">N/A</span>
+                        <span className="text-theme-text-dim/50 font-bold text-[10px] uppercase">N/A</span>
                       )}
                     </td>
-                    <td className="py-3 px-5 font-mono text-[12px] font-semibold text-slate-800">
+                    <td className="py-3 px-5 font-mono text-[12px] font-semibold text-theme-text">
                       {row.distance_travelled.toFixed(2)} km
                     </td>
-                    <td className="py-3 px-5 text-center font-bold text-slate-700 text-[12px]">
+                    <td className="py-3 px-5 text-center font-bold text-theme-text text-[12px]">
                       {row.trip_count}
                     </td>
-                    <td className="py-3 px-5 font-mono text-[11px] text-slate-500">
+                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text-dim">
                       {row.running_hours}
                     </td>
-                    <td className="py-3 px-5 font-mono text-[11px] text-slate-500">
+                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text-dim">
                       {row.idle_hours}
                     </td>
-                    <td className="py-3 px-5 font-mono text-[11px] text-slate-700 font-semibold">
+                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text font-semibold">
                       {row.engine_hours}
                     </td>
-                    <td className="py-3 px-5 text-[11px] text-slate-500 max-w-xs break-words">
+                    <td className="py-3 px-5 text-[11px] text-theme-text-dim max-w-xs break-words">
                       {row.movement_summary}
                     </td>
                   </tr>
@@ -354,7 +346,7 @@ export default function SpecialOperationsReportPage() {
             </div>
 
             {hasLoaded && (
-              <div className="bg-slate-100 border-t border-slate-200 px-5 py-3 text-xs font-bold text-slate-500 select-none uppercase tracking-wider shrink-0">
+              <div className="bg-theme-surface border-t border-theme-border px-5 py-3 text-xs font-bold text-theme-text-dim select-none uppercase tracking-wider shrink-0">
                 {data.length} vehicles listed
               </div>
             )}

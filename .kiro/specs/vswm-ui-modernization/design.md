@@ -644,18 +644,15 @@ The project already has `fast-check` (^3.23.2) and `vitest` (^2.1.9) installed, 
 
 ---
 
-### Property Reflection
+**Property Reflection:** Before finalizing, reviewing for redundancy:
 
-Before finalizing, reviewing for redundancy:
+- Property 1 (spacing formula) is unique.
+- Properties 4 (Input error) and 5 (Select error) both test "error string is rendered" for different components — kept separate since they test different components.
+- Property 2 (Button no-throw) and Property 3 (Button variant classes) are complementary and non-redundant — Property 3 tests correct output, Property 2 tests absence of runtime errors.
+- Property 6 (pagination entry count) is unique.
+- Property 7 (Card hoverable classes) is unique.
 
-- Property 2 (spacing formula) and no other property overlap — unique.
-- Properties 5 (Input error) and 6 (Select error) both test "error string is rendered" for different components — they cannot be combined because the components are independent, but they share the same pattern. Kept separate since they test different components.
-- Property 3 (Button variant classes) and Property 4 (Button no-throw) are complementary and non-redundant — Property 3 tests correct output, Property 4 tests absence of runtime errors.
-- Property 7 (pagination entry count) is unique.
-- Property 8 (Card hoverable classes) is unique.
-- Property 1 (colors shape) is an example, not a property — confirmed no redundancy with Property 2.
-
-Final set: Properties 2–8 (spacing formula, button variant rendering, button no-throw, input error propagation, select error propagation, pagination summary, card hoverable).
+Final set: 7 properties (spacing formula, button no-throw, button variant, input error, select error, pagination summary, card hoverable).
 
 ---
 

@@ -9,11 +9,11 @@ import {
   Search, 
   RefreshCw, 
   AlertTriangle,
-  Play,
-  Calendar,
-  Clock
+  Play
 } from "lucide-react";
 import Link from "next/link";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface EarlyDepartureRecord {
   vehicle_id: number;
@@ -74,48 +74,46 @@ export default function EarlyDepartureReportPage() {
         breadcrumbs={[{ label: "Reports", href: "/reports" }, { label: "Early Departed Report" }]}
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-theme-surface border border-theme-border px-3 py-1.5 rounded-xl text-xs">
-              <Calendar className="w-3.5 h-3.5 text-theme-text-dim" />
-              <input
-                type="date"
+            <div className="w-36">
+              <DatePicker
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="bg-transparent text-theme-text outline-none"
               />
             </div>
 
-            <div className="flex items-center gap-2 bg-theme-surface border border-theme-border px-3 py-1.5 rounded-xl text-xs">
-              <Clock className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-theme-text-dim mr-1">Threshold:</span>
-              <select
+            <div className="flex flex-col w-36">
+              <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1">Threshold</span>
+              <SearchableSelect
                 value={thresholdFilter}
-                onChange={(e) => setThresholdFilter(e.target.value)}
-                className="bg-transparent text-theme-text outline-none font-semibold cursor-pointer"
-              >
-                <option value="11:00:00">11:00 AM</option>
-                <option value="12:00:00">12:00 PM</option>
-                <option value="12:30:00">12:30 PM</option>
-                <option value="13:00:00">01:00 PM</option>
-              </select>
+                onChange={(val) => setThresholdFilter(val)}
+                options={[
+                  { value: "11:00:00", label: "11:00 AM" },
+                  { value: "12:00:00", label: "12:00 PM" },
+                  { value: "12:30:00", label: "12:30 PM" },
+                  { value: "13:00:00", label: "01:00 PM" }
+                ]}
+                placeholder="Threshold"
+              />
             </div>
 
-            <div className="flex items-center gap-2 bg-theme-surface border border-theme-border px-3 py-1.5 rounded-xl text-xs">
-              <Clock className="w-3.5 h-3.5 text-rose-500" />
-              <span className="text-theme-text-dim mr-1">Shift End:</span>
-              <select
+            <div className="flex flex-col w-36">
+              <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1">Shift End</span>
+              <SearchableSelect
                 value={endTimeFilter}
-                onChange={(e) => setEndTimeFilter(e.target.value)}
-                className="bg-transparent text-theme-text outline-none font-semibold cursor-pointer"
-              >
-                <option value="14:00:00">02:00 PM</option>
-                <option value="15:00:00">03:00 PM</option>
-                <option value="16:00:00">04:00 PM</option>
-              </select>
+                onChange={(val) => setEndTimeFilter(val)}
+                options={[
+                  { value: "14:00:00", label: "02:00 PM" },
+                  { value: "15:00:00", label: "03:00 PM" },
+                  { value: "16:00:00", label: "04:00 PM" }
+                ]}
+                placeholder="Shift End"
+              />
             </div>
 
             <button 
               onClick={fetchEarlyDepartures} 
-              className="p-2.5 bg-theme-surface hover:bg-theme-surface-hover border border-theme-border rounded-xl transition"
+              className="p-2.5 bg-[#16A34A] hover:bg-[#15803D] border-none text-white rounded-xl transition shrink-0 self-end h-[38px] flex items-center justify-center cursor-pointer shadow-sm"
+              title="Refresh"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             </button>

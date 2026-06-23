@@ -111,7 +111,7 @@ export default function CrudDirectory({
               <form onSubmit={onSubmit} className="space-y-4">
                 {formFields}
                 <div className="flex items-center gap-3 pt-2 border-t border-theme-border">
-                  <Button type="submit" variant="accent" loading={submitting} loadingText="Submitting...">
+                  <Button type="submit" variant="success" loading={submitting} loadingText="Submitting...">
                     Submit
                   </Button>
                   <Button type="button" variant="outline" onClick={() => onFormOpenChange(false)}>

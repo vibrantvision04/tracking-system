@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
-import SearchableDropdown from "@/components/shared/SearchableDropdown";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface GTSTripRow {
 	vehicle_id: number;
@@ -28,21 +29,6 @@ export default function GTSTripReportPage() {
 	const [routeTypes, setRouteTypes] = useState<any[]>([]);
 	const [vehicles, setVehicles] = useState<any[]>([]);
 
-	const [zoneSearch, setZoneSearch] = useState("");
-	const [wardSearch, setWardSearch] = useState("");
-	const [routeTypeSearch, setRouteTypeSearch] = useState("");
-	const [vehicleSearch, setVehicleSearch] = useState("");
-
-	const [zoneOpen, setZoneOpen] = useState(false);
-	const [wardOpen, setWardOpen] = useState(false);
-	const [routeTypeOpen, setRouteTypeOpen] = useState(false);
-	const [vehicleOpen, setVehicleOpen] = useState(false);
-
-	const zoneRef = useRef<HTMLDivElement>(null);
-	const wardRef = useRef<HTMLDivElement>(null);
-	const routeTypeRef = useRef<HTMLDivElement>(null);
-	const vehicleRef = useRef<HTMLDivElement>(null);
-
 	// Filter states
 	const [selectedZone, setSelectedZone] = useState("");
 	const [selectedWard, setSelectedWard] = useState("");
@@ -52,17 +38,6 @@ export default function GTSTripReportPage() {
 		const today = new Date();
 		return today.toISOString().split("T")[0];
 	});
-
-	useEffect(() => {
-		const handleClickOutside = (e: MouseEvent) => {
-			if (zoneRef.current && !zoneRef.current.contains(e.target as Node)) setZoneOpen(false);
-			if (wardRef.current && !wardRef.current.contains(e.target as Node)) setWardOpen(false);
-			if (routeTypeRef.current && !routeTypeRef.current.contains(e.target as Node)) setRouteTypeOpen(false);
-			if (vehicleRef.current && !vehicleRef.current.contains(e.target as Node)) setVehicleOpen(false);
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, []);
 
 	// Fetch option lists on mount
 	useEffect(() => {
@@ -140,26 +115,31 @@ export default function GTSTripReportPage() {
 		? wards.filter((w) => String(w.parent_id) === selectedZone)
 		: wards;
 
+	const zoneOptions = zones.map(z => ({ value: String(z.id), label: z.region_name }));
+	const wardOptions = filteredWards.map(w => ({ value: String(w.id), label: w.region_name }));
+	const routeTypeOptions = routeTypes.map(rt => ({ value: String(rt.id), label: rt.name }));
+	const vehicleOptions = vehicles.map(v => ({ value: String(v.id), label: v.registration_no }));
+
 	return (
-		<div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 overflow-hidden font-sans">
+		<div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans">
 			{/* Sub-header / Playback Title with Green Line */}
-			<div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+			<div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
 				<div>
-					<h2 className="text-base font-bold text-slate-700">Trips To GTS (Transfer Station) Report</h2>
-					<div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+					<h2 className="text-base font-bold text-theme-text">Trips To GTS (Transfer Station) Report</h2>
+					<div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
 				</div>
 				<div className="flex gap-2 print:hidden">
 					<Button
 						onClick={() => window.print()}
 						variant="outline"
-						className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200"
+						className="px-3 py-1.5 text-xs font-semibold"
 					>
 						PDF
 					</Button>
 					<Button
 						onClick={handleExportCSV}
 						variant="outline"
-						className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200"
+						className="px-3 py-1.5 text-xs font-semibold"
 					>
 						CSV
 					</Button>
@@ -168,119 +148,66 @@ export default function GTSTripReportPage() {
 
 			<div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
 				{/* Filter Form Card */}
-				<Card className="border border-slate-200 bg-white rounded-xl shadow-sm print:hidden !overflow-visible">
+				<Card className="print:hidden !overflow-visible">
 					<CardContent className="p-6">
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-							<SearchableDropdown
-								label="Zone"
-								selectedName={zones.find(z => z.id.toString() === selectedZone)?.region_name || "Select Zone"}
-								isSelected={!!selectedZone}
-								isOpen={zoneOpen}
-								setOpen={setZoneOpen}
-								search={zoneSearch}
-								setSearch={setZoneSearch}
-								items={zones.filter(z => z.region_name.toLowerCase().includes(zoneSearch.toLowerCase()))}
-								onSelect={(id) => {
-									if (selectedZone === id.toString()) {
-										setSelectedZone("");
-									} else {
-										setSelectedZone(id.toString());
-									}
-									setSelectedWard("");
-									setZoneOpen(false);
-								}}
-								dropdownRef={zoneRef}
-								keyField="id"
-								displayField="region_name"
-							/>
-
-							<SearchableDropdown
-								label="Ward"
-								selectedName={filteredWards.find(w => w.id.toString() === selectedWard)?.region_name || "Select Ward"}
-								isSelected={!!selectedWard}
-								isOpen={wardOpen}
-								setOpen={setWardOpen}
-								search={wardSearch}
-								setSearch={setWardSearch}
-								items={filteredWards.filter(w => w.region_name.toLowerCase().includes(wardSearch.toLowerCase()))}
-								onSelect={(id) => {
-									if (selectedWard === id.toString()) {
-										setSelectedWard("");
-									} else {
-										setSelectedWard(id.toString());
-									}
-									setWardOpen(false);
-								}}
-								dropdownRef={wardRef}
-								keyField="id"
-								displayField="region_name"
-							/>
-
-							<SearchableDropdown
-								label="Route Type"
-								selectedName={routeTypes.find(rt => rt.id.toString() === selectedRouteType)?.name || "Select Route Type"}
-								isSelected={!!selectedRouteType}
-								isOpen={routeTypeOpen}
-								setOpen={setRouteTypeOpen}
-								search={routeTypeSearch}
-								setSearch={setRouteTypeSearch}
-								items={routeTypes.filter(rt => rt.name.toLowerCase().includes(routeTypeSearch.toLowerCase()))}
-								onSelect={(id) => {
-									if (selectedRouteType === id.toString()) {
-										setSelectedRouteType("");
-									} else {
-										setSelectedRouteType(id.toString());
-									}
-									setRouteTypeOpen(false);
-								}}
-								dropdownRef={routeTypeRef}
-								keyField="id"
-								displayField="name"
-							/>
-
-							<SearchableDropdown
-								label="Vehicle(s) RTO"
-								selectedName={vehicles.find(v => v.id.toString() === selectedVehicle)?.registration_no || "Select Vehicle"}
-								isSelected={!!selectedVehicle}
-								isOpen={vehicleOpen}
-								setOpen={setVehicleOpen}
-								search={vehicleSearch}
-								setSearch={setVehicleSearch}
-								items={vehicles.filter(v => v.registration_no.toLowerCase().includes(vehicleSearch.toLowerCase()))}
-								onSelect={(id) => {
-									if (selectedVehicle === id.toString()) {
-										setSelectedVehicle("");
-									} else {
-										setSelectedVehicle(id.toString());
-									}
-									setVehicleOpen(false);
-								}}
-								dropdownRef={vehicleRef}
-								keyField="id"
-								displayField="registration_no"
-							/>
-
-							{/* Date Filter */}
 							<div className="flex flex-col">
-								<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-									Date
-								</span>
-								<input
-									type="date"
-									value={selectedDate}
-									onChange={(e) => setSelectedDate(e.target.value)}
-									className="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-700 outline-none hover:border-emerald-500/40 focus:border-emerald-500 transition min-h-[38px]"
+								<span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">Zone</span>
+								<SearchableSelect
+									value={selectedZone}
+									onChange={(val) => {
+										setSelectedZone(val);
+										setSelectedWard("");
+									}}
+									options={zoneOptions}
+									placeholder="Select Zone"
 								/>
 							</div>
+
+							<div className="flex flex-col">
+								<span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">Ward</span>
+								<SearchableSelect
+									value={selectedWard}
+									onChange={(val) => setSelectedWard(val)}
+									options={wardOptions}
+									placeholder="Select Ward"
+									disabled={!selectedZone}
+								/>
+							</div>
+
+							<div className="flex flex-col">
+								<span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">Route Type</span>
+								<SearchableSelect
+									value={selectedRouteType}
+									onChange={(val) => setSelectedRouteType(val)}
+									options={routeTypeOptions}
+									placeholder="Select Route Type"
+								/>
+							</div>
+
+							<div className="flex flex-col">
+								<span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">Vehicle(s) RTO</span>
+								<SearchableSelect
+									value={selectedVehicle}
+									onChange={(val) => setSelectedVehicle(val)}
+									options={vehicleOptions}
+									placeholder="Select Vehicle"
+								/>
+							</div>
+
+							<DatePicker
+								label="Date"
+								value={selectedDate}
+								onChange={(e) => setSelectedDate(e.target.value)}
+							/>
 						</div>
 
-						<div className="flex justify-start pt-4 border-t border-slate-100">
+						<div className="flex justify-start pt-4 border-t border-theme-border">
 							<Button
 								onClick={loadReport}
-								variant="accent"
+								variant="success"
 								loading={loading}
 								loadingText="Loading..."
-								className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-lg text-xs transition"
 							>
 								Load
 							</Button>
@@ -289,33 +216,33 @@ export default function GTSTripReportPage() {
 				</Card>
 
 				{/* Results Table Card */}
-				<Card className="border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
+				<Card className="overflow-hidden flex flex-col min-h-[400px] print:border-none print:shadow-none">
 					<CardContent className="p-0 flex-1 flex flex-col justify-between overflow-hidden">
 						<div className="flex-1 overflow-x-auto">
 							<Table
 								headers={[
 									<div
 										key="s"
-										className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider"
+										className="text-center w-16 text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider"
 									>
 										S. NO.
 									</div>,
-									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+									<span className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">
 										VEHICLE REG. NO.
 									</span>,
-									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+									<span className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">
 										ZONE
 									</span>,
-									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+									<span className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">
 										WARD
 									</span>,
-									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
+									<span className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">
 										VALID TRIPS
 									</span>,
-									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider text-red-600">
+									<span className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider text-rose-500">
 										REJECTED TRIPS
 									</span>,
-									<span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider text-red-600">
+									<span className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider text-rose-500">
 										REJECTION REASONS
 									</span>,
 								]}
@@ -325,27 +252,27 @@ export default function GTSTripReportPage() {
 								{data.map((row, idx) => (
 									<tr
 										key={row.vehicle_id}
-										className="hover:bg-slate-50/50 border-b border-slate-100 transition-colors print:border-black"
+										className="hover:bg-theme-base/40 border-b border-theme-border/50 transition-colors print:border-black"
 									>
-										<td className="py-3 px-5 text-center text-slate-400 font-mono text-[11px] print:text-black">
+										<td className="py-3 px-5 text-center text-theme-text-dim font-mono text-[11px] print:text-black">
 											{idx + 1}
 										</td>
-										<td className="py-3 px-5 font-bold text-slate-800 text-[12px] print:text-black">
+										<td className="py-3 px-5 font-bold text-theme-text text-[12px] print:text-black">
 											{row.registration_no}
 										</td>
-										<td className="py-3 px-5 text-slate-600 text-[12px] print:text-black">
+										<td className="py-3 px-5 text-theme-text-dim text-[12px] print:text-black">
 											{row.zone_name || "—"}
 										</td>
-										<td className="py-3 px-5 text-slate-600 text-[12px] print:text-black">
+										<td className="py-3 px-5 text-theme-text-dim text-[12px] print:text-black">
 											{row.ward_name || "—"}
 										</td>
-										<td className="px-6 py-4 text-xs font-semibold text-emerald-700">
+										<td className="px-6 py-4 text-xs font-semibold text-emerald-400">
 											{row.trip_count}
 										</td>
-										<td className="px-6 py-4 text-xs font-semibold text-red-600">
+										<td className="px-6 py-4 text-xs font-semibold text-rose-400">
 											{row.rejected_count}
 										</td>
-										<td className="px-6 py-4 text-[11px] text-slate-500 max-w-[300px]">
+										<td className="px-6 py-4 text-[11px] text-theme-text-dim max-w-[300px]">
 											{row.rejection_reasons && row.rejection_reasons.length > 0 ? (
 												<ul className="list-disc pl-4 space-y-1">
 													{row.rejection_reasons.map((reason, i) => (
@@ -353,7 +280,7 @@ export default function GTSTripReportPage() {
 													))}
 												</ul>
 											) : (
-												<span className="text-slate-300">-</span>
+												<span className="text-theme-text-dim">-</span>
 											)}
 										</td>
 									</tr>
@@ -362,7 +289,7 @@ export default function GTSTripReportPage() {
 						</div>
 
 						{/* Total Count Footer */}
-						<div className="bg-slate-100 border-t border-slate-200 px-5 py-3 text-xs font-bold text-slate-500 select-none uppercase tracking-wider shrink-0">
+						<div className="bg-theme-surface border-t border-theme-border px-5 py-3 text-xs font-bold text-theme-text-dim select-none uppercase tracking-wider shrink-0">
 							{data.length} total vehicles listed
 						</div>
 					</CardContent>

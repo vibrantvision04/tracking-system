@@ -1,5 +1,6 @@
 import React from 'react';
 import { MapPin, Calculator, Scale, Video } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 
 export default function DeviceCard({ gpsDevicesCount }: { gpsDevicesCount: number | string }) {
   const items = [
@@ -10,23 +11,23 @@ export default function DeviceCard({ gpsDevicesCount }: { gpsDevicesCount: numbe
   ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
-      <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-5">Hardware Assets</h3>
+    <Card hoverable className="p-6 flex flex-col h-full">
+      <h3 className="text-sm font-semibold text-theme-text-dim uppercase tracking-wider mb-5">Hardware Assets</h3>
       <div className="flex flex-col gap-4 mt-auto">
         {items.map((item, idx) => (
           <div key={idx} className="flex justify-between items-center group">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg border transition-colors ${item.active ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-500 border-slate-100 group-hover:text-blue-600 group-hover:border-blue-100'}`}>
+              <div className="p-2 bg-[#ef4444]/10 text-[#ef4444] rounded-full border border-[#ef4444]/20 transition-all duration-300">
                 {item.icon}
               </div>
-              <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">{item.label}</div>
+              <div className="text-[11px] font-bold text-theme-text-dim uppercase tracking-wider">{item.label}</div>
             </div>
-            <div className={`text-lg font-extrabold ${item.active ? 'text-slate-900' : 'text-slate-400'}`}>
+            <div className={`text-lg font-extrabold ${item.active ? 'text-theme-text' : 'text-theme-text-dim'}`}>
               {item.count}
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

@@ -1,20 +1,19 @@
 import React, { useId } from 'react';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
 }
 
-export default function Input({
+export default function TextArea({
   label,
   error,
   className = "",
-  type = "text",
   id,
   ...props
-}: InputProps) {
+}: TextAreaProps) {
   const reactId = useId();
-  const generatedId = id || `input-${reactId}`;
+  const generatedId = id || `textarea-${reactId}`;
 
   return (
     <div className="space-y-1.5 w-full">
@@ -27,10 +26,9 @@ export default function Input({
         </label>
       )}
 
-      <input
-        type={type}
+      <textarea
         id={generatedId}
-        className={`w-full bg-(--color-theme-background-base) border border-theme-border rounded-[12px] px-3 py-2 text-theme-text placeholder:text-theme-text-dim focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 transition-all duration-150 ${
+        className={`w-full bg-(--color-theme-background-base) border border-theme-border rounded-[12px] px-3 py-2 text-theme-text placeholder:text-theme-text-dim focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 transition-all duration-150 min-h-[80px] resize-y ${
           error
             ? "border-[#EF4444] focus:ring-[#EF4444]/20"
             : ""

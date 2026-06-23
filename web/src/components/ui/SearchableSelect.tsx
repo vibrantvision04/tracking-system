@@ -53,15 +53,15 @@ export default function SearchableSelect({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-theme-surface border border-theme-border px-3 py-1.5 rounded text-sm text-theme-text hover:border-theme-border/80 focus:border-theme-accent outline-none transition cursor-pointer font-medium flex items-center justify-between shadow-sm ${
-          disabled ? "opacity-50 cursor-not-allowed bg-theme-base" : ""
+        className={`w-full bg-white border border-slate-200 px-3 py-1.5 rounded text-sm text-black hover:border-slate-300 focus:border-red-500 outline-none transition cursor-pointer font-medium flex items-center justify-between shadow-sm ${
+          disabled ? "opacity-50 cursor-not-allowed bg-slate-50 text-slate-400" : ""
         }`}
       >
         <span className="truncate pr-2">
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <svg
-          className={`h-4 w-4 text-theme-text-dim transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -71,22 +71,22 @@ export default function SearchableSelect({
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute left-0 mt-1 w-full bg-theme-surface border border-theme-border rounded-lg shadow-xl flex flex-col z-[1050] overflow-hidden min-w-[200px]">
-          <div className="p-2 border-b border-theme-border shrink-0 flex items-center gap-1.5 bg-theme-base">
-            <span className="text-theme-text-dim text-xs pl-1">🔍</span>
+        <div className="absolute left-0 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col z-[1050] overflow-hidden min-w-[200px]">
+          <div className="p-2 border-b border-slate-200 shrink-0 flex items-center gap-1.5 bg-slate-50">
+            <span className="text-slate-400 text-xs pl-1">🔍</span>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search..."
-              className="w-full bg-transparent text-xs text-theme-text outline-none placeholder:text-theme-text-dim"
+              className="w-full bg-transparent text-xs text-black outline-none placeholder:text-slate-400"
               autoFocus
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="text-theme-text-dim hover:text-theme-text text-xs pr-1 focus:outline-none"
+                className="text-slate-400 hover:text-slate-600 text-xs pr-1 focus:outline-none"
               >
                 ✕
               </button>
@@ -105,16 +105,16 @@ export default function SearchableSelect({
                   }}
                   className={`w-full text-left px-3 py-2 text-xs cursor-pointer transition flex items-center justify-between ${
                     opt.value === value
-                      ? 'bg-theme-accent/15 text-theme-accent font-semibold'
-                      : 'text-theme-text hover:bg-theme-surface-hover'
+                      ? 'bg-red-50 text-red-600 font-semibold'
+                      : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <span className="truncate">{opt.label}</span>
-                  {opt.value === value && <span className="text-[10px] text-theme-accent">✓</span>}
+                  {opt.value === value && <span className="text-[10px] text-red-600">✓</span>}
                 </button>
               ))
             ) : (
-              <div className="px-3 py-2.5 text-xs text-theme-text-dim italic text-center">
+              <div className="px-3 py-2.5 text-xs text-slate-400 italic text-center">
                 No results found
               </div>
             )}

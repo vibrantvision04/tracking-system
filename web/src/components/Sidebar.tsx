@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { useState, useRef, useEffect } from "react";
-import { Label } from "recharts";
 import {
   Home,
   Truck,
@@ -17,7 +16,10 @@ import {
   CheckCircle2,
   Rewind,
   CalendarCheck,
-  Radio
+  Radio,
+  ChevronRight,
+  ChevronLeft,
+  X
 } from "lucide-react";
 
 const navData = [
@@ -270,16 +272,32 @@ const filterFuelItems = (items: any[]): any[] => {
 
 const filteredNavData = filterFuelItems(navData);
 
+const isCategoryActive = (category: any, currentPath: string): boolean => {
+  if (category.href && currentPath === category.href) return true;
+  if (category.children) {
+    return category.children.some((child: any) => isCategoryActive(child, currentPath));
+  }
+  return false;
+};
+
 export default function Sidebar() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const path = usePathname();
   const sidebarOpen = useStore((state) => state.sidebarOpen);
   const setSidebarOpen = useStore((state) => state.setSidebarOpen);
-  const sidebarCollapsed = useStore((state) => state.sidebarCollapsed);
+  const storeCollapsed = useStore((state) => state.sidebarCollapsed);
   const setSidebarCollapsed = useStore((state) => state.setSidebarCollapsed);
+
+  const sidebarCollapsed = mounted ? storeCollapsed : false;
 
   // State to track active category for flyout
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [renderedCategory, setRenderedCategory] = useState<string | null>(null);
+  const [flyoutTop, setFlyoutTop] = useState<number>(0);
   const flyoutRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<any>(null);
 
@@ -325,39 +343,48 @@ export default function Sidebar() {
       {/* Main Sidebar - Premium dark aesthetic */}
       <aside className={`
         fixed inset-y-0 left-0 z-[1002] flex flex-col bg-theme-surface border-r border-theme-border
-        transition-all duration-300 ease-in-out lg:relative lg:translate-x-0
-        ${sidebarCollapsed ? "w-[64px]" : "w-[180px]"}
+        transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:relative lg:translate-x-0
+        ${sidebarCollapsed ? "w-[64px]" : "w-[220px]"}
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
       `}>
-        <div className={`flex items-center justify-between py-3 border-b border-theme-border transition-all duration-300 ${
-          sidebarCollapsed ? "px-2 lg:justify-center" : "px-4"
+        <div className={`flex flex-col items-center py-4 border-b border-theme-border transition-all duration-300 w-full relative ${
+          sidebarCollapsed ? "px-2" : "px-4"
         }`}>
-          <div className="flex items-center gap-2">
-           <a href="/"> <img 
-              src="/Jaipur_Municipal_Corporation_Logo.png" 
-              alt="Jaipur Municipal Corporation Logo" 
-              className={`object-contain shrink-0 hover:scale-105 transition-transform duration-200 ${
-                sidebarCollapsed ? "h-9 w-[46px]" : "h-40 w-[76px]"
-              }`}
-            /></a>
-            <div className={`transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
-              <div className="text-[11px] font-bold text-theme-text tracking-tight leading-none whitespace-nowrap">VSWM Jaipur</div>
-            </div>
+          <div className="flex flex-col items-center gap-3 w-full">
+            <a href="/">
+              <img 
+                src="/Jaipur_Municipal_Corporation_Logo.png" 
+                alt="Jaipur Municipal Corporation Logo" 
+                className={`object-contain shrink-0 hover:scale-105 transition-transform duration-200 ${
+                  sidebarCollapsed ? "h-9 w-[46px]" : "h-24 w-[110px]"
+                }`}
+              />
+            </a>
+            {!sidebarCollapsed && (
+              <div className="flex flex-col items-center mt-1 text-center select-none">
+                <div className="text-sm font-black text-theme-text tracking-widest uppercase">
+                  SWIFT
+                </div>
+                <div className="text-[9px] font-medium text-theme-text-dim mt-1.5 max-w-[130px] leading-tight">
+                  Smart Waste Integrated Fleet Tracking
+                </div>
+              </div>
+            )}
           </div>
           {!sidebarCollapsed && (
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors animate-fade-in"
+              className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors absolute top-3 right-3"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           )}
           {sidebarCollapsed && (
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors"
+              className="lg:hidden text-theme-text-dim hover:text-theme-text transition-colors mt-2"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -368,18 +395,21 @@ export default function Sidebar() {
             const hasChildren = category.children && category.children.length > 0;
             const isActive = activeCategory === category.label;
             const isCurrentPath = category.href && path === category.href;
+            const isParentActive = isCategoryActive(category, path);
 
             return (
               <div
                 key={category.label}
                 className="px-1.5"
-                onMouseEnter={() => {
+                onMouseEnter={(e) => {
                   if (closeTimeoutRef.current) {
                     clearTimeout(closeTimeoutRef.current);
                     closeTimeoutRef.current = null;
                   }
                   if (hasChildren) {
                     setActiveCategory(category.label);
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setFlyoutTop(rect.top);
                   } else {
                     setActiveCategory(null);
                   }
@@ -400,11 +430,11 @@ export default function Sidebar() {
                       setSidebarOpen(false);
                       setActiveCategory(null);
                     }}
-                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200 group
+                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors duration-150 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
                       ${isCurrentPath
-                        ? "bg-gradient-to-r from-red-500/[.15] to-transparent text-theme-accent font-medium"
-                        : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
+                        ? "border-l-[3px] border-[#DC2626] bg-theme-elevated text-theme-accent font-medium"
+                        : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated"
                       }`}
                   >
                     <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
@@ -415,24 +445,24 @@ export default function Sidebar() {
                 ) : (
                   <button
                     onClick={() => setActiveCategory(isActive ? null : category.label)}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg transition-all duration-200 group
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg transition-colors duration-150 group
                       ${sidebarCollapsed ? "lg:justify-center" : ""}
-                      ${isActive
-                        ? "bg-gradient-to-r from-red-500/[.15] to-transparent text-theme-accent font-medium"
-                        : "text-theme-text-dim hover:text-theme-text hover:bg-theme-surface"
+                      ${isActive || isParentActive
+                        ? "border-l-[3px] border-[#DC2626] bg-theme-elevated text-theme-accent font-medium"
+                        : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated"
                       }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="w-4 flex justify-center group-hover:scale-110 transition-transform shrink-0">
-                        <category.icon className="w-4 h-4 text-red-500" />
+                        <category.icon className={`w-4 h-4 ${isActive || isParentActive ? "text-[#DC2626]" : "text-red-500"}`} />
                       </span>
                       <span className={`truncate transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>{category.label}</span>
                     </div>
                     {hasChildren && !sidebarCollapsed && (
-                      <span className={`text-[7px] transition-transform duration-200 lg:block hidden ${isActive ? "rotate-90 text-theme-accent" : "text-theme-text-dim"}`}>▶</span>
+                      <ChevronRight className={`w-3 h-3 transition-transform duration-200 lg:block hidden ${isActive ? "rotate-90 text-[#DC2626]" : (isParentActive ? "text-[#DC2626]" : "text-theme-text-dim")}`} />
                     )}
                     {hasChildren && sidebarCollapsed && (
-                      <span className={`text-[7px] transition-transform duration-200 lg:hidden block ${isActive ? "rotate-90 text-theme-accent" : "text-theme-text-dim"}`}>▶</span>
+                      <ChevronRight className={`w-3 h-3 transition-transform duration-200 lg:hidden block ${isActive ? "rotate-90 text-[#DC2626]" : (isParentActive ? "text-[#DC2626]" : "text-theme-text-dim")}`} />
                     )}
                   </button>
                 )}
@@ -445,22 +475,44 @@ export default function Sidebar() {
         <div className="hidden lg:flex px-3 py-1.5 border-t border-theme-border items-center justify-center">
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="w-full py-1.5 rounded-md text-theme-text-dim hover:text-theme-text hover:bg-theme-surface transition-all flex items-center justify-center text-[10px] font-bold gap-1.5"
+            className="w-full py-1.5 rounded-md text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated transition-colors duration-150 flex items-center justify-center text-[10px] font-bold gap-1.5"
             title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
-            <span>{sidebarCollapsed ? "▶" : "◀"}</span>
-            {!sidebarCollapsed && <span className="uppercase tracking-wider text-[8px] text-theme-text-dim">Collapse</span>}
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-3.5 h-3.5" />
+            ) : (
+              <>
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span className="uppercase tracking-wider text-[8px] text-theme-text-dim">Collapse</span>
+              </>
+            )}
           </button>
+        </div>
+
+        {/* Company Branding */}
+        <div className={`px-3 py-2 border-t border-theme-border flex items-center gap-2.5 mt-auto bg-theme-elevated/10 ${sidebarCollapsed ? "justify-center" : ""}`}>
+          <img
+            src="/vibrant_vision_logo.png"
+            alt="Vibrant Visions Logo"
+            className="w-7 h-7 object-contain select-none shrink-0"
+            title="Vibrant Visions"
+          />
+          {!sidebarCollapsed && (
+            <div className="min-w-0">
+              <div className="text-[8px] font-extrabold text-[#ef4444] uppercase tracking-widest leading-none">Powered by</div>
+              <div className="text-[11px] font-black text-theme-text mt-1 truncate tracking-tight">Vibrant Visions</div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className={`px-3 py-3 border-t border-theme-border flex items-center gap-2 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-red-500 text-white text-[10px] font-bold shrink-0">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-red-500 text-white text-[10px] font-bold shrink-0 flex items-center justify-center">
             AD
           </div>
           <div className={`min-w-0 transition-all duration-300 ${sidebarCollapsed ? "lg:opacity-0 lg:w-0 lg:overflow-hidden" : "opacity-100"}`}>
-            <div className="text-[11px] font-semibold text-theme-text truncate whitespace-nowrap">Admin</div>
-            <div className="text-[8px] text-theme-text-dim truncate whitespace-nowrap">Master Admin</div>
+            <div className="text-xs font-semibold text-theme-text truncate whitespace-nowrap">Admin</div>
+            <div className="text-[10px] text-theme-text-dim truncate whitespace-nowrap">Master Admin</div>
           </div>
         </div>
       </aside>
@@ -479,15 +531,19 @@ export default function Sidebar() {
             setActiveCategory(null);
           }, 250);
         }}
-        className={`fixed inset-y-0 z-[1003] bg-theme-surface/95 backdrop-blur-xl border-r border-theme-border shadow-2xl shadow-slate-200/70 flex flex-col
+        className={`fixed z-[1003] bg-theme-surface/95 backdrop-blur-xl border border-theme-border rounded-xl shadow-2xl flex flex-col h-fit
           transition-all duration-300 ease-out
-          ${sidebarCollapsed ? "left-[64px]" : "left-[160px]"}
+          ${sidebarCollapsed ? "left-[60px]" : "left-[220px]"}
           ${activeCategory
             ? "opacity-100 translate-x-0"
             : "opacity-0 -translate-x-4 pointer-events-none"
           }
         `}
-        style={{ width: (activeCategory || renderedCategory) === "Reports" ? "600px" : "350px" }}
+        style={{
+          top: `${flyoutTop}px`,
+          maxHeight: `calc(100vh - ${flyoutTop + 16}px)`,
+          width: (activeCategory || renderedCategory) === "Reports" ? "600px" : "350px"
+        }}
       >
         {currentCategoryData && (
           <>
@@ -501,7 +557,7 @@ export default function Sidebar() {
                 onClick={() => setActiveCategory(null)}
                 className="text-theme-text-dim hover:text-theme-text transition-colors"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -521,7 +577,9 @@ export default function Sidebar() {
                             setSidebarOpen(false);
                             setActiveCategory(null);
                           }}
-                          className="text-[11px] font-medium text-theme-text hover:text-theme-accent transition-colors block"
+                          className={`text-[11px] font-medium transition-colors block ${
+                            path === sub.href ? "text-[#DC2626] font-semibold" : "text-theme-text hover:text-theme-accent"
+                          }`}
                         >
                           {sub.label}
                         </Link>
@@ -545,7 +603,7 @@ export default function Sidebar() {
                               }}
                               className={`text-[11px] leading-relaxed transition-colors py-0.5 rounded-md
                                 ${path === item.href
-                                  ? "text-theme-accent font-medium"
+                                  ? "text-[#DC2626] font-semibold"
                                   : "text-theme-text-dim hover:text-theme-text"
                                 }`}
                             >

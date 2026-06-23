@@ -1,23 +1,24 @@
 import React, { useId } from 'react';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface DatePickerProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  type?: 'date' | 'datetime-local' | 'time';
 }
 
-export default function Input({
+export function DatePicker({
   label,
   error,
-  className = "",
-  type = "text",
+  type = 'date',
+  className = '',
   id,
   ...props
-}: InputProps) {
+}: DatePickerProps) {
   const reactId = useId();
-  const generatedId = id || `input-${reactId}`;
+  const generatedId = id || `datepicker-${reactId}`;
 
   return (
-    <div className="space-y-1.5 w-full">
+    <div className="w-full">
       {label && (
         <label
           htmlFor={generatedId}
@@ -30,10 +31,8 @@ export default function Input({
       <input
         type={type}
         id={generatedId}
-        className={`w-full bg-(--color-theme-background-base) border border-theme-border rounded-[12px] px-3 py-2 text-theme-text placeholder:text-theme-text-dim focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 transition-all duration-150 ${
-          error
-            ? "border-[#EF4444] focus:ring-[#EF4444]/20"
-            : ""
+        className={`w-full h-9 bg-white text-gray-900 border border-gray-300 rounded-[8px] px-3 focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 transition-all duration-150 ${
+          error ? 'border-[#EF4444]' : ''
         } ${className}`}
         {...props}
       />
@@ -44,3 +43,5 @@ export default function Input({
     </div>
   );
 }
+
+export default DatePicker;

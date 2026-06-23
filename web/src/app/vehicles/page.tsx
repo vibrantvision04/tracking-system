@@ -201,7 +201,7 @@ export default function VehiclesPage() {
         {formOpen && (
           <Card className="animate-fade-in">
             <CardHeader>
-              <CardTitle>{editingVehicle ? "✏️ Edit Municipal Vehicle" : "Register New Municipal Vehicle"}</CardTitle>
+              <CardTitle>{editingVehicle ? "Edit Municipal Vehicle" : "Register New Municipal Vehicle"}</CardTitle>
               <CardDescription>
                 {editingVehicle 
                   ? "Update vehicle configuration, chassis, type mappings, and make parameters." 
@@ -272,7 +272,7 @@ export default function VehiclesPage() {
                 </Button>
                 <Button
                   onClick={saveVehicle}
-                  variant="accent"
+                  variant="success"
                   loading={submitting}
                   loadingText="Saving..."
                 >

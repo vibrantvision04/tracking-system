@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 import DepotMap from "@/components/DepotMap";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface OpenDepot {
   id: number;
@@ -125,106 +127,120 @@ export default function OpenDepotLiveMap() {
 
   const filteredDepots = getFilteredDepots();
 
+  const shiftOptions = [
+    { value: "", label: "Live/Active Shift" },
+    ...shifts.map((s) => ({ value: String(s.id), label: s.shift_name }))
+  ];
+
+  const zoneOptions = [
+    { value: "", label: "All Zones" },
+    ...zones.map((z) => ({ value: String(z.id), label: z.region_name }))
+  ];
+
+  const filteredWards = selectedZone
+    ? wards.filter((w) => w.parent_id === parseInt(selectedZone))
+    : wards;
+
+  const wardOptions = [
+    { value: "", label: "All Wards" },
+    ...filteredWards.map((w) => ({ value: String(w.id), label: w.region_name }))
+  ];
+
+  const statusOptions = [
+    { value: "", label: "All Statuses" },
+    { value: "Active", label: "Active" },
+    { value: "Inactive", label: "Inactive" }
+  ];
+
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f4f6f9] relative">
+    <div className="flex-1 flex flex-col h-full bg-theme-base relative select-none">
       
       {/* Top Filter Banner */}
-      <div className="bg-white border-b border-gray-150 px-6 py-4 flex flex-wrap items-center gap-4 z-[1000] shadow-sm">
+      <div className="bg-theme-surface border-b border-theme-border px-6 py-4 flex flex-wrap items-center gap-4 z-[1000] shadow-sm">
         
         {/* Search Input */}
-        <div className="flex flex-col space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Search Depot</label>
+        <div className="flex flex-col">
+          <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Search Depot</label>
           <input
             type="text"
-            placeholder="🔍 Search depots..."
+            placeholder="Search depots..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition w-48 shadow-inner"
+            className="w-48 h-9 px-3 bg-white text-gray-900 border border-gray-300 rounded-[8px] text-xs outline-none focus:ring-2 focus:ring-red-600/30 transition-all duration-150 shadow-sm"
           />
         </div>
 
         {/* Date Filter */}
-        <div className="flex flex-col space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Date</label>
-          <input
-            type="date"
+        <div className="w-36">
+          <DatePicker
+            label="Date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm w-36"
           />
         </div>
 
         {/* Shift Filter */}
-        <div className="flex flex-col space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shift</label>
-          <select
+        <div className="flex flex-col w-40">
+          <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Shift</label>
+          <SearchableSelect
             value={selectedShift}
-            onChange={(e) => setSelectedShift(e.target.value)}
-            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm w-40"
-          >
-            <option value="">Live/Active Shift</option>
-            {shifts.map((s) => (
-              <option key={s.id} value={s.id}>{s.shift_name}</option>
-            ))}
-          </select>
+            onChange={(val) => setSelectedShift(val)}
+            options={shiftOptions}
+            placeholder="Live/Active Shift"
+          />
         </div>
 
         {/* Zone Filter */}
-        <div className="flex flex-col space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Zone</label>
-          <select
+        <div className="flex flex-col w-44">
+          <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Zone</label>
+          <SearchableSelect
             value={selectedZone}
-            onChange={(e) => {
-              setSelectedZone(e.target.value);
-              setSelectedWard(""); // Reset ward when zone changes
+            onChange={(val) => {
+              setSelectedZone(val);
+              setSelectedWard("");
             }}
-            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm w-44"
-          >
-            <option value="">All Zones</option>
-            {zones.map((z) => (
-              <option key={z.id} value={z.id}>{z.region_name}</option>
-            ))}
-          </select>
+            options={zoneOptions}
+            placeholder="All Zones"
+          />
         </div>
 
         {/* Ward Filter */}
-        <div className="flex flex-col space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ward</label>
-          <select
+        <div className="flex flex-col w-44">
+          <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Ward</label>
+          <SearchableSelect
             value={selectedWard}
-            onChange={(e) => setSelectedWard(e.target.value)}
-            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm w-44"
-          >
-            <option value="">All Wards</option>
-            {wards
-              .filter((w) => !selectedZone || w.parent_id === parseInt(selectedZone))
-              .map((w) => (
-                <option key={w.id} value={w.id}>{w.region_name}</option>
-              ))}
-          </select>
+            onChange={(val) => setSelectedWard(val)}
+            options={wardOptions}
+            placeholder="All Wards"
+            disabled={!selectedZone}
+          />
         </div>
 
         {/* Status Filter */}
-        <div className="flex flex-col space-y-1">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</label>
-          <select
+        <div className="flex flex-col w-36">
+          <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Status</label>
+          <SearchableSelect
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm w-36"
-          >
-            <option value="">All Statuses</option>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
-          </select>
+            onChange={(val) => setSelectedStatus(val)}
+            options={statusOptions}
+            placeholder="All Statuses"
+          />
         </div>
 
         {/* Refresh button */}
         <button
           onClick={handleRefresh}
           disabled={loading || loadingDepots}
-          className="self-end px-3.5 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-bold transition shadow-sm h-[34px]"
+          className="self-end px-4 py-2 text-xs bg-[#16A34A] hover:bg-[#15803D] disabled:opacity-50 text-white rounded-lg font-bold transition shadow-sm h-9 flex items-center justify-center gap-1 cursor-pointer"
         >
-          {loading || loadingDepots ? "Refreshing..." : "↻ Refresh"}
+          {loading || loadingDepots ? (
+            <>
+              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span>Refreshing...</span>
+            </>
+          ) : (
+            <span>↻ Refresh</span>
+          )}
         </button>
 
       </div>
@@ -232,9 +248,9 @@ export default function OpenDepotLiveMap() {
       {/* Map Element */}
       <div className="flex-1 w-full h-full min-h-0 relative z-0">
         {(loading || loadingDepots) && depots.length === 0 ? (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-3">
-            <span className="w-8 h-8 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider animate-pulse">Loading depot layers...</span>
+          <div className="absolute inset-0 bg-theme-base/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-3">
+            <span className="w-8 h-8 border-4 border-theme-border border-t-theme-accent rounded-full animate-spin" />
+            <span className="text-xs font-bold text-theme-text-dim uppercase tracking-wider animate-pulse">Loading depot layers...</span>
           </div>
         ) : null}
         <DepotMap 

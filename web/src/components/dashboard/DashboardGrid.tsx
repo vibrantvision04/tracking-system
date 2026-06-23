@@ -13,9 +13,9 @@ export default function DashboardGrid({
   row1, row2Left, row2Right, row3Left, row3Right, mapCard
 }: DashboardGridProps) {
   return (
-    <div className="flex-1 flex flex-col xl:flex-row min-h-0 relative bg-slate-50/50">
+    <div className="flex-1 flex flex-col xl:flex-row min-h-0 relative bg-theme-base">
       {/* Left Column: Data Rows */}
-      <div className="w-full xl:w-[55%] flex flex-col h-full overflow-y-auto custom-scrollbar p-6 bg-transparent border-r border-slate-200">
+      <div className="w-full xl:w-[55%] flex flex-col h-full overflow-y-auto custom-scrollbar p-6 bg-transparent border-r border-theme-border">
         <div className="max-w-5xl mx-auto w-full space-y-6">
           
           {/* Row 1: Summary KPI Cards */}

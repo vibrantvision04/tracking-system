@@ -8,6 +8,8 @@ import PageHeader from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface Region {
   id: number;
@@ -53,35 +55,6 @@ export default function LaneMonitoringReportPage() {
     const today = new Date();
     return today.toISOString().split("T")[0];
   });
-
-  // Search states for dropdowns
-  const [zoneSearch, setZoneSearch] = useState("");
-  const [wardSearch, setWardSearch] = useState("");
-  const [shiftSearch, setShiftSearch] = useState("");
-  const [routeSearch, setRouteSearch] = useState("");
-
-  // Dropdown open states
-  const [zoneDropdownOpen, setZoneDropdownOpen] = useState(false);
-  const [wardDropdownOpen, setWardDropdownOpen] = useState(false);
-  const [shiftDropdownOpen, setShiftDropdownOpen] = useState(false);
-  const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
-
-  // Refs for click outside
-  const zoneRef = useRef<HTMLDivElement>(null);
-  const wardRef = useRef<HTMLDivElement>(null);
-  const shiftRef = useRef<HTMLDivElement>(null);
-  const routeRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (zoneRef.current && !zoneRef.current.contains(e.target as Node)) setZoneDropdownOpen(false);
-      if (wardRef.current && !wardRef.current.contains(e.target as Node)) setWardDropdownOpen(false);
-      if (shiftRef.current && !shiftRef.current.contains(e.target as Node)) setShiftDropdownOpen(false);
-      if (routeRef.current && !routeRef.current.contains(e.target as Node)) setRouteDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const loadMetaData = async () => {
     setMetaLoading(true);
@@ -167,74 +140,13 @@ export default function LaneMonitoringReportPage() {
   };
 
   // Filter dropdown options dynamically
-  const filteredZones = zones.filter(z => z.region_name.toLowerCase().includes(zoneSearch.toLowerCase()));
-  
-  const filteredWards = wards
-    .filter(w => !selectedZoneId || w.parent_id === selectedZoneId)
-    .filter(w => w.region_name.toLowerCase().includes(wardSearch.toLowerCase()));
-  
-  const filteredShifts = shifts.filter(s => s.shift_name.toLowerCase().includes(shiftSearch.toLowerCase()));
-
+  const filteredWards = wards.filter(w => !selectedZoneId || w.parent_id === selectedZoneId);
   const filteredRoutes = routes
     .filter(r => !selectedWardId || r.ward_id === selectedWardId)
-    .filter(r => !selectedShiftId || r.shift_id === selectedShiftId)
-    .filter(r => r.route_name.toLowerCase().includes(routeSearch.toLowerCase()));
-
-  const selectedZoneName = zones.find(z => z.id === selectedZoneId)?.region_name || "Select Zone";
-  const selectedWardName = wards.find(w => w.id === selectedWardId)?.region_name || "Select Ward";
-  const selectedShiftName = shifts.find(s => s.id === selectedShiftId)?.shift_name || "Select Shift";
-  const selectedRouteName = routes.find(r => r.id === selectedRouteId)?.route_name || "Select Route";
-
-  const SearchableDropdown = ({ label, selectedName, isSelected, isOpen, setOpen, search, setSearch, items, onSelect, dropdownRef, keyField, displayField, searchPlaceholder }: any) => {
-    return (
-      <div className="flex flex-col relative" ref={dropdownRef}>
-        <span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">{label}</span>
-        <div
-          className="bg-theme-surface border border-theme-border rounded-xl px-3.5 py-2 text-xs cursor-pointer flex justify-between items-center hover:border-theme-accent/40 transition min-h-[38px]"
-          onClick={() => setOpen(!isOpen)}
-        >
-          <span className={isSelected ? "text-theme-text font-medium truncate" : "text-theme-text-dim truncate"}>{selectedName}</span>
-          <span className="text-theme-text-dim text-[10px] flex-shrink-0 ml-2">{isOpen ? "▲" : "▼"}</span>
-        </div>
-        {isOpen && (
-          <div className="absolute top-[64px] left-0 w-full bg-theme-surface border border-theme-border rounded-lg shadow-xl overflow-hidden z-50">
-            <div className="p-2 border-b border-theme-border">
-              <input
-                type="text"
-                placeholder={searchPlaceholder || `Search ${label}...`}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-transparent text-xs text-theme-text outline-none placeholder:text-theme-text-dim"
-                autoFocus
-              />
-            </div>
-            <div className="max-h-60 overflow-y-auto custom-scrollbar">
-              {items.length === 0 ? (
-                <div className="px-4 py-2 text-xs text-theme-text-dim italic">No options found</div>
-              ) : (
-                items.map((item: any) => {
-                  const id = keyField ? item[keyField] : item;
-                  const text = displayField ? item[displayField] : item;
-                  return (
-                    <div
-                      key={id}
-                      className="px-4 py-2 text-xs text-theme-text hover:bg-theme-accent/20 hover:text-emerald-400 cursor-pointer transition"
-                      onClick={() => onSelect(id)}
-                    >
-                      {text}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+    .filter(r => !selectedShiftId || r.shift_id === selectedShiftId);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans space-y-6 p-6 lg:p-8 print:p-0 print:bg-white print:text-black">
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
       <PageHeader
         title="Lane Monitoring Report"
         description="Monitor the start and end times of vehicles covering lanes on specific routes."
@@ -251,158 +163,135 @@ export default function LaneMonitoringReportPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8 print:overflow-visible print:pb-0">
-        <Card className="relative z-20 !overflow-visible print:hidden">
-          <CardContent className="pt-6">
+      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 p-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
+        <Card hoverable className="relative z-20 !overflow-visible print:hidden">
+          <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <SearchableDropdown
-                label="Zone"
-                selectedName={selectedZoneName}
-                isSelected={!!selectedZoneId}
-                isOpen={zoneDropdownOpen}
-                setOpen={setZoneDropdownOpen}
-                search={zoneSearch}
-                setSearch={setZoneSearch}
-                items={filteredZones}
-                dropdownRef={zoneRef}
-                keyField="id"
-                displayField="region_name"
-                onSelect={(id: number) => {
-                  if (selectedZoneId === id) {
-                    setSelectedZoneId(null);
-                  } else {
+              
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Zone</span>
+                <SearchableSelect
+                  value={selectedZoneId ? selectedZoneId.toString() : ""}
+                  onChange={(val) => {
+                    const id = val ? parseInt(val) : null;
                     setSelectedZoneId(id);
-                  }
-                  setSelectedWardId(null);
-                  setSelectedRouteId(null);
-                  setZoneDropdownOpen(false);
-                  setZoneSearch("");
-                }}
-              />
-
-              <SearchableDropdown
-                label="Ward"
-                selectedName={selectedWardName}
-                isSelected={!!selectedWardId}
-                isOpen={wardDropdownOpen}
-                setOpen={setWardDropdownOpen}
-                search={wardSearch}
-                setSearch={setWardSearch}
-                items={filteredWards}
-                dropdownRef={wardRef}
-                keyField="id"
-                displayField="region_name"
-                onSelect={(id: number) => {
-                  if (selectedWardId === id) {
                     setSelectedWardId(null);
-                  } else {
-                    setSelectedWardId(id);
-                    // Autofill Zone if not selected
-                    const w = wards.find(x => x.id === id);
-                    if (w && w.parent_id) {
-                      setSelectedZoneId(w.parent_id);
-                    }
-                  }
-                  setSelectedRouteId(null);
-                  setWardDropdownOpen(false);
-                  setWardSearch("");
-                }}
-              />
-
-              <SearchableDropdown
-                label="Shift"
-                selectedName={selectedShiftName}
-                isSelected={!!selectedShiftId}
-                isOpen={shiftDropdownOpen}
-                setOpen={setShiftDropdownOpen}
-                search={shiftSearch}
-                setSearch={setShiftSearch}
-                items={filteredShifts}
-                dropdownRef={shiftRef}
-                keyField="id"
-                displayField="shift_name"
-                onSelect={(id: number) => {
-                  if (selectedShiftId === id) {
-                    setSelectedShiftId(null);
-                  } else {
-                    setSelectedShiftId(id);
-                  }
-                  setSelectedRouteId(null);
-                  setShiftDropdownOpen(false);
-                  setShiftSearch("");
-                }}
-              />
-
-              <SearchableDropdown
-                label="Route"
-                selectedName={selectedRouteName}
-                isSelected={!!selectedRouteId}
-                isOpen={routeDropdownOpen}
-                setOpen={setRouteDropdownOpen}
-                search={routeSearch}
-                setSearch={setRouteSearch}
-                items={filteredRoutes}
-                dropdownRef={routeRef}
-                keyField="id"
-                displayField="route_name"
-                onSelect={(id: number) => {
-                  if (selectedRouteId === id) {
                     setSelectedRouteId(null);
-                  } else {
-                    setSelectedRouteId(id);
-                    // Autofill Ward & Shift if not selected
-                    const r = routes.find(x => x.id === id);
-                    if (r) {
-                      if (r.ward_id) {
-                        setSelectedWardId(r.ward_id);
-                        const w = wards.find(x => x.id === r.ward_id);
-                        if (w && w.parent_id) {
-                          setSelectedZoneId(w.parent_id);
-                        }
-                      }
-                      if (r.shift_id) {
-                        setSelectedShiftId(r.shift_id);
-                      }
-                    }
-                  }
-                  setRouteDropdownOpen(false);
-                  setRouteSearch("");
-                }}
-              />
-
-              <div className="flex flex-col md:col-span-1">
-                <span className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-1.5">Date</span>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={e => setDate(e.target.value)}
-                  className="bg-theme-surface border border-theme-border rounded-xl px-3.5 py-2 text-xs text-theme-text placeholder:text-theme-text-dim outline-none hover:border-theme-accent/40 focus:border-theme-accent transition min-h-[38px]"
+                  }}
+                  options={[
+                    { value: "", label: "Select Zone" },
+                    ...zones.map((z) => ({ value: z.id.toString(), label: z.region_name }))
+                  ]}
+                  placeholder="Select Zone"
                 />
               </div>
+
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Ward</span>
+                <SearchableSelect
+                  value={selectedWardId ? selectedWardId.toString() : ""}
+                  onChange={(val) => {
+                    const id = val ? parseInt(val) : null;
+                    setSelectedWardId(id);
+                    if (id) {
+                      const w = wards.find(x => x.id === id);
+                      if (w && w.parent_id) {
+                        setSelectedZoneId(w.parent_id);
+                      }
+                    }
+                    setSelectedRouteId(null);
+                  }}
+                  options={[
+                    { value: "", label: "Select Ward" },
+                    ...filteredWards.map((w) => ({ value: w.id.toString(), label: w.region_name }))
+                  ]}
+                  placeholder="Select Ward"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Shift</span>
+                <SearchableSelect
+                  value={selectedShiftId ? selectedShiftId.toString() : ""}
+                  onChange={(val) => {
+                    const id = val ? parseInt(val) : null;
+                    setSelectedShiftId(id);
+                    setSelectedRouteId(null);
+                  }}
+                  options={[
+                    { value: "", label: "Select Shift" },
+                    ...shifts.map((s) => ({ value: s.id.toString(), label: s.shift_name }))
+                  ]}
+                  placeholder="Select Shift"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Route</span>
+                <SearchableSelect
+                  value={selectedRouteId ? selectedRouteId.toString() : ""}
+                  onChange={(val) => {
+                    const id = val ? parseInt(val) : null;
+                    setSelectedRouteId(id);
+                    if (id) {
+                      const r = routes.find(x => x.id === id);
+                      if (r) {
+                        if (r.ward_id) {
+                          setSelectedWardId(r.ward_id);
+                          const w = wards.find(x => x.id === r.ward_id);
+                          if (w && w.parent_id) {
+                            setSelectedZoneId(w.parent_id);
+                          }
+                        }
+                        if (r.shift_id) {
+                          setSelectedShiftId(r.shift_id);
+                        }
+                      }
+                    }
+                  }}
+                  options={[
+                    { value: "", label: "Select Route" },
+                    ...filteredRoutes.map((r) => ({ value: r.id.toString(), label: r.route_name }))
+                  ]}
+                  placeholder="Select Route"
+                />
+              </div>
+
+              <DatePicker
+                label="Date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
             </div>
 
-            <div className="flex justify-start pt-4 border-t border-theme-border">
-              <Button onClick={loadReport} variant="accent" loading={loading} loadingText="Loading...">
+            <div className="flex justify-start pt-4 border-t border-theme-border/60">
+              <Button onClick={loadReport} variant="success" loading={loading} loadingText="Loading...">
                 Load
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="flex flex-col min-h-[500px] print:border-none print:shadow-none">
+        <Card hoverable className="flex flex-col min-h-[500px] print:border-none print:shadow-none">
           <CardContent className="p-0 flex-1">
             <Table
               headers={[
-                <div key="s" className="text-center w-16">S. NO.</div>,
-                "LANE(S)",
-                "START TIME",
-                "END TIME"
+                <div key="s" className="text-center w-16 text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">S. NO.</div>,
+                <span key="lane" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">LANE(S)</span>,
+                <span key="start" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">START TIME</span>,
+                <span key="end" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">END TIME</span>
               ]}
               isLoading={loading || metaLoading}
-              emptyState="No data to display. Please select a route and click Load."
+              emptyState={
+                <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-theme-text-dim/60">
+                  <span className="text-3xl">📭</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider">No data to display</span>
+                  <span className="text-[10px]">Please select a route and click Load.</span>
+                </div>
+              }
             >
               {data.map((row, idx) => (
-                <tr key={idx} className="hover:bg-theme-base/40 transition-colors border-b border-theme-border/50 print:border-black">
+                <tr key={idx} className="border-b border-theme-border/30 transition-colors">
                   <td className="py-3 px-5 text-center text-theme-text-dim font-mono text-[11px] print:text-black">
                     {idx + 1}
                   </td>

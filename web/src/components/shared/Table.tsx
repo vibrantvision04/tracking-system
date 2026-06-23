@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { Inbox } from 'lucide-react';
 
 interface TableProps {
   headers: React.ReactNode[];
@@ -10,6 +11,13 @@ interface TableProps {
   className?: string;
   itemsPerPage?: number;
   paginate?: boolean;
+}
+
+export function paginationSummary(n: number, itemsPerPage: number, currentPage: number): string {
+  if (n === 0) return 'No entries';
+  const start = (currentPage - 1) * itemsPerPage + 1;
+  const end = Math.min(currentPage * itemsPerPage, n);
+  return `Showing ${start} to ${end} of ${n} entries`;
 }
 
 export default function Table({
@@ -33,18 +41,18 @@ export default function Table({
     }
   }, [totalItems, totalPages, currentPage]);
 
-  const currentData = paginate 
+  const currentData = paginate
     ? childrenArray.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
     : childrenArray;
 
   return (
     <div className={`w-full overflow-hidden flex flex-col rounded-xl border border-theme-border bg-theme-surface shadow-sm ${className}`}>
-      <div className="w-full overflow-x-auto custom-scrollbar">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead>
-            <tr className="border-b border-theme-border bg-theme-base/50 text-[10px] font-bold text-theme-text-dim uppercase tracking-wider select-none">
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse [&>tbody>tr:nth-child(odd)]:bg-theme-card [&>tbody>tr:nth-child(even)]:bg-theme-surface">
+          <thead className="sticky top-0 z-10 bg-theme-card">
+            <tr className="border-b border-theme-border select-none">
               {headers.map((header, idx) => (
-                <th key={idx} className="px-5 py-3.5 font-semibold">
+                <th key={idx} className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-theme-text-dim">
                   {header}
                 </th>
               ))}
@@ -53,27 +61,33 @@ export default function Table({
           <tbody className="divide-y divide-theme-border/50 text-theme-text">
             {isLoading ? (
               <tr>
-                <td colSpan={headers.length} className="px-5 py-12 text-center text-theme-text-dim">
-                  <div className="flex flex-col items-center justify-center gap-3">
-                    <span className="w-6 h-6 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
-                    <span className="text-[11px] font-medium tracking-wide uppercase">Loading records...</span>
+                <td colSpan={headers.length} className="px-5 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-8 h-8 border-2 border-theme-border border-t-theme-accent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-sm text-theme-text-dim">Loading records...</p>
                   </div>
                 </td>
               </tr>
             ) : totalItems === 0 ? (
               <tr>
-                <td colSpan={headers.length} className="px-5 py-12 text-center text-theme-text-dim">
+                <td colSpan={headers.length} className="px-5 py-12 text-center">
                   {emptyState || (
-                    <div className="flex flex-col items-center justify-center gap-1.5 py-4">
-                      <span className="text-xl">📭</span>
-                      <span className="text-[11px] font-semibold uppercase tracking-wider">No records found</span>
-                      <span className="text-[10px] text-theme-text-dim/80">Try adjusting your filters or adding a new record.</span>
+                    <div className="flex flex-col items-center justify-center">
+                      <Inbox className="h-10 w-10 text-theme-text-dim mx-auto mb-3" />
+                      <p className="text-sm font-semibold text-theme-text">No records found</p>
+                      <p className="text-xs text-theme-text-dim mt-1">Try adjusting your filters or adding new records</p>
                     </div>
                   )}
                 </td>
               </tr>
             ) : (
-              currentData
+              React.Children.map(currentData, (child) => {
+                if (!React.isValidElement(child)) return child;
+                const existingClass: string = (child.props as { className?: string }).className ?? '';
+                return React.cloneElement(child as React.ReactElement<{ className?: string }>, {
+                  className: `${existingClass} text-sm hover:bg-theme-elevated transition-colors duration-150`.trim(),
+                });
+              })
             )}
           </tbody>
         </table>
@@ -83,10 +97,10 @@ export default function Table({
       {paginate && totalPages > 1 && (
         <div className="border-t border-theme-border px-5 py-3 flex items-center justify-between bg-theme-base/30">
           <span className="text-xs text-theme-text-dim">
-            Showing <span className="font-semibold text-theme-text">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-semibold text-theme-text">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of <span className="font-semibold text-theme-text">{totalItems}</span> entries
+            {paginationSummary(totalItems, itemsPerPage, currentPage)}
           </span>
           <div className="flex gap-1">
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
               className="px-2.5 py-1.5 rounded-md border border-theme-border bg-theme-surface text-theme-text text-[11px] font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-theme-base transition-colors"
@@ -109,8 +123,8 @@ export default function Table({
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
                     className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-medium transition-colors ${
-                      currentPage === pageNum 
-                        ? "bg-theme-accent text-white" 
+                      currentPage === pageNum
+                        ? "bg-theme-accent text-white"
                         : "text-theme-text hover:bg-theme-border/50"
                     }`}
                   >
@@ -119,7 +133,7 @@ export default function Table({
                 );
               })}
             </div>
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
               className="px-2.5 py-1.5 rounded-md border border-theme-border bg-theme-surface text-theme-text text-[11px] font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-theme-base transition-colors"

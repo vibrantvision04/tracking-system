@@ -1,5 +1,6 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { Card } from '@/components/ui/Card';
 
 interface CoverageChartProps {
   title: string;
@@ -16,11 +17,12 @@ export default function CoverageChart({ title, percentage, color = '#3b82f6', su
   ];
 
   return (
-    <div 
+    <Card
+      hoverable
       onClick={onClick}
-      className={`bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full ${onClick ? 'cursor-pointer hover:border-slate-300 hover:bg-slate-50/50 active:scale-[0.99]' : ''}`}
+      className={`p-6 flex flex-col h-full ${onClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
     >
-      <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">{title}</h3>
+      <h3 className="text-sm font-semibold text-theme-text-dim uppercase tracking-wider mb-2">{title}</h3>
       <div className="flex-1 relative min-h-[140px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -36,15 +38,15 @@ export default function CoverageChart({ title, percentage, color = '#3b82f6', su
               stroke="none"
             >
               <Cell key="cell-0" fill={color} />
-              <Cell key="cell-1" fill="#f1f5f9" />
+              <Cell key="cell-1" fill="var(--color-theme-elevated, #f1f5f9)" />
             </Pie>
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-3xl font-extrabold text-slate-900">{percentage}%</span>
-          {subtitle && <span className="text-[10px] font-semibold text-slate-400 uppercase mt-1 tracking-wider">{subtitle}</span>}
+          <span className="text-3xl font-extrabold text-theme-text">{percentage}%</span>
+          {subtitle && <span className="text-[10px] font-semibold text-theme-text-dim uppercase mt-1 tracking-wider">{subtitle}</span>}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

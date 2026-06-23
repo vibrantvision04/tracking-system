@@ -1,5 +1,6 @@
 import React from 'react';
 import { Route, Building2, SquareParking, Fuel, Wrench, Users } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 
 interface InfraItem {
   icon: React.ReactNode;
@@ -34,21 +35,21 @@ export default function InfrastructureCard({
   ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
-      <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-5">Infrastructure Summary</h3>
+    <Card hoverable className="p-6 flex flex-col h-full">
+      <h3 className="text-sm font-semibold text-theme-text-dim uppercase tracking-wider mb-5">Infrastructure Summary</h3>
       <div className="grid grid-cols-2 gap-x-4 gap-y-5 mt-auto">
         {items.map((item, idx) => (
           <div key={idx} className="flex items-center gap-3 group">
-            <div className="p-2 bg-slate-50 text-slate-600 rounded-lg border border-slate-100 group-hover:text-blue-600 group-hover:bg-blue-50 transition-colors">
+            <div className="p-2 bg-[#ef4444]/10 text-[#ef4444] rounded-full border border-[#ef4444]/20 transition-all duration-300 flex items-center justify-center shrink-0">
               {item.icon}
             </div>
             <div>
-              <div className="text-lg font-bold text-slate-800 leading-none">{item.count}</div>
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-1 leading-none">{item.label}</div>
+              <div className="text-lg font-bold text-theme-text leading-none">{item.count}</div>
+              <div className="text-[10px] font-semibold text-theme-text-dim uppercase tracking-wider mt-1 leading-none">{item.label}</div>
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

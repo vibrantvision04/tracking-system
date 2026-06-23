@@ -25,7 +25,7 @@ export default function MainHeader() {
       <div className="flex items-center gap-3">
         <div className="text-right flex flex-col justify-center">
           <span className="text-xs font-bold text-theme-text">Admin User</span>
-          <span className="text-[9px] font-extrabold text-theme-accent uppercase tracking-wider mt-0.5">
+          <span className="text-[9px] font-extrabold text-[#16A34A] uppercase tracking-wider mt-0.5">
             ONLINE
           </span>
         </div>

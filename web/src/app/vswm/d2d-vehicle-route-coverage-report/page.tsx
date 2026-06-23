@@ -3,6 +3,10 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import Table from '@/components/shared/Table';
+import { Card, CardContent } from "@/components/ui/Card";
+import Button from "@/components/ui/Button";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 
 export default function D2DRouteCoverageReport() {
   const [loading, setLoading] = useState(false);
@@ -101,181 +105,190 @@ export default function D2DRouteCoverageReport() {
   };
 
   return (
-    <div className="flex-1 p-6 lg:p-8 bg-[#f4f6f8] min-h-screen text-theme-text">
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 border-b-2 border-emerald-500 pb-2 bg-theme-surface p-4 shadow-sm rounded-t-md">
-        <h1 className="text-xl font-bold text-theme-text tracking-tight">D2D Vehicle Route Coverage Report</h1>
-        <div className="flex gap-2 mt-4 md:mt-0">
-          <button className="bg-slate-600 hover:bg-slate-700 text-theme-text px-4 py-1.5 rounded text-sm font-medium transition-colors shadow-sm">
+      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-theme-text">D2D Vehicle Route Coverage Report</h2>
+          <div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
+        </div>
+        <div className="flex gap-2 print:hidden">
+          <Button
+            onClick={() => window.print()}
+            variant="outline"
+            className="px-3 py-1.5 text-xs font-semibold"
+          >
             PDF
-          </button>
-          <button className="bg-slate-600 hover:bg-slate-700 text-theme-text px-4 py-1.5 rounded text-sm font-medium transition-colors shadow-sm">
+          </Button>
+          <Button
+            variant="outline"
+            className="px-3 py-1.5 text-xs font-semibold"
+          >
             CSV
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Filters Form */}
-      <div className="bg-theme-surface rounded-md shadow-sm border border-theme-border p-6 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4">
-          
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">Zone</label>
-            <select 
-              value={zoneId} onChange={e => setZoneId(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            >
-              <option value="">Select Zone</option>
-              {zones.map(z => <option key={z.id} value={z.id}>{z.region_name}</option>)}
-            </select>
-          </div>
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
+        {/* Filters Form */}
+        <Card hoverable className="print:hidden">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4">
+              
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Zone</span>
+                <SearchableSelect
+                  value={zoneId}
+                  onChange={setZoneId}
+                  options={[
+                    { value: "", label: "Select Zone" },
+                    ...zones.map((z) => ({ value: z.id.toString(), label: z.region_name }))
+                  ]}
+                  placeholder="Select Zone"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">Ward</label>
-            <select 
-              value={wardId} onChange={e => setWardId(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            >
-              <option value="">Select Ward</option>
-              {wards.map(w => <option key={w.id} value={w.id}>{w.region_name}</option>)}
-            </select>
-          </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Ward</span>
+                <SearchableSelect
+                  value={wardId}
+                  onChange={setWardId}
+                  options={[
+                    { value: "", label: "Select Ward" },
+                    ...wards.map((w) => ({ value: w.id.toString(), label: w.region_name }))
+                  ]}
+                  placeholder="Select Ward"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">Shift</label>
-            <select 
-              value={shiftId} onChange={e => setShiftId(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            >
-              <option value="">Select Shift</option>
-              {shifts.map(s => <option key={s.id} value={s.id}>{s.shift_name}</option>)}
-            </select>
-          </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Shift</span>
+                <SearchableSelect
+                  value={shiftId}
+                  onChange={setShiftId}
+                  options={[
+                    { value: "", label: "Select Shift" },
+                    ...shifts.map((s) => ({ value: s.id.toString(), label: s.shift_name }))
+                  ]}
+                  placeholder="Select Shift"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">Route Type</label>
-            <select 
-              value={routeTypeId} onChange={e => setRouteTypeId(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            >
-              <option value="">Search Route Type</option>
-              {routeTypes.map(rt => <option key={rt.id} value={rt.id}>{rt.name}</option>)}
-            </select>
-          </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Route Type</span>
+                <SearchableSelect
+                  value={routeTypeId}
+                  onChange={setRouteTypeId}
+                  options={[
+                    { value: "", label: "Search Route Type" },
+                    ...routeTypes.map((rt) => ({ value: rt.id.toString(), label: rt.name }))
+                  ]}
+                  placeholder="Search Route Type"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">Route</label>
-            <select 
-              value={routeId} onChange={e => setRouteId(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            >
-              <option value="">Select Route</option>
-              {routes.map(r => <option key={r.id} value={r.id}>{r.route_name}</option>)}
-            </select>
-          </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Route</span>
+                <SearchableSelect
+                  value={routeId}
+                  onChange={setRouteId}
+                  options={[
+                    { value: "", label: "Select Route" },
+                    ...routes.map((r) => ({ value: r.id.toString(), label: r.route_name }))
+                  ]}
+                  placeholder="Select Route"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">Parking Spot</label>
-            <select 
-              value={parkingSpot} onChange={e => setParkingSpot(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            >
-              <option value="">Select Parking Spot</option>
-              <option value="1">Main Depot</option>
-              <option value="2">North Yard</option>
-            </select>
-          </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">Parking Spot</span>
+                <SearchableSelect
+                  value={parkingSpot}
+                  onChange={setParkingSpot}
+                  options={[
+                    { value: "", label: "Select Parking Spot" },
+                    { value: "1", label: "Main Depot" },
+                    { value: "2", label: "North Yard" }
+                  ]}
+                  placeholder="Select Parking Spot"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">From Date</label>
-            <input 
-              type="date"
-              value={fromDate} onChange={e => setFromDate(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            />
-          </div>
+              <DatePicker
+                label="From Date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
 
-          <div className="space-y-1">
-            <label className="text-xs text-theme-text-dim font-medium">To Date</label>
-            <input 
-              type="date"
-              value={toDate} onChange={e => setToDate(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-theme-text focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-theme-surface"
-            />
-          </div>
+              <DatePicker
+                label="To Date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
 
-        </div>
+            </div>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 flex gap-3">
-          <button 
-            onClick={() => handleLoad(false)}
-            disabled={loading}
-            className="bg-[#449e48] hover:bg-theme-accent text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
-          >
-            {loading ? "Loading..." : "Load"}
-          </button>
-          <button 
-            disabled={loading || !allowHistoricalRecalculation}
-            onClick={() => handleLoad(true)}
-            className={`px-6 py-2 rounded text-sm font-medium transition-colors shadow-sm ${
-              allowHistoricalRecalculation
-                ? "bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
-                : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
-            }`}
-            title={allowHistoricalRecalculation ? "Force recalculate coverage report for the selected dates" : "Historical recalculation is disabled"}
-          >
-            {loading ? "Loading..." : "Recalculate"}
-          </button>
-        </div>
+            <div className="mt-6 pt-4 border-t border-theme-border/60 flex gap-3">
+              <Button 
+                onClick={() => handleLoad(false)}
+                disabled={loading}
+                variant="success"
+                className="font-semibold px-6 py-2 rounded text-xs"
+              >
+                Load
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Data Table */}
+        <Table
+          headers={[
+            <div key="s" className="text-center w-16 text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">S. No.</div>,
+            <span key="date" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Date</span>,
+            <span key="route" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Route</span>,
+            <span key="zone" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Zone</span>,
+            <span key="ward" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Ward</span>,
+            <span key="veh" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Vehicle Reg. No.</span>,
+            <span key="cov" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Covered %</span>,
+            <span key="inorder" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Inorder % Covered</span>,
+          ]}
+          isLoading={loading}
+          itemsPerPage={50}
+          emptyState={
+            <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-theme-text-dim/60">
+              <span className="text-3xl">📭</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider">No data available</span>
+              <span className="text-[10px]">Select filters and click "Load" to fetch coverage logs.</span>
+            </div>
+          }
+        >
+          {data.map((row, idx) => (
+            <tr key={idx} className="border-b border-theme-border/30 transition-colors">
+              <td className="px-6 py-3 text-center text-theme-text-dim font-mono text-[11px]">{idx + 1}</td>
+              <td className="px-6 py-3 text-theme-text text-[12px]">{row.date}</td>
+              <td className="px-6 py-3 text-theme-text-dim text-[12px]">{row.route_name}</td>
+              <td className="px-6 py-3 text-theme-text-dim text-[12px]">{row.zone_name || '-'}</td>
+              <td className="px-6 py-3 text-theme-text-dim text-[12px]">{row.ward_name || '-'}</td>
+              <td className="px-6 py-3 font-medium text-[12px]">
+                {row.imei ? (
+                  <Link 
+                    href={`/playback?imei=${row.imei}&date=${row.date}&route_id=${row.route_id}`}
+                    className="text-[#f39c12] hover:text-[#d68910] hover:underline"
+                  >
+                    {row.vehicle_reg_no}
+                  </Link>
+                ) : (
+                  <span className="text-[#f39c12]">{row.vehicle_reg_no}</span>
+                )}
+              </td>
+              <td className="px-6 py-3 text-theme-text font-mono text-[12px] font-semibold">{row.covered_percentage}%</td>
+              <td className="px-6 py-3 text-theme-text font-mono text-[12px] font-semibold">{row.in_order_percentage}%</td>
+            </tr>
+          ))}
+        </Table>
       </div>
-
-      {/* Data Table */}
-      <Table
-        headers={[
-          <div key="s" className="text-center w-16 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">S. No.</div>,
-          <span key="date" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Date</span>,
-          <span key="route" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Route</span>,
-          <span key="zone" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Zone</span>,
-          <span key="ward" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Ward</span>,
-          <span key="veh" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Vehicle Reg. No.</span>,
-          <span key="cov" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Covered %</span>,
-          <span key="inorder" className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Inorder % Covered</span>,
-        ]}
-        isLoading={loading}
-        itemsPerPage={50}
-        emptyState={
-          <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-slate-400">
-            <span className="text-3xl">📭</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider">No data available</span>
-            <span className="text-[10px]">Select filters and click "Load" to fetch coverage logs.</span>
-          </div>
-        }
-      >
-        {data.map((row, idx) => (
-          <tr key={idx} className="hover:bg-theme-surface transition-colors border-b border-theme-border">
-            <td className="px-6 py-3 text-center">{idx + 1}</td>
-            <td className="px-6 py-3">{row.date}</td>
-            <td className="px-6 py-3 text-theme-text-dim">{row.route_name}</td>
-            <td className="px-6 py-3">{row.zone_name || '-'}</td>
-            <td className="px-6 py-3">{row.ward_name || '-'}</td>
-            <td className="px-6 py-3 font-medium">
-              {row.imei ? (
-                <Link 
-                  href={`/playback?imei=${row.imei}&date=${row.date}&route_id=${row.route_id}`}
-                  className="text-[#f39c12] hover:text-[#d68910] hover:underline"
-                >
-                  {row.vehicle_reg_no}
-                </Link>
-              ) : (
-                <span className="text-[#f39c12]">{row.vehicle_reg_no}</span>
-              )}
-            </td>
-            <td className="px-6 py-3">{row.covered_percentage}%</td>
-            <td className="px-6 py-3">{row.in_order_percentage}%</td>
-          </tr>
-        ))}
-      </Table>
 
     </div>
   );

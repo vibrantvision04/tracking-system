@@ -1,16 +1,39 @@
 @import "tailwindcss";
 
 @theme {
-  --color-theme-base: #0b0f19;
-  --color-theme-surface: #151d30;
-  --color-theme-surface-hover: #1e293b;
-  --color-theme-text: #f8fafc;
-  --color-theme-text-dim: #94a3b8;
-  --color-theme-border: #1e293b;
-  --color-theme-accent: #ef4444;
-  --color-theme-accent-hover: #dc2626;
-  --color-theme-danger: #f87171;
-  --color-theme-danger-hover: #ef4444;
+  /* ── Granular token variables ── */
+  --color-theme-background-base:     #0F172A;
+  --color-theme-background-surface:  #111827;
+  --color-theme-background-card:     #1E293B;
+  --color-theme-background-elevated: #243244;
+  --color-theme-brand-primary:       #DC2626;
+  --color-theme-brand-primaryHover:  #B91C1C;
+  --color-theme-brand-primaryLight:  #FEE2E2;
+  --color-theme-semantic-success:    #16A34A;
+  --color-theme-semantic-warning:    #F59E0B;
+  --color-theme-semantic-error:      #EF4444;
+  --color-theme-semantic-info:       #06B6D4;
+  --color-theme-text-default:        #F8FAFC;
+  --color-theme-text-dim:            #94A3B8;
+  --color-theme-text-inverted:       #0F172A;
+  --color-theme-border-default:      #1E293B;
+  --color-theme-border-subtle:       #243244;
+
+  /* ── Backward-compat aliases (existing components continue working) ── */
+  --color-theme-base:         var(--color-theme-background-base);
+  --color-theme-surface:      var(--color-theme-background-surface);
+  --color-theme-card:         var(--color-theme-background-card);
+  --color-theme-elevated:     var(--color-theme-background-elevated);
+  --color-theme-accent:       var(--color-theme-brand-primary);
+  --color-theme-accent-hover: var(--color-theme-brand-primaryHover);
+  --color-theme-text:         var(--color-theme-text-default);
+  --color-theme-text-dim:     var(--color-theme-text-dim);
+  --color-theme-border:       var(--color-theme-border-default);
+
+  /* ── Legacy aliases preserved for backward compatibility ── */
+  --color-theme-surface-hover: var(--color-theme-background-elevated);
+  --color-theme-danger:        var(--color-theme-semantic-error);
+  --color-theme-danger-hover:  var(--color-theme-semantic-error);
 
   /* Color Mapping Overrides (Fail-safe for hardcoded green classes) */
   --color-emerald-50: #fef2f2;
@@ -26,32 +49,55 @@
 }
 
 :root {
-  --color-theme-base: #0b0f19;
-  --color-theme-surface: #151d30;
-  --color-theme-surface-hover: #1e293b;
-  --color-theme-text: #f8fafc;
-  --color-theme-text-dim: #94a3b8;
-  --color-theme-border: #1e293b;
-  --color-theme-accent: #ef4444;
-  --color-theme-accent-hover: #dc2626;
-  --color-theme-danger: #f87171;
-  --color-theme-danger-hover: #ef4444;
+  /* ── Granular token variables ── */
+  --color-theme-background-base:     #0F172A;
+  --color-theme-background-surface:  #111827;
+  --color-theme-background-card:     #1E293B;
+  --color-theme-background-elevated: #243244;
+  --color-theme-brand-primary:       #DC2626;
+  --color-theme-brand-primaryHover:  #B91C1C;
+  --color-theme-brand-primaryLight:  #FEE2E2;
+  --color-theme-semantic-success:    #16A34A;
+  --color-theme-semantic-warning:    #F59E0B;
+  --color-theme-semantic-error:      #EF4444;
+  --color-theme-semantic-info:       #06B6D4;
+  --color-theme-text-default:        #F8FAFC;
+  --color-theme-text-dim:            #94A3B8;
+  --color-theme-text-inverted:       #0F172A;
+  --color-theme-border-default:      #1E293B;
+  --color-theme-border-subtle:       #243244;
+
+  /* ── Backward-compat aliases ── */
+  --color-theme-base:         var(--color-theme-background-base);
+  --color-theme-surface:      var(--color-theme-background-surface);
+  --color-theme-card:         var(--color-theme-background-card);
+  --color-theme-elevated:     var(--color-theme-background-elevated);
+  --color-theme-accent:       var(--color-theme-brand-primary);
+  --color-theme-accent-hover: var(--color-theme-brand-primaryHover);
+  --color-theme-text:         var(--color-theme-text-default);
+  --color-theme-text-dim:     var(--color-theme-text-dim);
+  --color-theme-border:       var(--color-theme-border-default);
+
+  /* ── Legacy aliases preserved for backward compatibility ── */
+  --color-theme-surface-hover: var(--color-theme-background-elevated);
+  --color-theme-danger:        var(--color-theme-semantic-error);
+  --color-theme-danger-hover:  var(--color-theme-semantic-error);
 
   /* Mapped CSS Variables for raw styling (e.g. body, Leaflet) */
   --bg-dark: var(--color-theme-base);
-  --bg-card: var(--color-theme-surface);
+  --bg-card: var(--color-theme-card);
   --bg-sidebar: var(--color-theme-surface);
   --bg-surface: var(--color-theme-surface);
   --primary: var(--color-theme-accent);
-  --primary-glow: rgba(239, 68, 68, 0.15);
+  --primary-glow: rgba(220, 38, 38, 0.15);
   --text-main: var(--color-theme-text);
   --text-dim: var(--color-theme-text-dim);
   --border: var(--color-theme-border);
 
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #06b6d4;
+  --success: var(--color-theme-semantic-success);
+  --warning: var(--color-theme-semantic-warning);
+  --danger:  var(--color-theme-semantic-error);
+  --info:    var(--color-theme-semantic-info);
   --radius: 12px;
 }
 
@@ -95,5 +141,14 @@ body {
 }
 
 .animate-slide-in {
-  animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
 }

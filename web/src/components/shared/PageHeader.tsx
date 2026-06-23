@@ -25,7 +25,7 @@ export default function PageHeader({
     <div className={`flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-theme-border ${className}`}>
       <div className="space-y-1.5">
         {breadcrumbs && breadcrumbs.length > 0 && (
-          <nav className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-theme-text-dim select-none">
+          <nav className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-theme-text-dim select-none">
             {breadcrumbs.map((crumb, idx) => (
               <React.Fragment key={idx}>
                 {idx > 0 && <span className="opacity-40">/</span>}
@@ -41,12 +41,12 @@ export default function PageHeader({
           </nav>
         )}
         
-        <h1 className="text-xl font-extrabold text-theme-text tracking-tight sm:text-2xl">
+        <h1 className="text-3xl font-extrabold text-theme-text tracking-tight">
           {title}
         </h1>
         
         {description && (
-          <p className="text-xs text-theme-text-dim max-w-2xl leading-relaxed">
+          <p className="text-sm text-theme-text-dim max-w-2xl leading-relaxed">
             {description}
           </p>
         )}

@@ -22,10 +22,10 @@ export default function VehicleLocationPage() {
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none">
       {/* Sub-header with Title */}
-      <div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-slate-700">Vehicle Live Location Tracking</h2>
-          <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
+          <h2 className="text-base font-bold text-theme-text">Vehicle Live Location Tracking</h2>
+          <div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
         </div>
       </div>
 

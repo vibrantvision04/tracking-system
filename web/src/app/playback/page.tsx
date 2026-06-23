@@ -4,6 +4,10 @@ import { api, post } from "@/lib/api";
 import type { Vehicle, GpsDataPoint } from "@/lib/types";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import { populateOpenDepotLayer } from "@/components/OpenDepotMapLayer";
+import { FilterBar } from "@/components/shared/FilterBar";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
+import Button from "@/components/ui/Button";
 
 interface StoppagePoint {
   startIndex: number;
@@ -1801,7 +1805,7 @@ export default function PlaybackPage() {
           setAiRouteCorrectionActive(defaultAi);
           useAI = defaultAi;
 
-          const defaultAgg = assignedRouteData.aggressive_snapping === true;
+          const defaultAgg = false; // Always default to false as requested
           setAggressiveSnapping(defaultAgg);
           defaultAggressive = defaultAgg;
         } else {
@@ -2905,7 +2909,7 @@ export default function PlaybackPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-white text-slate-800 font-sans">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#0F172A] text-slate-800 font-sans">
       <style dangerouslySetInnerHTML={{
         __html: `
         @keyframes stop-pulse {
@@ -2924,25 +2928,25 @@ export default function PlaybackPage() {
       `}} />
 
       {/* Sub-header / Playback Title with Green Line */}
-      <div className="bg-white px-6 py-2 border-b border-slate-200 shrink-0">
-        <h2 className="text-base font-bold text-slate-700">Playback</h2>
+      <div className="bg-[#0F172A] px-6 py-2 border-b border-[#0F172A] shrink-0">
+        <h2 className="text-base font-bold text-white">Playback</h2>
         <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
       </div>
 
       {/* HORIZONTAL CONTROLS PANEL */}
-      <section className="bg-[#f1f5f9] border-b border-slate-200 px-6 py-3.5 z-10 shrink-0 w-full flex flex-col gap-3">
+      <section className="bg-[#0F172A] border-b border-[#0F172A] px-6 py-3.5 z-10 shrink-0 w-full flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3.5 w-full">
 
           {/* Date Picker */}
-          <div className="relative min-w-[130px]">
-            <input
+          <div className="min-w-[130px]">
+            <DatePicker
               type="date"
               value={date}
               onChange={(e) => {
                 setDate(e.target.value);
                 setRouteIdParam(null);
               }}
-              className="w-full bg-white border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
+              className="w-full bg-[#0F172A] border border-slate-300 px-3 py-1.5 rounded text-sm text-slate-700 focus:border-emerald-500 outline-none transition cursor-pointer font-medium"
             />
           </div>
 
@@ -3007,19 +3011,7 @@ export default function PlaybackPage() {
             />
           </div>
 
-          {/* Select Route */}
-          <div className="min-w-[170px]">
-            <SearchableSelect
-              value={selectedRouteId}
-              onChange={(val) => {
-                setSelectedRouteId(val);
-                setRouteIdParam(null);
-              }}
-              options={routeOptions}
-              placeholder="Select Route"
-              className="w-full"
-            />
-          </div>
+
 
           {/* Speed Selector */}
           <div className="min-w-[80px]">
@@ -3038,43 +3030,7 @@ export default function PlaybackPage() {
             </select>
           </div>
 
-          {/* Aggressive Snapping Toggle */}
-          <div className="flex items-center gap-1.5 shrink-0 px-2 border-l border-slate-200">
-            <input
-              id="aggressive-snapping-toggle"
-              type="checkbox"
-              checked={aggressiveSnapping}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setAggressiveSnapping(checked);
-                loadRoute(false);
-              }}
-              className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-            />
-            <label htmlFor="aggressive-snapping-toggle" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-              Aggressive
-            </label>
-          </div>
 
-          {/* AI Route Reconstruction Toggle */}
-          <div className="flex items-center gap-1.5 shrink-0 px-2 border-l border-slate-200">
-            <input
-              id="ai-route-correction-toggle"
-              type="checkbox"
-              checked={aiRouteCorrectionActive}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setAiRouteCorrectionActive(checked);
-                if (checked) {
-                  setShowRawGpsTrace(true);
-                }
-              }}
-              className="w-4 h-4 text-violet-600 border-slate-300 rounded focus:ring-violet-500 cursor-pointer"
-            />
-            <label htmlFor="ai-route-correction-toggle" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-              AI Correction
-            </label>
-          </div>
 
           {/* Playback Controls Row */}
           <button
@@ -3093,8 +3049,8 @@ export default function PlaybackPage() {
               }
             }}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${!selectedImei
-              ? "bg-slate-300 cursor-not-allowed shadow-none"
-              : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
+              ? "bg-slate-700 cursor-not-allowed shadow-none"
+              : "bg-[#22c55e] hover:bg-[#16a34a] active:scale-95 shadow-[#22c55e]/20 cursor-pointer hover:shadow-lg"
               }`}
             title={!selectedImei ? "Please select a vehicle first" : playing ? "Pause Playback" : "Start Playback"}
           >
@@ -3111,8 +3067,8 @@ export default function PlaybackPage() {
             disabled={points.length === 0}
             onClick={handleStop}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 ${points.length === 0
-              ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-              : "bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-rose-500/20 cursor-pointer hover:shadow-lg"
+              ? "bg-slate-700 text-slate-500 cursor-not-allowed shadow-none"
+              : "bg-[#ef4444] hover:bg-[#dc2626] active:scale-95 shadow-[#ef4444]/20 cursor-pointer hover:shadow-lg"
               }`}
             title="Show Full Route / Stop Playback"
           >
@@ -3125,7 +3081,7 @@ export default function PlaybackPage() {
           <button
             type="button"
             onClick={handleReset}
-            className="w-8 h-8 rounded-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white flex items-center justify-center shadow-md shadow-slate-500/20 transition-all shrink-0 cursor-pointer hover:shadow-lg"
+            className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white flex items-center justify-center shadow-md shadow-blue-500/20 transition-all shrink-0 cursor-pointer hover:shadow-lg"
             title="Reset Filters and Playback"
           >
             <svg className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="2.5" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
@@ -3137,7 +3093,7 @@ export default function PlaybackPage() {
 
         {/* Playback Progress timeline scrub slider - Always visible */}
         <div className="w-full flex items-center gap-3 mt-1">
-          <span className="text-xs font-semibold font-mono text-slate-500 w-14 shrink-0 text-left">
+          <span className="text-xs font-semibold font-mono text-white w-14 shrink-0 text-left">
             {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[idx]?.time) : "00:00:00"}
           </span>
           <input
@@ -3156,9 +3112,9 @@ export default function PlaybackPage() {
                 setIdx(Number(e.target.value));
               }
             }}
-            className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-200 accent-sky-500 appearance-none outline-none"
+            className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-700 accent-[#22c55e] appearance-none outline-none"
           />
-          <span className="text-xs font-semibold font-mono text-slate-500 w-14 shrink-0 text-right">
+          <span className="text-xs font-semibold font-mono text-white w-14 shrink-0 text-right">
             {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[playbackSteps.length - 1]?.time) : "00:00:00"}
           </span>
         </div>
@@ -3460,12 +3416,12 @@ export default function PlaybackPage() {
                         }
                       }}
                       className={`w-full text-left p-2.5 border rounded-xl text-xs transition flex items-center justify-between group active:scale-98 ${cp.visited
-                        ? 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100 hover:border-emerald-200'
+                        ? 'bg-[#f0fdf4]/50 hover:bg-[#f0fdf4] border-[#dcfce7] hover:border-[#bbf7d0]'
                         : 'bg-rose-50/30 hover:bg-rose-50/70 border-rose-100 hover:border-rose-200'
                         }`}
                     >
                       <div className="space-y-0.5 max-w-[70%]">
-                        <span className={`font-extrabold block truncate ${cp.visited ? 'text-emerald-600' : 'text-rose-500'}`}>
+                        <span className={`font-extrabold block truncate ${cp.visited ? 'text-[#16a34a]' : 'text-rose-500'}`}>
                           #{cp.sequence_order} {formatCheckpointName(cp.checkpoint_name, cp.sequence_order)}
                         </span>
                         <span className="text-[9px] text-slate-400 block font-normal">
@@ -3478,7 +3434,7 @@ export default function PlaybackPage() {
                         )}
                       </div>
                       <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg transition duration-200 ${cp.visited
-                        ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-200'
+                        ? 'bg-[#dcfce7] text-[#15803d] group-hover:bg-[#bbf7d0]'
                         : 'bg-rose-100 text-rose-600 group-hover:bg-rose-200'
                         }`}>
                         {cp.visited ? 'HIT' : 'MISSED'}

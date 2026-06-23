@@ -1,40 +1,72 @@
 import React from 'react';
 
+// 'accent' kept as backward-compat alias for 'primary'
+type ButtonVariant = 'primary' | 'accent' | 'success' | 'secondary' | 'danger' | 'ghost' | 'outline';
+type ButtonSize = 'sm' | 'md' | 'lg';
+
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'accent' | 'danger' | 'primary' | 'secondary' | 'outline';
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   loading?: boolean;
   loadingText?: string;
+  disabled?: boolean;
   children: React.ReactNode;
 }
 
+const variantClasses: Record<ButtonVariant, string> = {
+  primary:   'bg-theme-accent text-white hover:bg-theme-accent-hover',
+  accent:    'bg-theme-accent text-white hover:bg-theme-accent-hover', // alias for primary
+  success:   'bg-[#16A34A] text-white hover:bg-[#15803D]',
+  secondary: 'bg-theme-surface text-theme-text border border-theme-border hover:bg-theme-elevated',
+  danger:    'bg-red-600 text-white hover:bg-red-700',
+  ghost:     'bg-transparent text-theme-text hover:bg-theme-surface',
+  outline:   'bg-transparent text-theme-text border border-theme-border hover:bg-theme-surface',
+};
+
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: 'text-xs',
+  md: 'text-sm',
+  lg: 'text-base',
+};
+
 export default function Button({
   variant = 'primary',
+  size = 'md',
   loading = false,
-  loadingText = "Loading...",
-  className = "",
+  loadingText = 'Loading...',
+  className = '',
   children,
   disabled,
   ...props
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none disabled:opacity-50 select-none shadow-sm";
-  
-  const variants = {
-    accent: "bg-theme-accent hover:bg-theme-accent-hover text-white shadow-emerald-500/5 hover:shadow",
-    danger: "bg-red-600 hover:bg-red-700 text-white shadow-red-500/5 hover:shadow",
-    primary: "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/5 hover:shadow",
-    secondary: "bg-theme-surface border border-theme-border text-theme-text hover:bg-theme-surface-hover",
-    outline: "border border-theme-border bg-transparent text-theme-text hover:bg-theme-surface"
-  };
+  const baseStyles =
+    'inline-flex items-center justify-center min-h-[36px] px-4 rounded-[8px] font-medium ' +
+    'transition-colors duration-150 focus:outline-none select-none';
+
+  const disabledStyles = disabled || loading ? 'opacity-50 cursor-not-allowed' : '';
+  const loadingPointer = loading ? 'pointer-events-none' : '';
 
   return (
     <button
       disabled={disabled || loading}
-      className={`${baseStyles} ${variants[variant]} ${className}`}
+      className={[
+        baseStyles,
+        variantClasses[variant],
+        sizeClasses[size],
+        disabledStyles,
+        loadingPointer,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
       {...props}
     >
       {loading ? (
         <>
-          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+          <span
+            className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"
+            aria-hidden="true"
+          />
           <span>{loadingText}</span>
         </>
       ) : (
