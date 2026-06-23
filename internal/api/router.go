@@ -163,6 +163,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.Get("/reports/gts-trips", h.GetGTSTripReport)
 		r.Get("/reports/special-operations", h.GetShiftBasedOpsReport)
 		r.Get("/reports/early-departed", h.GetEarlyDepartureReport)
+		r.Get("/reports/vehicle-summary", h.GetVehicleSummaryReport)
 
 		// Ultimate Reports — new independent module (does not affect existing Reports)
 		r.Get("/ultimate-reports/daily-excel", h.GetUltimateDailyExcelReport)

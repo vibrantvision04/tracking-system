@@ -584,7 +584,7 @@ export default function RegionManager() {
         <div className="flex-grow overflow-y-auto p-6 lg:p-8 custom-scrollbar space-y-6 flex flex-col h-full">
           {formOpen ? (
             /* ─── CASE A.2: Split-Screen Form (Form Card Left, Map Card Right) ─── */
-            <div className="max-w-7xl mx-auto w-full space-y-6 flex-grow flex flex-col">
+            <div className="w-full space-y-6 flex-grow flex flex-col">
               <PageHeader
                 title={editingRegion ? "Edit Region" : "Create Region"}
                 description="Define name, parent hierarchy, population, and draw the region coordinates."
@@ -667,7 +667,7 @@ export default function RegionManager() {
             </div>
           ) : (
             /* ─── CASE B: Table List ─── */
-            <div className="max-w-7xl mx-auto w-full space-y-6 flex-grow flex flex-col">
+            <div className="w-full space-y-6 flex-grow flex flex-col">
               <PageHeader
                 title="Region & Ward Boundaries"
                 description="Manage administrative levels (Zones, Wards, Sectors) and map their geographic coordinates."

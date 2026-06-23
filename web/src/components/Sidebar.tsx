@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 const navData = [
- 
+
   {
     label: "Vehicles",
     icon: Truck,
@@ -50,7 +50,7 @@ const navData = [
   {
     label: "GPS Devices",
     icon: Cpu,
-    href: "/devices" 
+    href: "/devices"
 
   },
   {
@@ -102,6 +102,7 @@ const navData = [
       { label: "RFID Coverage Report", href: "/vswm/rfid-coverage" },
       { label: "Survey Report", href: "/vswm/survey-report" },
       { label: "Survey List", href: "/vswm/survey-list" },
+      { label: "Survey Payment Report", href: "/vswm/survey-payment-report" },
     ],
   },
   {
@@ -113,7 +114,7 @@ const navData = [
       {
         label: "Assignments",
         children: [
-          { label: "Driver/Helper to Shift & Vehicle", href: "/vswm/employee-shift-vehicle" },
+          { label: "Driver to Vehicle", href: "/vswm/employee-vehicle" },
           { label: "Employee to Designation & Department", href: "/vswm/employee-department-designation" },
           { label: "Role To User", href: "/vswm/role-user" },
           { label: "Department to Designation", href: "/vswm/department-designation" },
@@ -517,9 +518,8 @@ export default function Sidebar() {
                             setSidebarOpen(false);
                             setActiveCategory(null);
                           }}
-                          className={`text-[11px] font-medium transition-colors block ${
-                            path === sub.href ? "text-[#10B981] font-semibold" : "text-theme-text hover:text-theme-accent"
-                          }`}
+                          className={`text-[11px] font-medium transition-colors block ${path === sub.href ? "text-[#10B981] font-semibold" : "text-theme-text hover:text-theme-accent"
+                            }`}
                         >
                           {sub.label}
                         </Link>
