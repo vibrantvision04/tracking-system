@@ -233,7 +233,7 @@ export default function D2DRouteCoverageReport() {
               <Button 
                 onClick={() => handleLoad(false)}
                 disabled={loading}
-                variant="success"
+                variant="primary"
                 className="font-semibold px-6 py-2 rounded text-xs"
               >
                 Load

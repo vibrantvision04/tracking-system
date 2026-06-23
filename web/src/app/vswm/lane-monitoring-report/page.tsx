@@ -265,7 +265,7 @@ export default function LaneMonitoringReportPage() {
             </div>
 
             <div className="flex justify-start pt-4 border-t border-theme-border/60">
-              <Button onClick={loadReport} variant="success" loading={loading} loadingText="Loading...">
+              <Button onClick={loadReport} variant="primary" loading={loading} loadingText="Loading...">
                 Load
               </Button>
             </div>
