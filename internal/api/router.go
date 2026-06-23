@@ -20,10 +20,13 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 	r.Use(middleware.Compress(5)) // Enable gzip compression for faster API response transfer
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
+		AllowOriginFunc: func(r *http.Request, origin string) bool {
+			return true
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"*"},
 		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: false, // Set to false to support "*" origin properly
+		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 

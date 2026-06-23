@@ -342,7 +342,7 @@ export default function HomePage() {
                 {/* Stats Grid */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-theme-text-dim uppercase">Total Depots</span>
+                    <span className="text-[10px] font-bold text-slate-300 uppercase">Total Depots</span>
                     <span className="text-lg font-extrabold text-theme-text mt-1">{openDepotDashboard?.kpis?.total_open_depots ?? 0}</span>
                   </div>
                   <div className="bg-[#16A34A]/10 border border-[#16A34A]/20 rounded-xl p-3 flex flex-col items-center">
@@ -361,8 +361,8 @@ export default function HomePage() {
                     <span className="text-[10px] font-bold text-[#F59E0B] uppercase">Pending</span>
                     <span className="text-lg font-extrabold text-[#F59E0B] mt-1">{openDepotDashboard?.kpis?.pending ?? 0}</span>
                   </div>
-                  <div className="bg-theme-base border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-theme-text-dim uppercase">Not Covered</span>
+                  <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
+                    <span className="text-[10px] font-bold text-slate-300 uppercase">Not Covered</span>
                     <span className="text-lg font-extrabold text-theme-text mt-1">{openDepotDashboard?.kpis?.not_covered ?? 0}</span>
                   </div>
                 </div>
@@ -411,7 +411,7 @@ export default function HomePage() {
                         <span className="text-[9px] font-bold bg-[#F59E0B]/10 text-[#F59E0B] px-2 py-0.5 rounded border border-[#F59E0B]/20">
                           Pending: {zone.pending}
                         </span>
-                        <span className="text-[9px] font-bold bg-theme-base text-theme-text-dim px-2 py-0.5 rounded border border-theme-border">
+                        <span className="text-[9px] font-bold bg-theme-card text-slate-300 px-2 py-0.5 rounded border border-theme-border">
                           Not Mapped: {zone.not_covered}
                         </span>
                       </div>
@@ -463,11 +463,11 @@ export default function HomePage() {
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-theme-text-dim uppercase">Total Valid Trips</span>
+                    <span className="text-[10px] font-bold text-slate-300 uppercase">Total Valid Trips</span>
                     <span className="text-lg font-extrabold text-theme-text mt-1">{totalValidTrips}</span>
                   </div>
                   <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-theme-text-dim uppercase">Active Compactor Zones</span>
+                    <span className="text-[10px] font-bold text-slate-300 uppercase">Active Compactor Zones</span>
                     <span className="text-lg font-extrabold text-theme-text mt-1">{zoneTonnages.length}</span>
                   </div>
                 </div>

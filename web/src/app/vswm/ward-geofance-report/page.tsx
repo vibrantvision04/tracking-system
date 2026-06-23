@@ -134,7 +134,7 @@ export default function WardGeofenceReportPage() {
             </div>
 
             <div className="flex justify-start pt-4 border-t border-slate-100">
-              <Button onClick={loadReport} variant="accent" loading={loading} loadingText="Loading..." className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2 rounded-lg text-xs transition">
+              <Button onClick={loadReport} variant="success" loading={loading} loadingText="Loading..." className="font-semibold px-5 py-2 rounded-lg text-xs transition">
                 Load
               </Button>
             </div>

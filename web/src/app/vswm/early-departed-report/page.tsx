@@ -7,13 +7,12 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import Table from "@/components/shared/Table";
 import { 
   Search, 
-  RefreshCw, 
   AlertTriangle,
-  Play,
-  Calendar,
-  Clock
+  Play
 } from "lucide-react";
 import Link from "next/link";
+import SearchableSelect from "@/components/ui/SearchableSelect";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface EarlyDepartureRecord {
   vehicle_id: number;
@@ -66,6 +65,19 @@ export default function EarlyDepartureReportPage() {
     return regNo.includes(q) || route.includes(q);
   });
 
+  const thresholdOptions = [
+    { value: "11:00:00", label: "11:00 AM" },
+    { value: "12:00:00", label: "12:00 PM" },
+    { value: "12:30:00", label: "12:30 PM" },
+    { value: "13:00:00", label: "01:00 PM" }
+  ];
+
+  const endTimeOptions = [
+    { value: "14:00:00", label: "02:00 PM" },
+    { value: "15:00:00", label: "03:00 PM" },
+    { value: "16:00:00", label: "04:00 PM" }
+  ];
+
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans space-y-6 p-6 lg:p-8">
       <PageHeader
@@ -74,50 +86,44 @@ export default function EarlyDepartureReportPage() {
         breadcrumbs={[{ label: "Reports", href: "/reports" }, { label: "Early Departed Report" }]}
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-theme-surface border border-theme-border px-3 py-1.5 rounded-xl text-xs">
-              <Calendar className="w-3.5 h-3.5 text-theme-text-dim" />
-              <input
-                type="date"
+            <div className="w-36">
+              <DatePicker
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="bg-transparent text-theme-text outline-none"
               />
             </div>
 
-            <div className="flex items-center gap-2 bg-theme-surface border border-theme-border px-3 py-1.5 rounded-xl text-xs">
-              <Clock className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-theme-text-dim mr-1">Threshold:</span>
-              <select
+            <div className="w-40">
+              <SearchableSelect
                 value={thresholdFilter}
-                onChange={(e) => setThresholdFilter(e.target.value)}
-                className="bg-transparent text-theme-text outline-none font-semibold cursor-pointer"
-              >
-                <option value="11:00:00">11:00 AM</option>
-                <option value="12:00:00">12:00 PM</option>
-                <option value="12:30:00">12:30 PM</option>
-                <option value="13:00:00">01:00 PM</option>
-              </select>
+                onChange={(val) => setThresholdFilter(val)}
+                options={thresholdOptions}
+                placeholder="Threshold"
+              />
             </div>
 
-            <div className="flex items-center gap-2 bg-theme-surface border border-theme-border px-3 py-1.5 rounded-xl text-xs">
-              <Clock className="w-3.5 h-3.5 text-rose-500" />
-              <span className="text-theme-text-dim mr-1">Shift End:</span>
-              <select
+            <div className="w-40">
+              <SearchableSelect
                 value={endTimeFilter}
-                onChange={(e) => setEndTimeFilter(e.target.value)}
-                className="bg-transparent text-theme-text outline-none font-semibold cursor-pointer"
-              >
-                <option value="14:00:00">02:00 PM</option>
-                <option value="15:00:00">03:00 PM</option>
-                <option value="16:00:00">04:00 PM</option>
-              </select>
+                onChange={(val) => setEndTimeFilter(val)}
+                options={endTimeOptions}
+                placeholder="Shift End"
+              />
             </div>
 
             <button 
-              onClick={fetchEarlyDepartures} 
-              className="p-2.5 bg-theme-surface hover:bg-theme-surface-hover border border-theme-border rounded-xl transition"
+              onClick={fetchEarlyDepartures}
+              disabled={loading}
+              className="px-4 py-2 text-xs bg-[#16A34A] hover:bg-[#15803D] disabled:opacity-50 text-white rounded-lg font-bold transition shadow-sm h-9 flex items-center justify-center gap-1 cursor-pointer shrink-0"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              {loading ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Refreshing...</span>
+                </>
+              ) : (
+                <span>↻ Refresh</span>
+              )}
             </button>
           </div>
         }

@@ -491,9 +491,11 @@ export default function Sidebar() {
 
         {/* Company Branding */}
         <div className={`px-3 py-2 border-t border-theme-border flex items-center gap-2.5 mt-auto bg-theme-elevated/10 ${sidebarCollapsed ? "justify-center" : ""}`}>
-          <div className="w-7 h-7 rounded-lg bg-[#ef4444]/15 border border-[#ef4444]/30 flex items-center justify-center text-xs font-black text-[#ef4444] select-none shrink-0" title="Vibrant Visions">
-            VV
-          </div>
+          <img
+            src="/vibrant_vision_logo.png"
+            alt="Vibrant Visions Logo"
+            className="w-7 h-7 object-contain select-none shrink-0"
+          />
           {!sidebarCollapsed && (
             <div className="min-w-0">
               <div className="text-[8px] font-extrabold text-[#ef4444] uppercase tracking-widest leading-none">Powered by</div>
