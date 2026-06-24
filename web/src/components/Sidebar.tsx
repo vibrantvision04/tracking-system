@@ -145,7 +145,6 @@ const navData = [
     icon: Tv,
     children: [
       { label: "Vehicle Location", href: "/vswm/vehicle-location" },
-      { label: "Employee Location", href: "/vswm/employee-location" },
       { label: "D2D", href: "/vswm/d2d" },
       { label: "Open Depot Live Map", href: "/vswm/open-depot-live-map" },
       { label: "Employee Monitoring", href: "/vswm/employee-monitoring" },
