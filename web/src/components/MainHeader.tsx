@@ -17,48 +17,48 @@ export default function MainHeader() {
   };
 
   return (
-    <header className="bg-theme-surface border-b border-theme-border h-16 shrink-0 flex items-center justify-between px-6 shadow-sm z-[9999] sticky top-0 select-none print:hidden w-full">
-      <div className="flex items-center gap-3.5">
+    <header className="bg-theme-surface border-b border-theme-border h-16 shrink-0 flex items-center justify-between px-3 sm:px-6 shadow-sm z-[9999] sticky top-0 select-none print:hidden w-full">
+      <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="w-10 h-10 flex items-center justify-center text-theme-text-dim hover:text-theme-text rounded-lg hover:bg-theme-elevated transition-colors"
+          className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-theme-text-dim hover:text-theme-text rounded-lg hover:bg-theme-elevated transition-colors shrink-0"
           title="Toggle Navigation Menu"
         >
-          <Menu className="w-5.5 h-5.5 text-emerald-600" />
+          <Menu className="w-5 h-5 text-emerald-600" />
         </button>
         <a href="/" className="flex items-center gap-2 shrink-0">
           <img 
             src="/Jaipur_Municipal_Corporation_Logo.png" 
             alt="Jaipur Municipal Corporation Logo" 
-            className="h-12 w-[62px] object-contain shrink-0 hover:scale-105 transition-transform duration-200"
+            className="h-10 w-[52px] sm:h-12 sm:w-[62px] object-contain shrink-0 hover:scale-105 transition-transform duration-200"
           />
         </a>
-        <div className="flex flex-col min-w-0">
-          <h1 className="text-xs sm:text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase truncate">
+        <div className="flex-col min-w-0 hidden sm:flex">
+          <h1 className="text-[10px] sm:text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase truncate">
             SWIFT - NAGAR NIGAM JAIPUR
           </h1>
-          <span className="text-[8px] sm:text-[9px] font-bold text-theme-text-dim uppercase tracking-widest mt-1 truncate">
+          <span className="text-[7px] sm:text-[9px] font-bold text-theme-text-dim uppercase tracking-widest mt-0.5 sm:mt-1 truncate hidden sm:block">
             SMART WASTE INTEGRATED FLEET TRACKING
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="text-right flex flex-col justify-center">
+      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div className="text-right flex-col justify-center hidden sm:flex">
           <span className="text-xs font-bold text-theme-text">{user?.email?.split("@")[0] || "User"}</span>
           <span className="text-[9px] font-extrabold text-[#16A34A] uppercase tracking-wider mt-0.5">
             {user?.role === "ADMIN" ? "ADMIN" : "USER"} • ONLINE
           </span>
         </div>
-        <div className={`w-9 h-9 rounded-full bg-gradient-to-tr flex items-center justify-center text-white text-[11px] font-black shadow select-none ${user?.role === "ADMIN" ? "from-emerald-500 to-teal-400 border border-emerald-400/20 shadow-emerald-500/10" : "from-blue-500 to-indigo-400 border border-blue-400/20 shadow-blue-500/10"}`}>
+        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr flex items-center justify-center text-white text-[10px] sm:text-[11px] font-black shadow select-none ${user?.role === "ADMIN" ? "from-emerald-500 to-teal-400 border border-emerald-400/20 shadow-emerald-500/10" : "from-blue-500 to-indigo-400 border border-blue-400/20 shadow-blue-500/10"}`}>
           {user?.email?.charAt(0).toUpperCase() || "U"}
         </div>
         <button
           onClick={handleLogout}
-          className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+          className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
           title="Sign Out"
         >
-          <LogOut className="w-4.5 h-4.5" />
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>

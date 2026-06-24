@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -17,10 +14,11 @@ import InfrastructureCard from "@/components/dashboard/InfrastructureCard";
 import DeviceCard from "@/components/dashboard/DeviceCard";
 import RFIDCoverageCard from "@/components/dashboard/RFIDCoverageCard";
 import DashboardCharts from "@/components/dashboard/DashboardCharts";
+import { CardSkeleton, ChartSkeleton, MapSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Map as MapIcon, Truck, Trash2, X } from 'lucide-react';
 import dynamic from "next/dynamic";
 
-const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false });
+const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false, loading: () => <MapSkeleton /> });
 
 const DEFAULT_CAPACITIES = [
   { id: 1, totalCapacity: "3.5", wet: "50", dry: "50", active: true },
@@ -33,6 +31,8 @@ export default function HomePage() {
   const devices = useStore((state) => state.devices);
   const loaded = useStore((state) => state.loaded);
   const loadAll = useStore((state) => state.loadAll);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const { data: zones = [], isValidating: loadingZones } = useSWR("/api/zones", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
   const { data: wards = [], isValidating: loadingWards } = useSWR("/api/wards", fetcher, { revalidateOnFocus: false, dedupingInterval: 60000 });
@@ -152,6 +152,25 @@ export default function HomePage() {
 
   const loading = !loaded;
   const activeVehiclesCount = vehicles.filter((v) => v.status !== "offline").length;
+
+  if (!mounted) {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-theme-base p-6 gap-6">
+        <div className="grid grid-cols-3 gap-6">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <ChartSkeleton />
+          <ChartSkeleton />
+        </div>
+        <div className="flex-1 rounded-3xl border border-slate-200/80 bg-white">
+          <MapSkeleton />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans">

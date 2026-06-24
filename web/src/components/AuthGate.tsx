@@ -2,12 +2,21 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
   const { loading, isAuthenticated } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated && pathname !== "/login") {
+      router.replace("/login");
+    } else if (isAuthenticated && pathname === "/login") {
+      router.replace("/");
+    }
+  }, [loading, isAuthenticated, pathname, router]);
 
   if (loading) {
     return (
@@ -20,15 +29,8 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isAuthenticated && pathname !== "/login") {
-    router.replace("/login");
-    return null;
-  }
-
-  if (isAuthenticated && pathname === "/login") {
-    router.replace("/");
-    return null;
-  }
+  if (!isAuthenticated && pathname !== "/login") return null;
+  if (isAuthenticated && pathname === "/login") return null;
 
   return <>{children}</>;
 }

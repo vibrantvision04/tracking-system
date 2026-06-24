@@ -24,7 +24,7 @@ interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function CardHeader({ children, className = "", ...props }: CardHeaderProps) {
   return (
-    <div className={`p-5 border-b border-theme-border flex flex-col gap-1.5 ${className}`} {...props}>
+    <div className={`p-4 sm:p-5 border-b border-theme-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${className}`} {...props}>
       {children}
     </div>
   );

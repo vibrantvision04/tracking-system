@@ -8,9 +8,9 @@ interface FilterBarProps {
 
 export function FilterBar({ children, actions, className = '' }: FilterBarProps) {
   return (
-    <div className={`flex flex-wrap gap-3 items-center p-3 bg-theme-surface border border-theme-border rounded-[12px] ${className}`}>
+    <div className={`flex flex-wrap gap-2 sm:gap-3 items-center p-2.5 sm:p-3 bg-theme-surface border border-theme-border rounded-[12px] ${className}`}>
       {children}
-      {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto justify-end sm:justify-start">{actions}</div>}
     </div>
   );
 }

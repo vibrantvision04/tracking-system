@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -12,6 +12,12 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const router = useRouter();
   const { user, loading, isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [loading, isAuthenticated, router]);
 
   if (loading) {
     return (
@@ -24,10 +30,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     );
   }
 
-  if (!isAuthenticated) {
-    router.replace("/login");
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   if (requiredRole && user?.role !== requiredRole && user?.role !== "ADMIN") {
     return <ForbiddenPage />;

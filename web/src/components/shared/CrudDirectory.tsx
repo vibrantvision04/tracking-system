@@ -125,12 +125,12 @@ export default function CrudDirectory({
 
         {/* Directory List Card */}
         <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between py-4">
-            <div>
+          <CardHeader className="py-4">
+            <div className="w-full">
               <CardTitle>{title.includes("Management") ? title.replace("Management", "Directory") : `${title} Directory`}</CardTitle>
               <CardDescription>All registered {title.replace("Management", "").toLowerCase().trim()} records in the system.</CardDescription>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 w-full sm:w-auto">
               {onSearchChange && (
                 <Input
                   placeholder={searchPlaceholder}

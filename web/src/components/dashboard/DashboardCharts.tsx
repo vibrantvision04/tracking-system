@@ -1,10 +1,11 @@
 "use client";
 
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   BarChart, Bar, Legend
 } from 'recharts';
+import { ChartSkeleton } from '@/components/ui/LoadingSkeleton';
 
 const weeklyTonnageData = [
   { day: 'Mon', Tonnage: 12.4, Trips: 14 },
@@ -26,6 +27,18 @@ const fleetActivityData = [
 ];
 
 export default function DashboardCharts() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!mounted) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+        <ChartSkeleton />
+        <ChartSkeleton />
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
       {/* Fleet Activity Trend (Area Chart) */}

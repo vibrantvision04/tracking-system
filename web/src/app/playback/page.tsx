@@ -3031,6 +3031,10 @@ export default function PlaybackPage() {
 
   const currentStep = playbackSteps[idx];
   const p = currentStep ? (points[currentStep.gpsIndex] || points[0]) : points[0];
+  const progressPct = playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0;
+  const totalCheckpoints = checkpoints.length;
+  const visitedCheckpoints = checkpoints.filter(cp => cp.visited).length;
+  const coveragePct = totalCheckpoints > 0 ? (visitedCheckpoints / totalCheckpoints) * 100 : 0;
 
   // Helper format time
   const formatTimeStr = (t?: string) => {
@@ -3058,9 +3062,9 @@ export default function PlaybackPage() {
       `}} />
 
       {/* Sub-header / Playback Title with Green Line */}
-      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
+      <div className="bg-theme-surface px-3 sm:px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-theme-text">Playback</h2>
+          <h2 className="text-sm sm:text-base font-bold text-theme-text">Playback</h2>
           <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
         </div>
       </div>
@@ -3072,11 +3076,11 @@ export default function PlaybackPage() {
         <div ref={box} className="absolute inset-0 z-0 bg-theme-base w-full h-full" />
 
         {/* Left Panel: Collapsible Configuration & Telemetry */}
-        <div className={`absolute top-4 left-4 z-[1000] h-[calc(100%-32px)] w-80 flex transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          leftPanelCollapsed ? '-translate-x-[calc(100%-12px)]' : 'translate-x-0'
+        <div className={`absolute top-4 left-2 sm:left-4 z-[1000] h-[calc(100%-32px)] w-[calc(100%-16px)] sm:w-72 md:w-80 flex transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          leftPanelCollapsed ? '-translate-x-[calc(100%-16px)]' : 'translate-x-0'
         }`}>
           {/* Main Card */}
-          <div className="w-80 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-2xl p-4 flex flex-col h-full">
+          <div className="w-full bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-2xl p-3 sm:p-4 flex flex-col h-full">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3 shrink-0">
               <div className="flex items-center gap-2">
@@ -3171,58 +3175,42 @@ export default function PlaybackPage() {
                 </div>
               </div>
 
-              {/* Telemetry and Stats Section (Visible only when vehicle loaded) */}
-              {selectedImei && points.length > 0 && (
+              {/* Driver Details */}
+              {selectedImei && (
                 <div className="border-t border-slate-100 pt-4 space-y-3.5">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Telemetry & Snapping
+                    Driver Details
                   </div>
-
                   <div className="grid grid-cols-2 gap-2.5 text-slate-600 font-mono text-[11px] bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">GPS Points</span>
-                      <span className="font-bold text-slate-700 text-sm">{totalGpsPoints}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Driver</span>
+                      <span className="font-bold text-slate-700 text-sm truncate">{driverDetails?.driverName || "N/A"}</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Confidence</span>
-                      <span className="font-bold text-violet-600 text-sm">
-                        {aiConfidence !== null ? `${Math.round(aiConfidence)}%` : "N/A"}
-                      </span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Stoppages</span>
-                      <span className="font-bold text-rose-500 text-sm">{stoppages.length}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Snapped</span>
-                      <span className="font-bold text-emerald-600 text-sm">{snappedPointsCount}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Helper</span>
+                      <span className="font-bold text-slate-700 text-sm truncate">{driverDetails?.helperName || "N/A"}</span>
                     </div>
                     <div className="flex flex-col col-span-2 border-t border-slate-200/55 pt-1.5">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Corridor</span>
-                      <span className="font-bold text-slate-700 text-xs truncate">{activeCorridor}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">TS Trips</span>
+                      <span className="font-bold text-emerald-600 text-sm">{transferStationTrips}</span>
                     </div>
-                  </div>
-
-                  {/* Toggle switches for Snapping settings */}
-                  <div className="space-y-2.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer select-none">
-                      <span className="font-semibold text-slate-700">AI Route Snapping</span>
-                      <input
-                        type="checkbox"
-                        checked={aiRouteCorrectionActive}
-                        onChange={(e) => setAiRouteCorrectionActive(e.target.checked)}
-                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
-                      />
-                    </label>
-                    <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer select-none">
-                      <span className="font-semibold text-slate-700">Aggressive Snapping</span>
-                      <input
-                        type="checkbox"
-                        checked={aggressiveSnapping}
-                        onChange={(e) => setAggressiveSnapping(e.target.checked)}
-                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5"
-                      />
-                    </label>
+                    <div className="flex flex-col col-span-2 border-t border-slate-200/55 pt-1.5">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Coverage</span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${coveragePct}%`,
+                              background: `linear-gradient(to right, #f59e0b, #10B981)`
+                            }}
+                          />
+                        </div>
+                        <span className="font-bold text-slate-700 text-sm shrink-0">
+                          {totalCheckpoints > 0 ? `${Math.round(coveragePct)}%` : "N/A"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3240,8 +3228,8 @@ export default function PlaybackPage() {
 
         {/* Right Panel: Collapsible tabbed Checkpoints & Stoppages */}
         {(checkpoints.length > 0 || stoppages.length > 0) && (
-          <div className={`absolute top-4 right-4 z-[1000] h-[calc(100%-32px)] w-80 flex transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-            rightPanelCollapsed ? 'translate-x-[calc(100%-12px)]' : 'translate-x-0'
+          <div className={`absolute top-4 right-2 sm:right-4 z-[1000] h-[calc(100%-32px)] w-[calc(100%-16px)] sm:w-72 md:w-80 flex transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            rightPanelCollapsed ? 'translate-x-[calc(100%-16px)]' : 'translate-x-0'
           }`}>
             {/* Toggle Handle */}
             <button
@@ -3252,7 +3240,7 @@ export default function PlaybackPage() {
             </button>
 
             {/* Main Card */}
-            <div className="w-80 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-2xl p-4 flex flex-col h-full text-slate-800">
+            <div className="w-full bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-2xl p-3 sm:p-4 flex flex-col h-full text-slate-800">
               {/* Tab Selector */}
               <div className="flex border-b border-slate-100 pb-2 mb-3 gap-1 shrink-0">
                 <button
@@ -3392,8 +3380,8 @@ export default function PlaybackPage() {
         {/* Dynamic Map Indication Dropdown positioning */}
         <div className={`absolute top-4 z-[1000] flex flex-col items-end transition-all duration-300 ${
           (checkpoints.length > 0 || stoppages.length > 0) && !rightPanelCollapsed
-            ? 'right-[346px]'
-            : 'right-4'
+            ? 'right-[calc(100%-16px)] sm:right-[308px] md:right-[346px]'
+            : 'right-2 sm:right-4'
         }`}>
           <div
             onClick={() => setShowMapIndicationMenu(!showMapIndicationMenu)}
@@ -3570,24 +3558,11 @@ export default function PlaybackPage() {
           )}
         </div>
 
-        {/* Floating AI Confidence Badge */}
-        {aiConfidence !== null && (
-          <div className={`absolute bottom-32 z-[1000] bg-violet-600/90 backdrop-blur text-white px-3.5 py-2.5 rounded-xl text-xs font-black shadow-2xl border border-violet-400/30 flex items-center gap-2 select-none pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-            leftPanelCollapsed ? 'left-4' : 'left-[336px]'
-          }`}>
-            <span className="text-base animate-pulse">🧠</span>
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-wider text-violet-200 font-bold">Viterbi Alignment</span>
-              <span className="text-xs font-black font-mono">AI Confidence: {Math.round(aiConfidence)}%</span>
-            </div>
-          </div>
-        )}
-
         {/* Media Player Floating Deck at Bottom Center */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-2xl bg-white/95 backdrop-blur-md border border-slate-200 text-slate-800 rounded-2xl shadow-2xl p-4 flex flex-col gap-3 transition-all duration-300">
+        <div className="absolute bottom-2 sm:bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-[96%] sm:w-[90%] max-w-2xl bg-white/95 backdrop-blur-md border border-slate-200 text-slate-800 rounded-xl sm:rounded-2xl shadow-2xl p-3 sm:p-4 flex flex-col gap-2 sm:gap-3 transition-all duration-300">
           {/* Timeline slider row */}
-          <div className="w-full flex items-center gap-3">
-            <span className="text-xs font-semibold font-mono text-slate-500 w-16 shrink-0 text-left">
+          <div className="w-full flex items-center gap-2 sm:gap-3">
+            <span className="text-[10px] sm:text-xs font-semibold font-mono text-slate-500 w-12 sm:w-16 shrink-0 text-left">
               {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[idx]?.time) : "00:00:00"}
             </span>
             <input
@@ -3608,18 +3583,18 @@ export default function PlaybackPage() {
               }}
               className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-200 accent-emerald-500 appearance-none outline-none focus:outline-none"
               style={{
-                background: `linear-gradient(to right, #10B981 0%, #10B981 ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #e2e8f0 ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #e2e8f0 100%)`
+                background: `linear-gradient(to right, #10B981 0%, #10B981 ${progressPct}%, #e2e8f0 ${progressPct}%, #e2e8f0 100%)`
               }}
             />
-            <span className="text-xs font-semibold font-mono text-slate-500 w-16 shrink-0 text-right">
+            <span className="text-[10px] sm:text-xs font-semibold font-mono text-slate-500 w-12 sm:w-16 shrink-0 text-right">
               {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[playbackSteps.length - 1]?.time) : "00:00:00"}
             </span>
           </div>
 
           {/* Controls and Telemetry Row */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
             {/* Left Group: Controls */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {/* Play/Pause */}
               <button
                 type="button"
@@ -3636,16 +3611,16 @@ export default function PlaybackPage() {
                     }
                   }
                 }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 shadow-md shrink-0 focus:outline-none ${!selectedImei
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all duration-200 shadow-md shrink-0 focus:outline-none ${!selectedImei
                   ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                   : "bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
                   }`}
                 title={!selectedImei ? "Please select a vehicle first" : playing ? "Pause Playback" : "Start Playback"}
               >
                 {playing ? (
-                  <Pause className="w-4 h-4 fill-current" />
+                  <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
                 ) : (
-                  <Play className="w-4 h-4 fill-current translate-x-0.5" />
+                  <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current translate-x-0.5" />
                 )}
               </button>
 
@@ -3654,57 +3629,68 @@ export default function PlaybackPage() {
                 type="button"
                 disabled={points.length === 0}
                 onClick={handleStop}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 focus:outline-none ${points.length === 0
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 focus:outline-none ${points.length === 0
                   ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                   : "bg-rose-500 hover:bg-rose-600 active:scale-95 shadow-rose-500/20 cursor-pointer hover:shadow-lg"
                   }`}
                 title="Stop Playback"
               >
-                <Square className="w-3.5 h-3.5 fill-current" />
+                <Square className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current" />
               </button>
 
               {/* Reset */}
               <button
                 type="button"
                 onClick={handleReset}
-                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-600 hover:text-slate-800 flex items-center justify-center shadow-md transition-all shrink-0 cursor-pointer focus:outline-none"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-600 hover:text-slate-800 flex items-center justify-center shadow-md transition-all shrink-0 cursor-pointer focus:outline-none"
                 title="Reset filters and data"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
+              
+              {/* Speed Multiplier Select */}
+              <div className="relative">
+                <select
+                  value={speedMultiplier}
+                  onChange={(e) => setSpeedMultiplier(Number(e.target.value))}
+                  className="bg-slate-100 border border-slate-200 text-slate-900 pl-3 pr-8 py-1.5 rounded-xl text-xs focus:border-emerald-500 outline-none transition cursor-pointer font-bold appearance-none select-none"
+                >
+                  <option value={1}>1X</option>
+                  <option value={2}>2X</option>
+                  <option value={4}>4X</option>
+                  <option value={8}>8X</option>
+                  <option value={16}>16X</option>
+                  <option value={32}>32X</option>
+                  <option value={64}>64X</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
             </div>
 
-            {/* Right Group: Driver Details */}
-            {selectedImei && (
-              <div className="flex items-center gap-3.5 text-xs">
-                {driverDetails ? (
-                  <>
-                    {/* Driver Name */}
-                    <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-500">Driver:</span>
-                      <span className="font-bold text-slate-700">{driverDetails.driverName}</span>
-                    </div>
+            {/* Right Group: Live Telemetry Values */}
+            {selectedImei && playbackSteps.length > 0 && currentStep && (
+              <div className="flex items-center gap-3.5 text-xs font-mono">
+                {/* Speed indicator */}
+                <div className="flex items-center gap-1.5 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200/50">
+                  <Gauge className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-slate-900">Speed:</span>
+                  <span className="font-bold text-black">{Math.round(currentStep.speed)} km/h</span>
+                </div>
 
-                    {/* Helper Name */}
-                    {driverDetails.helperName && driverDetails.helperName !== "N/A" && (
-                      <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                        <span className="text-slate-500">Helper:</span>
-                        <span className="font-bold text-slate-700">{driverDetails.helperName}</span>
-                      </div>
-                    )}
+                {/* Ignition indicator */}
+                <div className="flex items-center gap-1.5 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200/50">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-slate-900">Ignition:</span>
+                  <span className={`inline-flex items-center gap-1.5 font-bold ${currentStep.ignition ? "text-emerald-400" : "text-rose-400"}`}>
+                    <span className={`w-2 h-2 rounded-full ${currentStep.ignition ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
+                    {currentStep.ignition ? "ON" : "OFF"}
+                  </span>
+                </div>
+            </div>
 
-                    {/* Transfer Station Trips */}
-                    <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-500">TS Trips:</span>
-                      <span className="font-bold text-emerald-600">{transferStationTrips}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                    <span className="text-slate-400 italic">No driver assigned</span>
-                  </div>
-                )}
-              </div>
+
             )}
           </div>
         </div>
