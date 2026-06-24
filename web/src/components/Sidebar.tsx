@@ -338,9 +338,8 @@ export default function Sidebar() {
           <div className="flex items-center gap-2.5 w-full">
             <a href="/" className="flex items-center gap-2.5 min-w-0" onClick={() => setSidebarOpen(false)}>
               <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 shrink-0 shadow-sm">
-                <svg className="w-5.5 h-5.5 text-emerald-600" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L2 22h9l1-8h9L12 2z" />
-                </svg>
+                               <img src="/Jaipur_Municipal_Corporation_Logo.png" alt="SWIFT Logo" className="w-6 h-6" />
+
               </div>
               <div className="flex flex-col select-none min-w-0">
                 <div className="text-sm font-black text-theme-text tracking-tight uppercase leading-none">
