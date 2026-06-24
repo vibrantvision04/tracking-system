@@ -101,3 +101,25 @@ export interface Alert {
   is_resolved: boolean;
   registration_no?: string;
 }
+
+// ── Auth types ──
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: "ADMIN" | "USER";
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RefreshRequest {
+  refresh_token: string;
+}

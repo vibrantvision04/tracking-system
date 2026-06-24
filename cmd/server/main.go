@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"gps-tracking-system/internal/api"
+	"gps-tracking-system/internal/auth"
 	"gps-tracking-system/internal/cache"
 	"gps-tracking-system/internal/config"
 	"gps-tracking-system/internal/cron"
@@ -48,6 +49,70 @@ func main() {
 	_, err = db.Exec(context.Background(), "ALTER TABLE gps_devices ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT false")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to run schema migration for blocked column")
+	}
+
+	// Ensure refresh_tokens table exists for server-side token revocation
+	_, err = db.Exec(context.Background(), `
+		CREATE TABLE IF NOT EXISTS refresh_tokens (
+			id SERIAL PRIMARY KEY,
+			token_id TEXT UNIQUE NOT NULL,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			revoked_at TIMESTAMP,
+			expires_at TIMESTAMP NOT NULL,
+			created_at TIMESTAMP DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create refresh_tokens table")
+	}
+	_, err = db.Exec(context.Background(), `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id)`)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create index on refresh_tokens")
+	}
+	_, err = db.Exec(context.Background(), `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_id ON refresh_tokens(token_id)`)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create index on refresh_tokens")
+	}
+
+	// Ensure audit_log table exists
+	_, err = db.Exec(context.Background(), `
+		CREATE TABLE IF NOT EXISTS audit_log (
+			id SERIAL PRIMARY KEY,
+			event TEXT NOT NULL,
+			user_id INTEGER,
+			email TEXT,
+			ip TEXT,
+			metadata TEXT,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create audit_log table")
+	}
+	_, err = db.Exec(context.Background(), `CREATE INDEX IF NOT EXISTS idx_audit_log_event ON audit_log(event)`)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create index on audit_log")
+	}
+	_, err = db.Exec(context.Background(), `CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)`)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create index on audit_log")
+	}
+
+	// Bootstrap admin user if not already seeded
+	var adminExists bool
+	err = db.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM users WHERE email='test-admin@example.com')").Scan(&adminExists)
+	if err == nil && !adminExists {
+		hashedPassword, hashErr := auth.HashPassword("SecurePass123!")
+		if hashErr == nil {
+			_, execErr := db.Exec(context.Background(), `
+				INSERT INTO users (email, role, password_hash)
+				VALUES ('test-admin@example.com', 'ADMIN', $1)
+				ON CONFLICT (email) DO NOTHING
+			`, hashedPassword)
+			if execErr == nil {
+				log.Info().Msg("Bootstrapped default admin user: test-admin@example.com / SecurePass123!")
+			}
+		}
 	}
 
 	rdb, err := cache.InitRedis(cfg)
@@ -121,14 +186,14 @@ func main() {
 		}
 	}()
 
-	// 10. Start Cron Scheduler
-	cron.StartScheduler(cfg, rService, vRepo)
+	// 10. Start Cron Scheduler (includes report generation and token cleanup)
+	cron.StartScheduler(cfg, rService, vRepo, db)
 
 	// 11. Start API Clients (Removed as per blueprint optimization)
 
 
 	// 12. Start Servers
-	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo, routeEngine, openDepotRepo, cfg.JWTSecret, cfg.AllowHistoricalRecalculation)
+	handler := api.NewHandler(vRepo, gpsRepo, rService, rdb, routeRepo, routeEngine, openDepotRepo, cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cfg.AllowHistoricalRecalculation)
 
 	// Ultimate Reports engine — independent module, wired separately so NewHandler signature stays unchanged
 	urRepo := ultimatereport.NewUltimateReportRepository(db)

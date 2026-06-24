@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gps-tracking-system/internal/audit"
 	"gps-tracking-system/internal/decoder"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
@@ -49,15 +50,18 @@ type Handler struct {
 	alertsMutex                  sync.Mutex
 	alertsCache                  []map[string]interface{}
 	resolvedAlerts               map[int]ResolvedDetails
-	jwtSecret                    string
+	jwtAccessSecret              string
+	jwtRefreshSecret             string
 	allowHistoricalRecalculation bool
+	auditLogger *audit.Logger
+
 	// Ultimate Reports engine (independent module — does not affect existing Reports)
 	ultimateReportService *ultimatereport.UltimateReportService
 	excelEngine           *ultimatereport.ExcelEngine
 	reportTemplatePath    string
 }
 
-func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine, openDepotRepo *repository.OpenDepotRepository, jwtSecret string, allowHistoricalRecalc bool) *Handler {
+func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine, openDepotRepo *repository.OpenDepotRepository, jwtAccessSecret, jwtRefreshSecret string, allowHistoricalRecalc bool) *Handler {
 	h := &Handler{
 		vRepo:                        vRepo,
 		gpsRepo:                      gpsRepo,
@@ -68,9 +72,11 @@ func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepo
 		routeEngine:                  routeEngine,
 		zoneVehiclesCache:            make(map[string][]map[string]interface{}),
 		resolvedAlerts:               make(map[int]ResolvedDetails),
-		jwtSecret:                    jwtSecret,
+		jwtAccessSecret:              jwtAccessSecret,
+		jwtRefreshSecret:             jwtRefreshSecret,
 		allowHistoricalRecalculation: allowHistoricalRecalc,
 	}
+	h.auditLogger = audit.NewLogger(gpsRepo.Pool())
 	h.RebuildCache()
 	h.LoadAlerts()
 	// Refresh vehicle cache every 30 seconds so GPS positions and statuses stay live
@@ -153,6 +159,17 @@ func (h *Handler) publishMetadataUpdate(ctx context.Context, entity string, id i
 	}
 	jsonData, _ := json.Marshal(payload)
 	h.rdb.Publish(ctx, "metadata:updates", jsonData)
+}
+
+func clientIP(r *http.Request) string {
+	ip := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ip = forwarded
+	}
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	return ip
 }
 
 // Helper to send JSON responses

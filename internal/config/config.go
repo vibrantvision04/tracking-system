@@ -16,7 +16,9 @@ type Config struct {
 	RedisURL                     string
 	RedisAddr                    string
 	RedisPassword                string
-	JWTSecret                    string
+	JWTAccessSecret              string
+	JWTRefreshSecret             string
+	FrontendURL                  string
 	WorkerPoolSize               int
 	BatchSize                    int
 	BatchTimeoutMS               int
@@ -28,8 +30,7 @@ type Config struct {
 	RequireSequentialCheckpoints bool
 	MaxCheckpointSpeedKmh        float64
 	AllowHistoricalRecalculation bool
-	// Ultimate Reports engine
-	ReportTemplatePath           string // REPORT_TEMPLATE_PATH env var
+	ReportTemplatePath           string
 }
 
 func LoadConfig() *Config {
@@ -40,13 +41,12 @@ func LoadConfig() *Config {
 
 	gpsTcpPort := getEnv("GPS_TCP_PORT", "5027")
 
-	// Railway injects PORT for HTTP routing. However, when a TCP proxy is also
-	// configured, Railway may set PORT to the TCP proxy port (e.g. 5027), which
-	// would collide with the GPS TCP server. In that case, fall back to HTTP_PORT.
 	httpPort := getEnv("PORT", "8080")
 	if httpPort == gpsTcpPort {
 		httpPort = getEnv("HTTP_PORT", "8080")
 	}
+
+	frontendURL := getEnv("FRONTEND_URL", "http://localhost:3000")
 
 	return &Config{
 		GPSTCPPort:                   gpsTcpPort,
@@ -56,7 +56,9 @@ func LoadConfig() *Config {
 		RedisURL:                     getEnv("REDISURL", getEnv("REDIS_URL", "")),
 		RedisAddr:                    getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:                getEnv("REDIS_PASSWORD", ""),
-		JWTSecret:                    getEnv("JWT_SECRET", "your-super-secret-key-here"),
+		JWTAccessSecret:              getEnv("JWT_ACCESS_SECRET", "change-me-access-secret-min-32-chars"),
+		JWTRefreshSecret:             getEnv("JWT_REFRESH_SECRET", "change-me-refresh-secret-min-32-chars"),
+		FrontendURL:                  frontendURL,
 		WorkerPoolSize:               getEnvInt("WORKER_POOL_SIZE", 8),
 		BatchSize:                    getEnvInt("BATCH_SIZE", 200),
 		BatchTimeoutMS:               getEnvInt("BATCH_TIMEOUT_MS", 5000),
@@ -67,7 +69,7 @@ func LoadConfig() *Config {
 		MaxPlaybackPoints:            getEnvInt("MAX_PLAYBACK_POINTS", 5000),
 		RequireSequentialCheckpoints: getEnvBool("REQUIRE_SEQUENTIAL_CHECKPOINTS", false),
 		MaxCheckpointSpeedKmh:        getEnvFloat("MAX_CHECKPOINT_SPEED_KMH", 10.0),
-		AllowHistoricalRecalculation: true, // Hardcoded boolean directly in code
+		AllowHistoricalRecalculation: true,
 		ReportTemplatePath:           getTemplatePath(),
 	}
 }
@@ -75,7 +77,6 @@ func LoadConfig() *Config {
 func getTemplatePath() string {
 	path := getEnv("REPORT_TEMPLATE_PATH", "./storage/report-templates")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// Fallback for when running via `go run main.go` inside cmd/server/
 		fallback := "../../storage/report-templates"
 		if _, err := os.Stat(fallback); err == nil {
 			return fallback

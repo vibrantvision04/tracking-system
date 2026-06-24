@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"gps-tracking-system/internal/audit"
 	"gps-tracking-system/internal/auth"
 	"net/http"
 	"os"
@@ -50,6 +51,17 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		RespondWithError(w, http.StatusBadRequest, "Phone/Employee ID or Email is required")
 		return
 	}
+	if req.Password == "" {
+		RespondWithError(w, http.StatusBadRequest, "Password is required")
+		return
+	}
+
+	lockKey := "lockout:" + req.Identifier
+	locked, _ := h.rdb.Get(ctx, lockKey).Bool()
+	if locked {
+		RespondWithError(w, http.StatusTooManyRequests, "Account locked due to too many failed attempts. Try again in 15 minutes.")
+		return
+	}
 
 	// Find user by email or employee ID suffix
 	var user struct {
@@ -67,10 +79,29 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 	`
 	err := db.QueryRow(ctx, query, req.Identifier, req.Identifier+"@%").Scan(&user.ID, &user.Email, &user.Role, &user.PasswordHash)
 	if err != nil {
+		failCount, _ := h.rdb.Incr(ctx, "fail:"+req.Identifier).Result()
+		h.rdb.Expire(ctx, "fail:"+req.Identifier, 15*time.Minute)
+		if failCount >= 5 {
+			h.rdb.Set(ctx, lockKey, true, 15*time.Minute)
+		}
+		h.auditLogger.Log(r.Context(), audit.EventLoginFailure, 0, req.Identifier, clientIP(r), nil)
 		RespondWithError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
+	if !auth.VerifyPassword(user.PasswordHash, req.Password) {
+		failCount, _ := h.rdb.Incr(ctx, "fail:"+req.Identifier).Result()
+		h.rdb.Expire(ctx, "fail:"+req.Identifier, 15*time.Minute)
+		if failCount >= 5 {
+			h.rdb.Set(ctx, lockKey, true, 15*time.Minute)
+		}
+		h.auditLogger.Log(r.Context(), audit.EventLoginFailure, 0, req.Identifier, clientIP(r), nil)
+		RespondWithError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
+	}
+
+	h.rdb.Del(ctx, "fail:"+req.Identifier, lockKey)
+	h.auditLogger.Log(r.Context(), audit.EventLoginSuccess, user.ID, user.Email, clientIP(r), nil)
 	mappedRole := mapRoleToMobile(user.Role)
 
 	// Fetch employee profile details if present
@@ -89,12 +120,24 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		LIMIT 1
 	`, localPart).Scan(&emp.ID, &emp.FirstName, &emp.LastName, &emp.EmployeeID, &emp.ContactNo)
 
-	// Generate JWT Token
-	token, err := auth.GenerateToken(user.ID, user.Email, mappedRole, h.jwtSecret)
+	// Generate JWT Tokens
+	accessToken, err := auth.GenerateAccessToken(user.ID, user.Email, mappedRole, h.jwtAccessSecret)
 	if err != nil {
 		RespondWithError(w, http.StatusInternalServerError, "Failed to generate session token")
 		return
 	}
+
+	tokenID, refreshToken, err := auth.GenerateRefreshToken(user.ID, user.Email, mappedRole, h.jwtRefreshSecret)
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Failed to generate refresh token")
+		return
+	}
+
+	_, _ = db.Exec(ctx, `
+		INSERT INTO refresh_tokens (token_id, user_id, expires_at)
+		VALUES ($1, $2, NOW() + INTERVAL '7 days')
+		ON CONFLICT DO NOTHING
+	`, auth.HashTokenID(tokenID), user.ID)
 
 	profileName := emp.FirstName
 	if emp.LastName != "" {
@@ -105,8 +148,8 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"access_token":  token,
-		"refresh_token": "mock_refresh_token_" + uuid.New().String(),
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 		"user": map[string]interface{}{
 			"id":          user.ID,
 			"email":       user.Email,
@@ -120,6 +163,9 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 
 // 2. MobileRefresh
 func (h *Handler) MobileRefresh(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db := h.gpsRepo.Pool()
+
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -127,15 +173,78 @@ func (h *Handler) MobileRefresh(w http.ResponseWriter, r *http.Request) {
 		RespondWithError(w, http.StatusBadRequest, "Invalid payload")
 		return
 	}
-	// Return a fresh mock token (in production this would validate refresh token)
-	token, err := auth.GenerateToken(1, "mobile_refresh@jaipur.swm", "driver", h.jwtSecret)
+
+	if req.RefreshToken == "" {
+		RespondWithError(w, http.StatusBadRequest, "Refresh token is required")
+		return
+	}
+
+	claims, err := auth.ValidateRefreshToken(req.RefreshToken, h.jwtRefreshSecret)
+	if err != nil {
+		RespondWithError(w, http.StatusUnauthorized, "Invalid or expired refresh token")
+		return
+	}
+
+	// Check server-side revocation + DB expiry
+	var revokedAt *time.Time
+	var expiresAt time.Time
+	err = db.QueryRow(ctx, `
+		SELECT revoked_at, expires_at FROM refresh_tokens
+		WHERE token_id = $1
+	`, auth.HashTokenID(claims.TokenID)).Scan(&revokedAt, &expiresAt)
+	if err != nil || revokedAt != nil || expiresAt.Before(time.Now()) {
+		if revokedAt != nil {
+			_, _ = db.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, claims.UserID)
+		}
+		RespondWithError(w, http.StatusUnauthorized, "Refresh token has been revoked or expired")
+		return
+	}
+
+	var user struct {
+		ID    int
+		Email string
+		Role  string
+	}
+	err = db.QueryRow(ctx, `
+		SELECT id, email, COALESCE(role, '')
+		FROM users
+		WHERE id = $1
+	`, claims.UserID).Scan(&user.ID, &user.Email, &user.Role)
+	if err != nil {
+		RespondWithError(w, http.StatusUnauthorized, "User not found")
+		return
+	}
+
+	// Revoke the old token
+	_, _ = db.Exec(ctx, `
+		UPDATE refresh_tokens SET revoked_at = NOW()
+		WHERE token_id = $1 AND revoked_at IS NULL
+	`, auth.HashTokenID(claims.TokenID))
+
+	mappedRole := mapRoleToMobile(user.Role)
+
+	accessToken, err := auth.GenerateAccessToken(user.ID, user.Email, mappedRole, h.jwtAccessSecret)
 	if err != nil {
 		RespondWithError(w, http.StatusInternalServerError, "Failed to generate token")
 		return
 	}
+
+	tokenID, newRefreshToken, err := auth.GenerateRefreshToken(user.ID, user.Email, mappedRole, h.jwtRefreshSecret)
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Failed to generate refresh token")
+		return
+	}
+
+	// Store the new refresh token
+	_, _ = db.Exec(ctx, `
+		INSERT INTO refresh_tokens (token_id, user_id, expires_at)
+		VALUES ($1, $2, NOW() + INTERVAL '7 days')
+		ON CONFLICT DO NOTHING
+	`, auth.HashTokenID(tokenID), user.ID)
+
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"access_token":  token,
-		"refresh_token": req.RefreshToken,
+		"access_token":  accessToken,
+		"refresh_token": newRefreshToken,
 	})
 }
 
@@ -184,6 +293,21 @@ func (h *Handler) MobileMe(w http.ResponseWriter, r *http.Request) {
 
 // 4. MobileLogout
 func (h *Handler) MobileLogout(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil {
+		RespondWithError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	db := h.gpsRepo.Pool()
+	_, _ = db.Exec(r.Context(), `
+		UPDATE refresh_tokens SET revoked_at = NOW()
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, claims.UserID)
+
+	h.auditLogger.Log(r.Context(), audit.EventLogout, claims.UserID, claims.Email, clientIP(r), map[string]interface{}{
+		"source": "mobile",
+	})
 	RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Logged out successfully"})
 }
 

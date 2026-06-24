@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
 import {
   Home,
   Truck,
@@ -20,10 +21,16 @@ import {
   ChevronRight,
   ChevronLeft,
   X,
-  AlertCircle
+  AlertCircle,
+  LayoutDashboard
 } from "lucide-react";
 
-const navData = [
+const fullNavData = [
+  {
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    href: "/",
+  },
 
   {
     label: "Vehicles",
@@ -237,11 +244,25 @@ const navData = [
     icon: Rewind,
     href: "/playback",
   },
+  {
+    label: "Users",
+    icon: Users,
+    href: "/vswm/role-user",
+  },
 ];
 
-// Helper to recursively filter out fuel-related menus if feature toggle is disabled
+const adminOnlySections = new Set(["Users"]);
+
+const roleNavData = (role: string | undefined, items: any[]): any[] => {
+  const filtered = role === "ADMIN" ? items : items.filter((item) => !adminOnlySections.has(item.label));
+  const fuelFiltered = ENABLE_FUEL_FEATURES ? filtered : filterFuelItems(filtered);
+  if (!ENABLE_FUEL_FEATURES) {
+    return fuelFiltered;
+  }
+  return filtered;
+};
+
 const filterFuelItems = (items: any[]): any[] => {
-  if (ENABLE_FUEL_FEATURES) return items;
   return items
     .filter(item => {
       const isFuel = item.label.toLowerCase().includes("fuel") || (item.href && item.href.toLowerCase().includes("fuel"));
@@ -258,8 +279,6 @@ const filterFuelItems = (items: any[]): any[] => {
     });
 };
 
-const filteredNavData = filterFuelItems(navData);
-
 const isCategoryActive = (category: any, currentPath: string): boolean => {
   if (category.href && currentPath === category.href) return true;
   if (category.children) {
@@ -274,6 +293,7 @@ export default function Sidebar() {
     setMounted(true);
   }, []);
 
+  const { user } = useAuth();
   const path = usePathname();
   const sidebarOpen = useStore((state) => state.sidebarOpen);
   const setSidebarOpen = useStore((state) => state.setSidebarOpen);
@@ -281,6 +301,8 @@ export default function Sidebar() {
   const setSidebarCollapsed = useStore((state) => state.setSidebarCollapsed);
 
   const sidebarCollapsed = mounted ? storeCollapsed : false;
+
+  const navData = roleNavData(user?.role, fullNavData);
 
   // State to track active category for flyout
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -316,7 +338,7 @@ export default function Sidebar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const currentCategoryData = filteredNavData.find(cat => cat.label === (activeCategory || renderedCategory));
+  const currentCategoryData = navData.find(cat => cat.label === (activeCategory || renderedCategory));
 
   return (
     <>
@@ -364,7 +386,7 @@ export default function Sidebar() {
 
         {/* Navigation with micro-interactions */}
         <nav className="flex-1 py-3 space-y-0.5 text-[11px] overflow-y-auto custom-scrollbar">
-          {filteredNavData.map((category) => {
+          {navData.map((category) => {
             const hasChildren = category.children && category.children.length > 0;
             const isActive = activeCategory === category.label;
             const isCurrentPath = category.href && path === category.href;
@@ -454,12 +476,12 @@ export default function Sidebar() {
 
         {/* Footer */}
         <div className="px-3 py-3 border-t border-theme-border flex items-center gap-2">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 text-white text-[10px] font-bold shrink-0 flex items-center justify-center">
-            AD
+          <div className={`w-9 h-9 rounded-full bg-gradient-to-br text-white text-[10px] font-bold shrink-0 flex items-center justify-center ${user?.role === "ADMIN" ? "from-emerald-500 to-teal-400" : "from-blue-500 to-indigo-400"}`}>
+            {user?.email?.charAt(0).toUpperCase() || "U"}
           </div>
           <div className="min-w-0 transition-all duration-300 opacity-100">
-            <div className="text-xs font-semibold text-theme-text truncate whitespace-nowrap">Admin</div>
-            <div className="text-[10px] text-theme-text-dim truncate whitespace-nowrap">Master Admin</div>
+            <div className="text-xs font-semibold text-theme-text truncate whitespace-nowrap">{user?.email?.split("@")[0] || "User"}</div>
+            <div className="text-[10px] text-theme-text-dim truncate whitespace-nowrap">{user?.role === "ADMIN" ? "Administrator" : "User"}</div>
           </div>
         </div>
       </aside>
