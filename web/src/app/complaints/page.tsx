@@ -336,7 +336,7 @@ export default function ComplaintsPage() {
       />
 
       {/* Filters Card */}
-      <Card>
+      <Card className="overflow-visible">
         <CardHeader className="py-4 border-b border-theme-border">
           <CardTitle className="text-sm uppercase tracking-wider text-theme-text">Filters</CardTitle>
         </CardHeader>
