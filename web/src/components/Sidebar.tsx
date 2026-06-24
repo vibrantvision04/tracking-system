@@ -19,7 +19,8 @@ import {
   Radio,
   ChevronRight,
   ChevronLeft,
-  X
+  X,
+  AlertCircle
 } from "lucide-react";
 
 const navData = [
@@ -222,6 +223,13 @@ const navData = [
     icon: CheckCircle2,
     children: [
       { label: "Open Depot Cleaning", href: "/vswm/open-depot-cleaning" }
+    ],
+  },
+  {
+    label: "Complaints",
+    icon: AlertCircle,
+    children: [
+      { label: "Complaint List", href: "/complaints" },
     ],
   },
   {
