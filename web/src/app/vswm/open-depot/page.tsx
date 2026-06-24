@@ -449,7 +449,7 @@ export default function OpenDepotPage() {
                         {idx + 1}
                       </td>
                       <td className="py-3 px-5 font-semibold text-theme-text">
-                        {depot.name}
+                        {depot.name} <span className="text-[10px] text-theme-text-dim/60 font-mono ml-1">#ID:{depot.id}</span>
                       </td>
                       <td className="py-3 px-5 text-sm">{depot.zone_name || `Zone ${depot.zone_id}`}</td>
                       <td className="py-3 px-5 text-sm">{depot.ward_name || `Ward ${depot.ward_id}`}</td>

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import DepotMap from "@/components/DepotMap";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import DatePicker from "@/components/ui/DatePicker";
+import { Target, CheckCircle2, AlertCircle, Clock, XCircle, HelpCircle } from "lucide-react";
 
 interface OpenDepot {
   id: number;
@@ -152,6 +153,52 @@ export default function OpenDepotLiveMap() {
     { value: "Inactive", label: "Inactive" }
   ];
 
+  const getStats = () => {
+    let total = filteredDepots.length;
+    let approvedComplete = 0;
+    let approvedPartial = 0;
+    let rejected = 0;
+    let pending = 0;
+    let notCovered = 0;
+
+    filteredDepots.forEach((d) => {
+      const status = (d.last_cleaning_status || "").toUpperCase();
+      if (status === "APPROVED_COMPLETE") {
+        approvedComplete++;
+      } else if (status === "APPROVED_PARTIAL") {
+        approvedPartial++;
+      } else if (status === "REJECTED") {
+        rejected++;
+      } else if (status === "PENDING") {
+        pending++;
+      } else if (status === "NOT_COVERED" || status === "") {
+        if (d.total_submissions === 0) {
+          notCovered++;
+        } else if (d.cleaning_percentage >= 80) {
+          approvedComplete++;
+        } else if (d.cleaning_percentage >= 40) {
+          approvedPartial++;
+        } else {
+          rejected++;
+        }
+      } else {
+        if (d.total_submissions === 0) {
+          notCovered++;
+        } else if (d.cleaning_percentage >= 80) {
+          approvedComplete++;
+        } else if (d.cleaning_percentage >= 40) {
+          approvedPartial++;
+        } else {
+          rejected++;
+        }
+      }
+    });
+
+    return { total, approvedComplete, approvedPartial, rejected, pending, notCovered };
+  };
+
+  const stats = getStats();
+
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base relative select-none">
       
@@ -243,6 +290,75 @@ export default function OpenDepotLiveMap() {
           )}
         </button>
 
+      </div>
+
+      {/* Stats Banner */}
+      <div className="bg-theme-surface/55 border-b border-theme-border px-6 py-2.5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
+        {/* Total Depots */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-2.5 flex items-center gap-3 shadow-sm hover:scale-[1.02] transition duration-200">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <Target className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div>
+            <div className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Total Depots</div>
+            <div className="text-sm font-bold mt-0.5">{stats.total}</div>
+          </div>
+        </div>
+
+        {/* Cleaned (Complete) */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-2.5 flex items-center gap-3 shadow-sm hover:scale-[1.02] transition duration-200">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div>
+            <div className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Cleaned (Complete)</div>
+            <div className="text-sm font-bold text-emerald-500 mt-0.5">{stats.approvedComplete}</div>
+          </div>
+        </div>
+
+        {/* Cleaned (Partial) */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-2.5 flex items-center gap-3 shadow-sm hover:scale-[1.02] transition duration-200">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <AlertCircle className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div>
+            <div className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Cleaned (Partial)</div>
+            <div className="text-sm font-bold text-amber-500 mt-0.5">{stats.approvedPartial}</div>
+          </div>
+        </div>
+
+        {/* Pending Approval */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-2.5 flex items-center gap-3 shadow-sm hover:scale-[1.02] transition duration-200">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <Clock className="w-4 h-4 text-emerald-500 animate-pulse" />
+          </div>
+          <div>
+            <div className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Pending Review</div>
+            <div className="text-sm font-bold text-orange-500 mt-0.5">{stats.pending}</div>
+          </div>
+        </div>
+
+        {/* Rejected */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-2.5 flex items-center gap-3 shadow-sm hover:scale-[1.02] transition duration-200">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <XCircle className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div>
+            <div className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Rejected</div>
+            <div className="text-sm font-bold text-rose-500 mt-0.5">{stats.rejected}</div>
+          </div>
+        </div>
+
+        {/* Not Cleaned */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-2.5 flex items-center gap-3 shadow-sm hover:scale-[1.02] transition duration-200">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <HelpCircle className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div>
+            <div className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Not Covered</div>
+            <div className="text-sm font-bold text-theme-text-dim mt-0.5">{stats.notCovered}</div>
+          </div>
+        </div>
       </div>
 
       {/* Map Element */}

@@ -99,7 +99,7 @@ const navData = [
     label: "RFID",
     icon: Radio,
     children: [
-      { label: "RFID Coverage Report", href: "/vswm/rfid-coverage" },
+      { label: "RFID Coverage Report", href: "/vswm/rfid-coverage-report" },
       { label: "Survey Report", href: "/vswm/survey-report" },
       { label: "Survey List", href: "/vswm/survey-list" },
       { label: "Survey Payment Report", href: "/vswm/survey-payment-report" },
@@ -148,7 +148,7 @@ const navData = [
       { label: "Employee Location", href: "/vswm/employee-location" },
       { label: "D2D", href: "/vswm/d2d" },
       { label: "Open Depot Live Map", href: "/vswm/open-depot-live-map" },
-      { label: "Alert Manager", href: "/vswm/alert-manager" },
+      { label: "Employee Monitoring", href: "/vswm/employee-monitoring" },
       { label: "Household Monitoring", href: "/vswm/household-monitoring" },
     ],
   },
