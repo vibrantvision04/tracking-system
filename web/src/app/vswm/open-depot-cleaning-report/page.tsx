@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, API_URL } from "@/lib/api";
 import { toast } from "react-toastify";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
@@ -268,7 +268,7 @@ export default function OpenDepotCleaningReportPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0 relative">
         {/* Filter Card Panel */}
         <Card hoverable className="print:hidden">
           <CardContent className="p-6">
@@ -290,7 +290,7 @@ export default function OpenDepotCleaningReportPage() {
               </div>
 
               {/* Ward */}
-              <div className="flex flex-col">
+              <div className="flex flex-col relative z-[10000]">
                 <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Ward
                 </span>
@@ -307,7 +307,7 @@ export default function OpenDepotCleaningReportPage() {
               </div>
 
               {/* Open Depot */}
-              <div className="flex flex-col">
+              <div className="flex flex-col relative z-[10000]">
                 <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Open Depot
                 </span>
@@ -323,7 +323,7 @@ export default function OpenDepotCleaningReportPage() {
               </div>
 
               {/* Status */}
-              <div className="flex flex-col">
+              <div className="flex flex-col relative z-[10000]">
                 <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Status
                 </span>
@@ -343,14 +343,16 @@ export default function OpenDepotCleaningReportPage() {
               </div>
 
               {/* Date */}
-              <DatePicker
-                label="Date"
-                value={filters.date}
-                onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
-              />
+              <div className="flex flex-col relative z-[10000]">
+                <DatePicker
+                  label="Date"
+                  value={filters.date}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
+                />
+              </div>
 
               {/* Shift */}
-              <div className="flex flex-col">
+              <div className="flex flex-col relative z-[10000]">
                 <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5">
                   Shift
                 </span>
@@ -459,7 +461,7 @@ export default function OpenDepotCleaningReportPage() {
                     <td className="py-3 px-5 text-center">
                       {item.image_url ? (
                         <img
-                          src={item.image_url}
+                          src={item.image_url.startsWith("http") ? item.image_url : `${API_URL}${item.image_url}`}
                           alt="Cleaning proof"
                           onClick={() => setViewItem(item)}
                           className="w-12 h-12 rounded-lg object-cover cursor-pointer border border-theme-border/50 hover:scale-105 transition duration-300 shadow-sm mx-auto"
@@ -625,9 +627,9 @@ export default function OpenDepotCleaningReportPage() {
                 <div className="space-y-1.5">
                   <span className="text-[10px] font-bold text-theme-text-dim tracking-wider uppercase block">Submitted Photo</span>
                   <div className="border border-theme-border rounded-xl overflow-hidden aspect-video bg-black flex items-center justify-center relative shadow-inner">
-                    <img src={viewItem.image_url} alt="Cleaning Proof" className="w-full h-full object-contain" />
+                    <img src={viewItem.image_url.startsWith("http") ? viewItem.image_url : `${API_URL}${viewItem.image_url}`} alt="Cleaning Proof" className="w-full h-full object-contain" />
                     <a
-                      href={viewItem.image_url}
+                      href={viewItem.image_url.startsWith("http") ? viewItem.image_url : `${API_URL}${viewItem.image_url}`}
                       target="_blank"
                       rel="noreferrer"
                       className="absolute bottom-2 right-2 bg-theme-surface/90 backdrop-blur px-2.5 py-1 rounded text-[9px] font-bold text-theme-text hover:bg-theme-surface transition shadow"

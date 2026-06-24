@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, post } from "@/lib/api";
+import { api, API_URL, post } from "@/lib/api";
 import { toast } from "react-toastify";
 import dynamic from "next/dynamic";
 
@@ -172,7 +172,7 @@ export default function OpenDepotCleaningPage() {
               <tr key={s.id} className="hover:bg-theme-base/40 transition duration-150 border-b border-theme-border">
                 <td className="p-4">
                   <img
-                    src={s.image_url}
+                    src={s.image_url.startsWith("http") ? s.image_url : `${API_URL}${s.image_url}`}
                     alt="Thumbnail"
                     className="w-12 h-12 rounded-lg object-cover border border-theme-border shadow-sm cursor-pointer hover:scale-105 transition"
                     onClick={() => setReviewItem(s)}
@@ -277,9 +277,9 @@ export default function OpenDepotCleaningPage() {
                 <div className="space-y-1.5">
                   <span className="text-[10px] font-bold text-theme-text-dim tracking-wider uppercase block">Submitted Photo</span>
                   <div className="border border-theme-border rounded-xl overflow-hidden aspect-video bg-black flex items-center justify-center relative shadow-inner">
-                    <img src={reviewItem.image_url} alt="Cleaning Proof" className="w-full h-full object-contain" />
+                    <img src={reviewItem.image_url.startsWith("http") ? reviewItem.image_url : `${API_URL}${reviewItem.image_url}`} alt="Cleaning Proof" className="w-full h-full object-contain" />
                     <a
-                      href={reviewItem.image_url}
+                      href={reviewItem.image_url.startsWith("http") ? reviewItem.image_url : `${API_URL}${reviewItem.image_url}`}
                       target="_blank"
                       rel="noreferrer"
                       className="absolute bottom-2 right-2 bg-theme-surface/90 backdrop-blur px-2.5 py-1 rounded text-[9px] font-bold text-theme-text hover:bg-theme-surface transition shadow"

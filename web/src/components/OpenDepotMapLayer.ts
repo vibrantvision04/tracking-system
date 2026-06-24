@@ -92,15 +92,19 @@ export async function populateOpenDepotLayer(L: typeof LType, layerGroup: LType.
           width: 28px; 
           height: 28px; 
           border-radius: 50%; 
-          color: white; 
           display: flex; 
           align-items: center; 
           justify-content: center; 
-          font-size: 14px; 
-          font-weight: bold; 
           border: 2px solid white; 
           box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        ">🛖</div>
+        ">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </div>
       `,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
@@ -114,7 +118,12 @@ export async function populateOpenDepotLayer(L: typeof LType, layerGroup: LType.
       const popupContent = `
         <div class="p-2.5 text-xs text-slate-800 font-sans min-w-[180px]">
           <div class="border-b border-slate-100 pb-1 mb-1.5 flex items-center gap-1.5">
-            <span class="text-base">🛖</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
             <div>
               <h3 class="font-bold text-slate-900" style="margin: 0; font-size: 12px; line-height: 1.2;">${d.name}</h3>
               <span class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Open Depot</span>

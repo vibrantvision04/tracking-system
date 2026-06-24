@@ -315,11 +315,17 @@ export default function RouteBuilderMap({
 					${isDrawing ? `<button 
 						type="button" 
 						onclick="event.stopPropagation(); event.preventDefault(); window.deletePoint(${idx})" 
-						style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer; width: 100%; text-align: center;"
+						style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer; width: 100%; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px;"
 						onmouseover="this.style.background='#dc2626'"
 						onmouseout="this.style.background='#ef4444'"
 					>
-						🗑️ Delete Point
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<polyline points="3 6 5 6 21 6"></polyline>
+							<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+							<line x1="10" y1="11" x2="10" y2="17"></line>
+							<line x1="14" y1="11" x2="14" y2="17"></line>
+						</svg>
+						Delete Point
 					</button>` : ''}
 				</div>
 			`, { closeButton: false })

@@ -638,7 +638,7 @@ export default function LiveMap({
     const getVehicleEmoji = (type: string) => {
       const t = type.toLowerCase();
       if (t.includes("feeder") || t.includes("tipper")) return "🚛";
-      if (t.includes("compactor")) return "🗑️";
+      if (t.includes("compactor")) return "♻️";
       if (t.includes("tractor") || t.includes("ferguson")) return "🚜";
       if (t.includes("ambulance")) return "🚑";
       if (t.includes("tata") || t.includes("mahindra")) return "🚚";

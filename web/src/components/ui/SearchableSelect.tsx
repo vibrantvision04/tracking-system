@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Option {
   value: string;
@@ -24,7 +25,9 @@ export default function SearchableSelect({
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -40,6 +43,17 @@ export default function SearchableSelect({
     if (!isOpen) setSearch("");
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX,
+        width: rect.width
+      });
+    }
+  }, [isOpen]);
+
   const selectedOption = options.find(opt => opt.value === value);
 
   const filteredOptions = options.filter(opt => {
@@ -50,6 +64,7 @@ export default function SearchableSelect({
   return (
     <div ref={containerRef} className={`relative select-none ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
@@ -70,8 +85,16 @@ export default function SearchableSelect({
         </svg>
       </button>
 
-      {isOpen && !disabled && (
-        <div className="absolute left-0 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col z-[1050] overflow-hidden min-w-[200px]">
+      {isOpen && !disabled && typeof window !== 'undefined' && createPortal(
+        <div 
+          className="fixed bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col z-[99999] overflow-hidden"
+          style={{
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`,
+            minWidth: '200px'
+          }}
+        >
           <div className="p-2 border-b border-slate-200 shrink-0 flex items-center gap-1.5 bg-slate-50">
             <span className="text-slate-400 text-xs pl-1">🔍</span>
             <input
@@ -119,7 +142,8 @@ export default function SearchableSelect({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

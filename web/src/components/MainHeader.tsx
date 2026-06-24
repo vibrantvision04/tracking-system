@@ -26,10 +26,10 @@ export default function MainHeader() {
         </a>
         <div className="flex flex-col min-w-0">
           <h1 className="text-xs sm:text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase truncate">
-            VSWM - NAGAR NIGAM JAIPUR
+            SWIFT - NAGAR NIGAM JAIPUR
           </h1>
           <span className="text-[8px] sm:text-[9px] font-bold text-theme-text-dim uppercase tracking-widest mt-1 truncate">
-            INTEGRATED SOLID WASTE MANAGEMENT SYSTEM
+            SMART WASTE INTEGRATED FLEET TRACKING
           </span>
         </div>
       </div>
