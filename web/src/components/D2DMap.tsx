@@ -884,7 +884,7 @@ export default function D2DMap() {
         html: `
           <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 22px; height: 28px;">
             <svg width="22" height="28" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.5));">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 9.3 12 18 12 18s12-8.7 12-18c0-6.63-5.37-12-12-12z" fill="${color}" stroke="${strokeColor}" strokeWidth="1.5"/>
               <circle cx="12" cy="12" r="7.5" fill="white"/>
               <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="8.5" fill="${strokeColor}">${number}</text>
             </svg>
@@ -1497,91 +1497,109 @@ export default function D2DMap() {
     <div className="flex flex-col h-screen w-full bg-theme-base text-theme-text overflow-hidden font-sans">
       
       {/* Top Navigation / Filters Bar */}
-      <header className="flex flex-col lg:flex-row lg:h-16 bg-theme-surface px-4 py-3 lg:py-0 lg:px-6 items-start lg:items-center justify-between gap-4 lg:gap-0 border-b border-theme-border shrink-0 z-10 w-full">
-        <div className="flex items-center gap-3">
-          <span className="text-xl">📊</span>
-          <div>
-            <h1 className="text-sm font-bold tracking-wider text-theme-accent">VSWM - NAGAR NIGAM JAIPUR</h1>
-            <span className="text-[10px] text-theme-text-dim">Door-to-Door (D2D) Fleet Monitoring Dashboard</span>
+      <header className="bg-theme-surface border-b border-theme-border shrink-0 z-10 w-full">
+        {/* Header Row */}
+        <div className="px-4 py-3 lg:px-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">📊</span>
+            <div>
+              <h1 className="text-sm font-bold tracking-wider text-theme-accent">VSWM - NAGAR NIGAM JAIPUR</h1>
+              <span className="text-[10px] text-theme-text-dim">Door-to-Door (D2D) Fleet Monitoring Dashboard</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-theme-elevated border border-theme-border rounded-lg text-xs text-theme-text font-medium">
+            <span className="font-bold text-theme-accent">⏱️ Active Shift:</span> {activeShift || "N/A"}
           </div>
         </div>
 
-        {/* Dropdowns */}
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Zone</span>
+        {/* Filter Bar */}
+        <div className="px-4 pb-3 lg:px-6 flex flex-wrap items-center gap-3 border-t border-theme-border/50 pt-3">
+          <div className="flex items-center gap-2 min-w-[140px]">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold">Zone</span>
             <SearchableSelect
               value={selectedZone}
               onChange={(val) => {
                 setSelectedZone(val);
-                setSelectedWard(""); // Reset selected ward when zone changes
-                setSelectedRouteId(""); // Reset selected route when zone changes
-                setSelectedVehicleId(null); // Deselect vehicle when filters change
+                setSelectedWard("");
+                setSelectedRouteId("");
+                setSelectedVehicleId(null);
               }}
               options={zoneOptions}
               placeholder="Select Zone"
-              className="w-full"
+              className="flex-1"
             />
           </div>
 
-          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Select Ward</span>
+          <div className="flex items-center gap-2 min-w-[140px]">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold">Ward</span>
             <SearchableSelect
               value={selectedWard}
               onChange={(val) => {
                 setSelectedWard(val);
-                setSelectedRouteId(""); // Reset selected route when ward changes
-                setSelectedVehicleId(null); // Deselect vehicle when filters change
+                setSelectedRouteId("");
+                setSelectedVehicleId(null);
               }}
               options={wardOptions}
               placeholder="All Wards"
-              className="w-full"
+              className="flex-1"
             />
           </div>
 
-          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Shift</span>
+          <div className="flex items-center gap-2 min-w-[140px]">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold">Shift</span>
             <SearchableSelect
               value={selectedShift}
               onChange={(val) => {
                 setSelectedShift(val);
-                setSelectedRouteId(""); // Reset route selection when shift changes
-                setSelectedVehicleId(null); // Deselect vehicle when filters change
+                setSelectedRouteId("");
+                setSelectedVehicleId(null);
               }}
               options={shiftOptions}
               placeholder="All Shifts"
-              className="w-full"
+              className="flex-1"
             />
           </div>
 
-          <div className="flex flex-col min-w-[170px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Route</span>
+          <div className="flex items-center gap-2 min-w-[160px]">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold">Route</span>
             <SearchableSelect
               value={selectedRouteId}
               onChange={(val) => {
                 setSelectedRouteId(val);
-                setSelectedVehicleId(null); // Deselect vehicle when filters change
+                setSelectedVehicleId(null);
               }}
               options={routeOptions}
               placeholder="All Routes"
-              className="w-full"
+              className="flex-1"
             />
           </div>
 
-          <div className="flex flex-col min-w-[150px] flex-1 lg:flex-initial">
-            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold mb-1">Route Type</span>
+          <div className="flex items-center gap-2 min-w-[140px]">
+            <span className="text-[9px] text-theme-text-dim uppercase tracking-widest font-bold">Route Type</span>
             <SearchableSelect
               value={selectedRouteType}
               onChange={(val) => setSelectedRouteType(val)}
               options={routeTypeOptions}
-              placeholder="All Route Types"
-              className="w-full"
+              placeholder="All Types"
+              className="flex-1"
             />
           </div>
-          
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text font-medium shrink-0 ml-auto lg:ml-0 h-[32px] mt-4 lg:mt-0">
-            <span className="font-bold text-theme-accent">⏱️ Active:</span> {activeShift || "N/A"}
-          </div>
+
+          <button
+            onClick={() => {
+              setSelectedZone("Jaipur (All Zones)");
+              setSelectedWard("");
+              setSelectedRouteId("");
+              setSelectedRouteType("");
+              setSelectedShift("Morning Shift");
+              setSearchQuery("");
+              setSelectedVehicleId(null);
+            }}
+            className="ml-auto px-3 py-1.5 text-xs font-bold border border-theme-border bg-theme-base hover:bg-theme-elevated text-theme-text-dim rounded-lg transition cursor-pointer"
+          >
+            Reset Filters
+          </button>
         </div>
       </header>
 
@@ -1629,17 +1647,12 @@ export default function D2DMap() {
 
           {/* Bottom Tables Tabs */}
           <div className={`border-t border-theme-border bg-theme-base flex flex-col relative shrink-0 transition-all duration-300 ease-in-out ${
-            bottomPanelOpen ? "h-[280px] md:h-[340px]" : "h-10 overflow-hidden"
+            bottomPanelOpen ? "h-[320px] md:h-[380px]" : "h-12 overflow-hidden"
           }`}>
             
             {/* Tab selection triggers */}
-            <div className="flex h-10 border-b border-theme-border bg-theme-surface px-4 items-center justify-between cursor-pointer select-none gap-4" onClick={(e) => {
-              // Click the tab bar itself to toggle
-              if ((e.target as HTMLElement).tagName === 'DIV' || (e.target as HTMLElement).tagName === 'HEADER') {
-                setBottomPanelOpen(!bottomPanelOpen);
-              }
-            }}>
-              <div className="flex gap-2 h-full overflow-x-auto custom-scrollbar flex-1 whitespace-nowrap">
+            <div className="flex h-12 border-b border-theme-border bg-theme-surface px-4 items-center justify-between">
+              <div className="flex gap-1 h-full overflow-x-auto custom-scrollbar flex-1 whitespace-nowrap">
                 <button
                   onClick={() => {
                     if (activeTab === "alerts") {
@@ -1649,14 +1662,14 @@ export default function D2DMap() {
                       setBottomPanelOpen(true);
                     }
                   }}
-                  className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
+                  className={`h-full px-4 text-xs font-semibold flex items-center gap-2 rounded-t-lg transition-all duration-200 ${
                     activeTab === "alerts"
-                      ? "border-red-500 text-red-400 bg-red-950/10"
-                      : "border-transparent text-theme-text-dim hover:text-theme-text"
+                      ? "bg-red-950/30 text-red-400 border-b-2 border-red-500"
+                      : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated/50"
                   }`}
                 >
-                  <span>⚠️ All Alerts</span>
-                  <span className="px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded-full text-[10px] font-bold">
+                  <span>⚠️ Alerts</span>
+                  <span className="px-2 py-0.5 bg-red-500/20 text-red-300 rounded-full text-[10px] font-bold min-w-[20px] text-center">
                     {filteredAlerts.length}
                   </span>
                 </button>
@@ -1670,14 +1683,14 @@ export default function D2DMap() {
                       setBottomPanelOpen(true);
                     }
                   }}
-                  className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
+                  className={`h-full px-4 text-xs font-semibold flex items-center gap-2 rounded-t-lg transition-all duration-200 ${
                     activeTab === "started"
-                      ? "border-green-500 text-green-400 bg-green-950/10"
-                      : "border-transparent text-theme-text-dim hover:text-theme-text"
+                      ? "bg-green-950/30 text-green-400 border-b-2 border-green-500"
+                      : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated/50"
                   }`}
                 >
-                  <span>🟢 Started Vehicles</span>
-                  <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded-full text-[10px] font-bold">
+                  <span>🟢 Active</span>
+                  <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-[10px] font-bold min-w-[20px] text-center">
                     {filteredStarted.length}
                   </span>
                 </button>
@@ -1691,14 +1704,14 @@ export default function D2DMap() {
                       setBottomPanelOpen(true);
                     }
                   }}
-                  className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
+                  className={`h-full px-4 text-xs font-semibold flex items-center gap-2 rounded-t-lg transition-all duration-200 ${
                     activeTab === "unauth"
-                      ? "border-amber-500 text-amber-400 bg-amber-950/10"
-                      : "border-transparent text-theme-text-dim hover:text-theme-text"
+                      ? "bg-amber-950/30 text-amber-400 border-b-2 border-amber-500"
+                      : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated/50"
                   }`}
                 >
-                  <span>🛡️ Unauthorized Movements</span>
-                  <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-full text-[10px] font-bold">
+                  <span>🛡️ Unauthorized</span>
+                  <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full text-[10px] font-bold min-w-[20px] text-center">
                     {filteredUnauthorized.length}
                   </span>
                 </button>
@@ -1712,31 +1725,36 @@ export default function D2DMap() {
                       setBottomPanelOpen(true);
                     }
                   }}
-                  className={`h-full px-4 text-xs font-semibold flex items-center border-b-2 gap-1.5 transition ${
+                  className={`h-full px-4 text-xs font-semibold flex items-center gap-2 rounded-t-lg transition-all duration-200 ${
                     activeTab === "other"
-                      ? "border-slate-500 text-theme-text bg-slate-800/10"
-                      : "border-transparent text-theme-text-dim hover:text-theme-text"
+                      ? "bg-slate-800/30 text-theme-text border-b-2 border-slate-500"
+                      : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated/50"
                   }`}
                 >
-                  <span>💤 Other / Stopped</span>
-                  <span className="px-1.5 py-0.5 bg-theme-surface0/20 text-theme-text rounded-full text-[10px] font-bold">
+                  <span>💤 Other</span>
+                  <span className="px-2 py-0.5 bg-slate-500/20 text-slate-300 rounded-full text-[10px] font-bold min-w-[20px] text-center">
                     {filteredOther.length}
                   </span>
                 </button>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0 ml-auto">
-                {loading && <span className="text-[10px] text-theme-text-dim animate-pulse">Syncing database data...</span>}
-                <button
-                  onClick={() => setBottomPanelOpen(!bottomPanelOpen)}
-                  className="p-1.5 rounded-lg text-theme-text-dim hover:text-theme-text hover:bg-slate-800/80 transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
-                  title={bottomPanelOpen ? "Collapse Panel" : "Expand Panel"}
-                >
-                  <svg className={`w-4 h-4 transition-transform duration-300 ${bottomPanelOpen ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
+              <button
+                onClick={() => setBottomPanelOpen(!bottomPanelOpen)}
+                className="ml-2 px-3 py-1.5 text-xs font-bold border border-theme-border bg-theme-base hover:bg-theme-elevated text-theme-text-dim rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                title={bottomPanelOpen ? "Collapse Panel" : "Expand Panel"}
+              >
+                {bottomPanelOpen ? (
+                  <>
+                    <span>▼</span>
+                    <span className="hidden sm:inline">Collapse</span>
+                  </>
+                ) : (
+                  <>
+                    <span>▲</span>
+                    <span className="hidden sm:inline">Expand</span>
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Table Area */}
@@ -2129,10 +2147,10 @@ export default function D2DMap() {
             : "w-0 p-0 border-l-0 opacity-0 overflow-hidden pointer-events-none translate-x-full md:translate-x-0"
         }`}>
           
-          <div className="space-y-2 pb-2.5 border-b border-theme-border">
-            {/* Header Row 1 */}
+          <div className="space-y-3 pb-3 border-b border-theme-border">
+            {/* Header Row */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-theme-accent uppercase tracking-wider">Map Indication Controls</span>
+              <span className="text-xs font-bold text-theme-accent uppercase tracking-wider">Map Controls</span>
               <button
                 onClick={() => setRightPanelOpen(false)}
                 className="text-theme-text-dim hover:text-theme-text hover:bg-slate-800/80 p-1.5 rounded-lg transition duration-200 active:scale-95 flex items-center justify-center shrink-0"
@@ -2144,25 +2162,22 @@ export default function D2DMap() {
               </button>
             </div>
             
-            {/* Header Row 2 */}
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-theme-text-dim font-semibold uppercase tracking-wider">Layers & Options</span>
-              <label className="flex items-center gap-1.5 cursor-pointer select-none group">
-                <input
-                  type="checkbox"
-                  checked={isAllSelected}
-                  onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="w-3.5 h-3.5 accent-indigo-500 rounded bg-theme-surface border-theme-border cursor-pointer focus:ring-0 focus:ring-offset-0"
-                />
-                <span className="text-theme-text-dim font-semibold group-hover:text-theme-text transition duration-150">Select All</span>
-              </label>
-            </div>
+            {/* Select All */}
+            <label className="flex items-center gap-2 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                checked={isAllSelected}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+                className="w-4 h-4 accent-indigo-500 rounded bg-theme-surface border-theme-border cursor-pointer"
+              />
+              <span className="text-xs text-theme-text-dim font-semibold group-hover:text-theme-text transition">Select All Layers</span>
+            </label>
           </div>
 
-          {/* Group 1: Layer Options */}
+          {/* Group 1: Facilities */}
           <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
             <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
-              <span>Geofences & Layers</span>
+              <span>📍 Facilities</span>
               <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
             </summary>
             <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">
@@ -2173,7 +2188,7 @@ export default function D2DMap() {
                   onChange={(e) => setShowParking(e.target.checked)}
                   className="w-4 h-4 accent-emerald-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
-                <span className="flex items-center gap-1.5">🅿️ Parking Lot(s)</span>
+                <span className="flex items-center gap-1.5">🅿️ Parking Lots</span>
               </label>
 
               <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
@@ -2183,7 +2198,7 @@ export default function D2DMap() {
                   onChange={(e) => setShowTransfer(e.target.checked)}
                   className="w-4 h-4 accent-blue-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
-                <span className="flex items-center gap-1.5">🔄 Transfer Station(s)</span>
+                <span className="flex items-center gap-1.5">🔄 Transfer Stations</span>
               </label>
 
               {ENABLE_FUEL_FEATURES && (
@@ -2194,7 +2209,7 @@ export default function D2DMap() {
                     onChange={(e) => setShowFuel(e.target.checked)}
                     className="w-4 h-4 accent-yellow-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                   />
-                  <span className="flex items-center gap-1.5">⛽ Fuel Station(s)</span>
+                  <span className="flex items-center gap-1.5">⛽ Fuel Stations</span>
                 </label>
               )}
 
@@ -2215,23 +2230,15 @@ export default function D2DMap() {
                   onChange={(e) => setShowOpenDepots(e.target.checked)}
                   className="w-4 h-4 accent-slate-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
-                <span className="flex items-center gap-1.5">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                    <line x1="14" y1="11" x2="14" y2="17"></line>
-                  </svg>
-                  Open Depot(s)
-                </span>
+                <span className="flex items-center gap-1.5">🏭 Open Depots</span>
               </label>
             </div>
           </details>
 
-          {/* Group 2: Stoppage Duration Filters */}
+          {/* Group 2: Stoppage Thresholds */}
           <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
             <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
-              <span>Stoppage Thresholds</span>
+              <span>⏱️ Stoppage Thresholds</span>
               <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
             </summary>
             <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">
@@ -2242,7 +2249,7 @@ export default function D2DMap() {
                   onChange={(e) => setShowStop5_10(e.target.checked)}
                   className="w-4 h-4 accent-yellow-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
-                <span className="flex items-center gap-1.5">🟡 Stoppage 5 to 10 mins</span>
+                <span className="flex items-center gap-1.5">🟡 5-10 mins</span>
               </label>
 
               <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
@@ -2252,7 +2259,7 @@ export default function D2DMap() {
                   onChange={(e) => setShowStop10_15(e.target.checked)}
                   className="w-4 h-4 accent-orange-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
-                <span className="flex items-center gap-1.5">🟠 Stoppage 10 to 15 mins</span>
+                <span className="flex items-center gap-1.5">🟠 10-15 mins</span>
               </label>
 
               <label className="flex items-center gap-2.5 text-xs text-theme-text hover:text-theme-text cursor-pointer select-none">
@@ -2262,15 +2269,15 @@ export default function D2DMap() {
                   onChange={(e) => setShowStop15_plus(e.target.checked)}
                   className="w-4 h-4 accent-red-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
-                <span className="flex items-center gap-1.5">🔴 Stoppage of 15 mins +</span>
+                <span className="flex items-center gap-1.5">🔴 15+ mins</span>
               </label>
             </div>
           </details>
 
-          {/* Group 3: Alert Types Checklist */}
+          {/* Group 3: Alert Filters */}
           <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
             <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
-              <span>Alert Filters</span>
+              <span>⚠️ Alert Filters</span>
               <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
             </summary>
             <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">
@@ -2331,15 +2338,15 @@ export default function D2DMap() {
                   onChange={(e) => setShowUnauthorizedMovement(e.target.checked)}
                   className="w-4 h-4 accent-red-500 rounded bg-theme-surface border-theme-border cursor-pointer"
                 />
-                <span className="flex items-center gap-1.5">🛡️ Unauthorized Movement</span>
+                <span className="flex items-center gap-1.5">🛡️ Unauthorized</span>
               </label>
             </div>
           </details>
 
-          {/* Group 4: Routes & Overlays */}
+          {/* Group 4: Route Overlays */}
           <details className="group border border-theme-border/40 rounded-xl bg-theme-surface/25 transition-all duration-300 overflow-hidden" open>
             <summary className="flex items-center justify-between p-3 text-[10px] font-bold text-theme-text-dim uppercase tracking-widest cursor-pointer select-none hover:bg-theme-surface transition-colors">
-              <span>Route Overlays</span>
+              <span>🛣️ Route Overlays</span>
               <span className="text-[8px] text-theme-text-dim transition-transform duration-300 group-open:rotate-90">▶</span>
             </summary>
             <div className="p-3 pt-1.5 space-y-2 border-t border-theme-border/20 pl-4">

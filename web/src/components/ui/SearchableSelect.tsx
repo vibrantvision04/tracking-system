@@ -63,7 +63,7 @@ export default function SearchableSelect({
   });
 
   return (
-    <div ref={containerRef} className={`relative select-none ${className}`}>
+    <div ref={containerRef} className={`relative ${className}`}>
       <button
         ref={buttonRef}
         type="button"
@@ -88,7 +88,7 @@ export default function SearchableSelect({
 
       {isOpen && !disabled && typeof window !== 'undefined' && createPortal(
         <div 
-          className="fixed bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col z-[99999] overflow-hidden"
+          className="fixed bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col z-[999999] overflow-hidden pointer-events-auto"
           style={{
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
@@ -123,7 +123,7 @@ export default function SearchableSelect({
                 <button
                   type="button"
                   key={`${opt.value}-${idx}`}
-                  onClick={() => {
+                  onMouseDown={() => {
                     onChange(opt.value);
                     setIsOpen(false);
                   }}

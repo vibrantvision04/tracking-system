@@ -475,6 +475,10 @@ export default function PlaybackPage() {
   const [aggressiveSnapping, setAggressiveSnapping] = useState<boolean>(false);
   const [routeIdParam, setRouteIdParam] = useState<string | null>(null);
 
+  // Driver Details States
+  const [driverDetails, setDriverDetails] = useState<any>(null);
+  const [transferStationTrips, setTransferStationTrips] = useState<number>(0);
+
   // Snapping Diagnostics States
   const [totalGpsPoints, setTotalGpsPoints] = useState<number>(0);
   const [snappedPointsCount, setSnappedPointsCount] = useState<number>(0);
@@ -1052,6 +1056,56 @@ export default function PlaybackPage() {
     }
   }, []);
 
+  // Fetch driver details for selected vehicle
+  const fetchDriverDetails = useCallback(async (vehicleId: number, selectedDate: string) => {
+    try {
+      // Fetch driver assignment
+      const driverRes = await api<any>(`/api/employee-vehicle-assignments?vehicle_id=${vehicleId}`);
+      if (driverRes.success && driverRes.data && driverRes.data.length > 0) {
+        const activeAssignment = driverRes.data.find((a: any) => a.is_active !== false);
+        if (activeAssignment) {
+          setDriverDetails({
+            driverName: activeAssignment.employee_name || 
+              [activeAssignment.employee?.first_name, activeAssignment.employee?.last_name].filter(Boolean).join(" ") || 
+              "N/A",
+            helperName: activeAssignment.helper_name || "N/A",
+            employeeId: activeAssignment.employee_id
+          });
+        } else {
+          setDriverDetails(null);
+        }
+      } else {
+        setDriverDetails(null);
+      }
+
+      // Fetch transfer station trips from GTS trip report
+      const tripRes = await api<any>(`/api/reports?vehicle_id=${vehicleId}&from=${selectedDate}&to=${selectedDate}&limit=1`);
+      if (tripRes.success && tripRes.data && tripRes.data.length > 0) {
+        const report = tripRes.data[0];
+        setTransferStationTrips(report.transfer_station_trips || 0);
+      } else {
+        setTransferStationTrips(0);
+      }
+    } catch (error) {
+      // Handle 404 and other errors gracefully - just set to null/0
+      setDriverDetails(null);
+      setTransferStationTrips(0);
+    }
+  }, []);
+
+  // Fetch driver details when vehicle or date changes
+  useEffect(() => {
+    if (selectedImei && date) {
+      const vehicle = vehicles.find(v => v.gps_device?.imei === selectedImei);
+      if (vehicle) {
+        fetchDriverDetails(vehicle.id, date);
+      }
+    } else {
+      setDriverDetails(null);
+      setTransferStationTrips(0);
+    }
+  }, [selectedImei, date, vehicles, fetchDriverDetails]);
+
   // Synchronize route and filters when vehicle, shift, or list changes
   useEffect(() => {
     if (selectedImei && vehicles.length > 0 && routesList.length > 0) {
@@ -1504,6 +1558,8 @@ export default function PlaybackPage() {
     setSnappedPointsCount(0);
     setRawPointsCount(0);
     setActiveCorridor("N/A");
+    setAiConfidence(null);
+    lastLoadedRouteIdRef.current = null;
     if (intervalRef.current) {
       clearTimeout(intervalRef.current);
       intervalRef.current = null;
@@ -1512,6 +1568,7 @@ export default function PlaybackPage() {
     const map = mapRef.current;
     if (!map) return;
 
+    // Clear all line layers
     if (lineRef.current) {
       map.removeLayer(lineRef.current);
       lineRef.current = null;
@@ -1532,13 +1589,12 @@ export default function PlaybackPage() {
       map.removeLayer(endMarkerRef.current);
       endMarkerRef.current = null;
     }
-    matchedCoordsRef.current = [];
-    matchedRoadIndicesRef.current = [];
     if (rawTraceLineRef.current) {
       map.removeLayer(rawTraceLineRef.current);
       rawTraceLineRef.current = null;
     }
 
+    // Clear all markers
     if (stoppageMarkersRef.current) {
       stoppageMarkersRef.current.forEach((marker: any) => map.removeLayer(marker));
       stoppageMarkersRef.current = [];
@@ -1548,10 +1604,52 @@ export default function PlaybackPage() {
       checkpointMarkersRef.current = [];
     }
     checkpointMarkersMapRef.current = {};
+
+    // Clear all route layers
     if (assignedRouteLayerRef.current) {
       map.removeLayer(assignedRouteLayerRef.current);
       assignedRouteLayerRef.current = null;
     }
+    if (allRoutesLayerRef.current) {
+      allRoutesLayerRef.current.clearLayers();
+    }
+
+    // Clear boundary layer
+    if (boundaryLayerRef.current) {
+      boundaryLayerRef.current.clearLayers();
+    }
+
+    // Clear POI layers
+    if (parkingSpotsLayerRef.current) {
+      map.removeLayer(parkingSpotsLayerRef.current);
+      parkingSpotsLayerRef.current = null;
+    }
+    if (transferStationsLayerRef.current) {
+      map.removeLayer(transferStationsLayerRef.current);
+      transferStationsLayerRef.current = null;
+    }
+    if (fuelStationsLayerRef.current) {
+      map.removeLayer(fuelStationsLayerRef.current);
+      fuelStationsLayerRef.current = null;
+    }
+    if (workshopsLayerRef.current) {
+      map.removeLayer(workshopsLayerRef.current);
+      workshopsLayerRef.current = null;
+    }
+    if (openDepotsLayerRef.current) {
+      openDepotsLayerRef.current.clearLayers();
+    }
+
+    // Clear refs
+    matchedCoordsRef.current = [];
+    matchedRoadIndicesRef.current = [];
+    roadCoordsRef.current = [];
+    checkpointRoadIndicesRef.current = [];
+    checkpointsRef.current = [];
+    checkpointsWithStatusRef.current = [];
+
+    // Reset map view to default
+    map.setView([26.9124, 75.7873], 12);
   }, []);
 
   // Load Route Playback Trace
@@ -2747,6 +2845,22 @@ export default function PlaybackPage() {
     setDate(new Date().toISOString().split("T")[0]);
     setSelectedRouteId("");
     setRouteIdParam(null);
+    setDriverDetails(null);
+    setTransferStationTrips(0);
+    
+    // Reset all visibility toggles
+    setShowPlannedRoute(true);
+    setShowActualMovement(true);
+    setShowRawPlayback(true);
+    setShowRawGpsTrace(false);
+    setShowRegionBoundary(true);
+    setShowStartEndPoint(true);
+    setShowStoppages(true);
+    setShowMajorStoppages(true);
+    setShowMiniStoppages(true);
+    setShowCoveredCheckpoints(true);
+    setShowUncoveredCheckpoints(true);
+    
     clearPlaybackLayers();
   };
 
@@ -3469,11 +3583,11 @@ export default function PlaybackPage() {
           </div>
         )}
 
-        {/* Dark Media Player Floating Deck at Bottom Center */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-2xl bg-slate-900/95 backdrop-blur-md border border-slate-800 text-white rounded-2xl shadow-2xl p-4 flex flex-col gap-3 transition-all duration-300">
+        {/* Media Player Floating Deck at Bottom Center */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-2xl bg-white/95 backdrop-blur-md border border-slate-200 text-slate-800 rounded-2xl shadow-2xl p-4 flex flex-col gap-3 transition-all duration-300">
           {/* Timeline slider row */}
           <div className="w-full flex items-center gap-3">
-            <span className="text-xs font-semibold font-mono text-slate-400 w-16 shrink-0 text-left">
+            <span className="text-xs font-semibold font-mono text-slate-500 w-16 shrink-0 text-left">
               {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[idx]?.time) : "00:00:00"}
             </span>
             <input
@@ -3492,12 +3606,12 @@ export default function PlaybackPage() {
                   setIdx(Number(e.target.value));
                 }
               }}
-              className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-800 accent-[#10B981] appearance-none outline-none focus:outline-none"
+              className="flex-1 h-1.5 rounded-full cursor-pointer bg-slate-200 accent-emerald-500 appearance-none outline-none focus:outline-none"
               style={{
-                background: `linear-gradient(to right, #10B981 0%, #10B981 ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #1e293b ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #1e293b 100%)`
+                background: `linear-gradient(to right, #10B981 0%, #10B981 ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #e2e8f0 ${playbackSteps.length > 0 ? (idx / (playbackSteps.length - 1)) * 100 : 0}%, #e2e8f0 100%)`
               }}
             />
-            <span className="text-xs font-semibold font-mono text-slate-400 w-16 shrink-0 text-right">
+            <span className="text-xs font-semibold font-mono text-slate-500 w-16 shrink-0 text-right">
               {playbackSteps.length > 0 ? formatTimeStr(playbackSteps[playbackSteps.length - 1]?.time) : "00:00:00"}
             </span>
           </div>
@@ -3522,9 +3636,9 @@ export default function PlaybackPage() {
                     }
                   }
                 }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 focus:outline-none ${!selectedImei
-                  ? "bg-slate-800 text-slate-600 cursor-not-allowed"
-                  : "bg-emerald-50 hover:bg-emerald-600 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 shadow-md shrink-0 focus:outline-none ${!selectedImei
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95 shadow-emerald-500/20 cursor-pointer hover:shadow-lg"
                   }`}
                 title={!selectedImei ? "Please select a vehicle first" : playing ? "Pause Playback" : "Start Playback"}
               >
@@ -3541,7 +3655,7 @@ export default function PlaybackPage() {
                 disabled={points.length === 0}
                 onClick={handleStop}
                 className={`w-9 h-9 rounded-full flex items-center justify-center text-white transition-all duration-200 shadow-md shrink-0 focus:outline-none ${points.length === 0
-                  ? "bg-slate-800 text-slate-600 cursor-not-allowed"
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                   : "bg-rose-500 hover:bg-rose-600 active:scale-95 shadow-rose-500/20 cursor-pointer hover:shadow-lg"
                   }`}
                 title="Stop Playback"
@@ -3553,52 +3667,43 @@ export default function PlaybackPage() {
               <button
                 type="button"
                 onClick={handleReset}
-                className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center shadow-md transition-all shrink-0 cursor-pointer focus:outline-none"
+                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-600 hover:text-slate-800 flex items-center justify-center shadow-md transition-all shrink-0 cursor-pointer focus:outline-none"
                 title="Reset filters and data"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
-
-              {/* Speed Multiplier Select */}
-              <div className="relative">
-                <select
-                  value={speedMultiplier}
-                  onChange={(e) => setSpeedMultiplier(Number(e.target.value))}
-                  className="bg-slate-800 border border-slate-700 text-slate-200 pl-3 pr-8 py-1.5 rounded-xl text-xs focus:border-emerald-500 outline-none transition cursor-pointer font-bold appearance-none select-none"
-                >
-                  <option value={1}>1X</option>
-                  <option value={2}>2X</option>
-                  <option value={4}>4X</option>
-                  <option value={8}>8X</option>
-                  <option value={16}>16X</option>
-                  <option value={32}>32X</option>
-                  <option value={64}>64X</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </div>
-              </div>
             </div>
 
-            {/* Right Group: Live Telemetry Values */}
-            {selectedImei && playbackSteps.length > 0 && currentStep && (
-              <div className="flex items-center gap-3.5 text-xs font-mono">
-                {/* Speed indicator */}
-                <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/50">
-                  <Gauge className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-slate-400">Speed:</span>
-                  <span className="font-bold text-white">{Math.round(currentStep.speed)} km/h</span>
-                </div>
+            {/* Right Group: Driver Details */}
+            {selectedImei && (
+              <div className="flex items-center gap-3.5 text-xs">
+                {driverDetails ? (
+                  <>
+                    {/* Driver Name */}
+                    <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                      <span className="text-slate-500">Driver:</span>
+                      <span className="font-bold text-slate-700">{driverDetails.driverName}</span>
+                    </div>
 
-                {/* Ignition indicator */}
-                <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/50">
-                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-slate-400">Ignition:</span>
-                  <span className={`inline-flex items-center gap-1.5 font-bold ${currentStep.ignition ? "text-emerald-400" : "text-rose-400"}`}>
-                    <span className={`w-2 h-2 rounded-full ${currentStep.ignition ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
-                    {currentStep.ignition ? "ON" : "OFF"}
-                  </span>
-                </div>
+                    {/* Helper Name */}
+                    {driverDetails.helperName && driverDetails.helperName !== "N/A" && (
+                      <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                        <span className="text-slate-500">Helper:</span>
+                        <span className="font-bold text-slate-700">{driverDetails.helperName}</span>
+                      </div>
+                    )}
+
+                    {/* Transfer Station Trips */}
+                    <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                      <span className="text-slate-500">TS Trips:</span>
+                      <span className="font-bold text-emerald-600">{transferStationTrips}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <span className="text-slate-400 italic">No driver assigned</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
