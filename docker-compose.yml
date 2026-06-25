@@ -3,8 +3,6 @@ version: '3.8'
 services:
   app:
     build: .
-    env_file:
-      - .env
     ports:
       - "5027:5027"
       - "0.0.0.0:8080:8080"
@@ -13,6 +11,8 @@ services:
       - DB_DSN=postgres://gps:${POSTGRES_PASSWORD:-password}@db:5432/gpsdb
       - REDIS_URL=redis://redis:6379
       - REDIS_ADDR=redis:6379
+      # CORS allow-list: includes the Vercel frontend origin (not a secret)
+      - FRONTEND_URL=http://localhost:3000,http://localhost:5173,http://localhost:8080,https://tracking-system-rosy.vercel.app
     depends_on:
       - redis
       - db
