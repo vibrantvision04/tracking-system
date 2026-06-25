@@ -7,6 +7,7 @@ import { ToastContainer } from "react-toastify";
 import { ConfirmProvider } from "@/context/ConfirmContext";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthGate from "@/components/AuthGate";
+import AppShell from "@/components/AppShell";
 
 import "react-toastify/dist/ReactToastify.css";
 
@@ -30,13 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <ConfirmProvider>
             <AuthGate>
-              <div className="flex h-screen overflow-hidden">
-                <Sidebar />
-                <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                  <MainHeader />
-                  <main className="flex-1 flex flex-col min-h-0 bg-[var(--bg-dark)]">{children}</main>
-                </div>
-              </div>
+              <AppShell>
+                {children}
+              </AppShell>
             </AuthGate>
           </ConfirmProvider>
           <ToastContainer

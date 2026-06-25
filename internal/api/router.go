@@ -21,13 +21,21 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 	r.Use(middleware.Compress(5))
 	r.Use(SecurityHeadersMiddleware)
 
-	// CORS — only allow the configured frontend origin
-	corsOrigins := []string{cfg.FrontendURL}
-	if cfg.FrontendURL == "http://localhost:3000" {
+	// CORS — allow the configured frontend origin(s)
+	corsOrigins := strings.Split(cfg.FrontendURL, ",")
+	for i := range corsOrigins {
+		corsOrigins[i] = strings.TrimSpace(corsOrigins[i])
+	}
+	if len(corsOrigins) == 0 || (len(corsOrigins) == 1 && corsOrigins[0] == "") {
 		corsOrigins = []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"}
+	}
+	allowedOriginsMap := make(map[string]bool, len(corsOrigins))
+	for _, o := range corsOrigins {
+		allowedOriginsMap[o] = true
 	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   corsOrigins,
+		AllowOriginFunc:  func(r *http.Request, origin string) bool { return allowedOriginsMap[origin] },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Requested-With"},
 		ExposedHeaders:   []string{"Link"},
