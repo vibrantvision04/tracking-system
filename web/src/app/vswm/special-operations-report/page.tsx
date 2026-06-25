@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
+import ReportHeader from "@/components/shared/ReportHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import StatCard from "@/components/shared/StatCard";
 import SearchableSelect from "@/components/ui/SearchableSelect";
@@ -154,29 +155,15 @@ export default function SpecialOperationsReportPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
-      {/* Sub-header with Title & Action Exports */}
-      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-theme-text">Special Operations Report</h2>
-          <div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
-        </div>
-        <div className="flex gap-2 print:hidden">
-          <Button
-            onClick={() => window.print()}
-            variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold"
-          >
-            PDF
-          </Button>
-          <Button
-            onClick={handleExportCSV}
-            variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold"
-          >
-            CSV
-          </Button>
-        </div>
-      </div>
+      <ReportHeader
+        title="Special Operations Report"
+        actions={
+          <div className="flex gap-2">
+            <Button onClick={() => window.print()} variant="outline" className="px-3 py-1.5 text-xs font-semibold">PDF</Button>
+            <Button onClick={handleExportCSV} variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV</Button>
+          </div>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
         {/* Filter Card Panel */}

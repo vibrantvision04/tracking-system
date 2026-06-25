@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import { Card, CardContent } from "@/components/ui/Card";
 import StatCard from "@/components/shared/StatCard";
+import ReportHeader from "@/components/shared/ReportHeader";
 import { Users, User, MapPin, Wifi, WifiOff, Search, Filter } from "lucide-react";
 
 const EmployeeMap = dynamic(() => import("@/components/EmployeeMap"), {
@@ -210,17 +211,11 @@ export default function EmployeeMonitoringPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans">
-      {/* Page Header */}
-      <div className="bg-theme-surface border-b border-theme-border px-6 py-4 shrink-0">
-        <div>
-          <h1 className="text-lg font-extrabold text-theme-text tracking-tight uppercase">
-            Employee Monitoring
-          </h1>
-          <p className="text-xs font-bold text-theme-text-dim mt-1 uppercase tracking-wider">
-            Real-time Employee GPS Tracking
-          </p>
-        </div>
-      </div>
+      <ReportHeader
+        title="Employee Monitoring"
+        subtitle="Real-time Employee GPS Tracking"
+        variant="detailed"
+      />
 
       {/* Filters */}
       <div className="bg-theme-surface border-b border-theme-border px-6 py-3 flex flex-wrap items-end gap-3 shrink-0">

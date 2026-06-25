@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 
-import PageHeader from "@/components/shared/PageHeader";
+import ReportHeader from "@/components/shared/ReportHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
@@ -156,24 +156,18 @@ export default function AlertDetailReportPage() {
   const alertTypeOptions = ALERT_TYPES.map(t => ({ value: t, label: t }));
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans space-y-6 p-6 lg:p-8 print:p-0 print:bg-white print:text-black">
-      <PageHeader
-        title="Alert Detail Report"
-        description="Comprehensive summary of triggered alerts, overspeed events, geofence breaches, and device reporting statuses."
-        breadcrumbs={[{ label: "Reports", href: "/reports" }, { label: "Alert Detail Report" }]}
-        actions={
-          <div className="flex gap-2 print:hidden">
-            <Button onClick={() => window.print()} variant="outline">
-              PDF
-            </Button>
-            <Button onClick={handleExportCSV} variant="outline">
-              CSV
-            </Button>
-          </div>
-        }
-      />
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
+  <ReportHeader
+    title="Alert Detail Report"
+    actions={
+      <div className="flex gap-2">
+        <Button onClick={() => window.print()} variant="outline" className="px-3 py-1.5 text-xs font-semibold">PDF</Button>
+        <Button onClick={handleExportCSV} variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV</Button>
+      </div>
+    }
+  />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8 print:overflow-visible print:pb-0">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
         <Card className="relative z-20 !overflow-visible print:hidden">
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">

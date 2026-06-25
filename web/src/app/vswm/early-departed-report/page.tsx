@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
-import PageHeader from "@/components/shared/PageHeader";
+import ReportHeader from "@/components/shared/ReportHeader";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import Table from "@/components/shared/Table";
 import { 
@@ -79,11 +79,10 @@ export default function EarlyDepartureReportPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans space-y-6 p-6 lg:p-8">
-      <PageHeader
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
+      <ReportHeader
         title="Early Departed Report"
-        description="Identifies morning shift vehicles that ceased field operations early (e.g. final ignition off before threshold and no activity before shift end)."
-        breadcrumbs={[{ label: "Reports", href: "/reports" }, { label: "Early Departed Report" }]}
+        printHiddenActions={false}
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <div className="w-36">
@@ -129,7 +128,7 @@ export default function EarlyDepartureReportPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8">
         {/* Warning callout */}
         <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-xl flex items-start gap-3 text-xs leading-relaxed">
           <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" />

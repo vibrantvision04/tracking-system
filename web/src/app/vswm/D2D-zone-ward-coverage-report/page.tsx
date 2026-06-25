@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import ReportHeader from '@/components/shared/ReportHeader';
 import { FileText, Download, Calendar, Map, Clock, Truck, BarChart3, CheckSquare } from 'lucide-react';
 
 export default function D2DZoneWardCoverageReport() {
@@ -132,28 +133,15 @@ export default function D2DZoneWardCoverageReport() {
   return (
     <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
       
-      {/* Modern Gradient Header */}
-   <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
-         <div>
-           <h2 className="text-base font-bold text-theme-text">D2D Zone Ward Coverage Report</h2>
-           <div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
-         </div>
-         <div className="flex gap-2 print:hidden">
-           <Button
-             onClick={() => window.print()}
-             variant="outline"
-             className="px-3 py-1.5 text-xs font-semibold"
-           >
-             PDF
-           </Button>
-           <Button
-             variant="outline"
-             className="px-3 py-1.5 text-xs font-semibold"
-           >
-             CSV
-           </Button>
-         </div>
-       </div>
+      <ReportHeader
+        title="D2D Zone Ward Coverage Report"
+        actions={
+          <div className="flex gap-2">
+            <Button onClick={() => window.print()} variant="outline" className="px-3 py-1.5 text-xs font-semibold">PDF</Button>
+            <Button variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV</Button>
+          </div>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
         

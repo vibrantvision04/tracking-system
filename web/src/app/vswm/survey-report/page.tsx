@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
 import StatCard from "@/components/shared/StatCard";
+import ReportHeader from "@/components/shared/ReportHeader";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import DatePicker from "@/components/ui/DatePicker";
 import { X, User, MapPin, Calendar, TrendingUp, CheckCircle, Clock, FileText, Radio } from "lucide-react";
@@ -310,33 +311,18 @@ export default function SurveyReportPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans">
-      {/* Page Header */}
-      <div className="bg-theme-surface border-b border-theme-border px-6 py-4 shrink-0 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-extrabold text-theme-text tracking-tight uppercase">
-            RFID Survey Report
-          </h1>
-          <p className="text-xs font-bold text-theme-text-dim mt-1 uppercase tracking-wider">
-            Supervisor RFID Installation Performance Tracking
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => handleExport("csv")}
-            variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold"
-          >
-            CSV
-          </Button>
-          <Button
-            onClick={() => handleExport("excel")}
-            variant="outline"
-            className="px-3 py-1.5 text-xs font-semibold"
-          >
-            Excel
-          </Button>
-        </div>
-      </div>
+      <ReportHeader
+        title="RFID Survey Report"
+        subtitle="Supervisor RFID Installation Performance Tracking"
+        variant="detailed"
+        printHiddenActions={false}
+        actions={
+          <div className="flex gap-2">
+            <Button onClick={() => handleExport("csv")} variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV</Button>
+            <Button onClick={() => handleExport("excel")} variant="outline" className="px-3 py-1.5 text-xs font-semibold">Excel</Button>
+          </div>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:hidden relative">
         {/* Filter Card Panel */}

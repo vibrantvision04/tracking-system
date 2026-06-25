@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
-import PageHeader from "@/components/shared/PageHeader";
+import ReportHeader from "@/components/shared/ReportHeader";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -142,33 +142,15 @@ export default function VehicleSummaryReportPage() {
 	};
 
 	return (
-		<div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full p-6 lg:p-8 space-y-6 print:p-0 print:bg-white print:text-black">
+		<div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
 			{/* Page Header */}
 			<div className="print:hidden">
-				<PageHeader
+				<ReportHeader
 					title="Vehicle Summary Report"
-					description="Detailed summary of vehicle distance covered, transfer station trips, and route coverage."
-					breadcrumbs={[
-						{ label: "VSWM", href: "/vswm/shift" },
-						{ label: "Reports", href: "/reports" },
-						{ label: "Vehicle Summary Report" }
-					]}
 					actions={
 						<div className="flex gap-2">
-							<Button
-								onClick={() => window.print()}
-								variant="outline"
-								className="px-3 py-1.5 text-xs font-semibold"
-							>
-								PDF
-							</Button>
-							<Button
-								onClick={handleExportCSV}
-								variant="outline"
-								className="px-3 py-1.5 text-xs font-semibold"
-							>
-								CSV
-							</Button>
+							<Button onClick={() => window.print()} variant="outline" className="px-3 py-1.5 text-xs font-semibold">PDF</Button>
+							<Button onClick={handleExportCSV} variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV</Button>
 						</div>
 					}
 				/>
@@ -180,6 +162,7 @@ export default function VehicleSummaryReportPage() {
 				<p className="text-xs text-slate-500 mt-1">Generated Date: {selectedDate}</p>
 			</div>
 
+			<div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
 			{/* Filters Section */}
 			<div className="print:hidden flex flex-col space-y-6">
 				<Card className="!overflow-visible">
@@ -363,6 +346,7 @@ export default function VehicleSummaryReportPage() {
 					</CardContent>
 				</Card>
 			</div>
+		</div>
 		</div>
 	);
 }

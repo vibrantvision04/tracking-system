@@ -21,7 +21,7 @@ import {
   X
 } from "lucide-react";
 
-import PageHeader from "@/components/shared/PageHeader";
+import ReportHeader from "@/components/shared/ReportHeader";
 import {
   Card,
   CardHeader,
@@ -451,35 +451,19 @@ export default function UnauthorizedMovementReportPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6 print:p-0 print:bg-white print:text-black">
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans">
       
       {/* Page Header */}
       <div className="print:hidden">
-        <PageHeader
+        <ReportHeader
           title="Unauthorized Movement Report"
-          description="Identify and review reports of active fleet vehicles deviating from approved geographical routes or geofence buffers."
-          breadcrumbs={[
-            { label: "VSWM", href: "/vswm/shift" },
-            { label: "Reports", href: "/reports" },
-            { label: "Unauthorized Movement" },
-          ]}
           actions={
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="flex items-center gap-1.5 shadow-sm text-xs"
-                onClick={handlePrintPDF}
-              >
-                <Printer size={14} />
-                PDF
+              <Button variant="outline" className="flex items-center gap-1.5 shadow-sm text-xs" onClick={handlePrintPDF}>
+                <Printer size={14} /> PDF
               </Button>
-              <Button
-                variant="outline"
-                className="flex items-center gap-1.5 shadow-sm text-xs bg-theme-elevated text-theme-text hover:bg-theme-border"
-                onClick={handleExportCSV}
-              >
-                <Download size={14} />
-                CSV
+              <Button variant="outline" className="flex items-center gap-1.5 shadow-sm text-xs bg-theme-elevated text-theme-text hover:bg-theme-border" onClick={handleExportCSV}>
+                <Download size={14} /> CSV
               </Button>
             </div>
           }
@@ -492,6 +476,7 @@ export default function UnauthorizedMovementReportPage() {
         <p className="text-xs text-slate-500 mt-1">Generated Date: {reportDate || new Date().toLocaleDateString()}</p>
       </div>
 
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
       {/* Filter Options Panel */}
       <Card className="shrink-0 border border-theme-border shadow-sm print:hidden">
         <CardContent className="p-4 md:p-5">
@@ -552,9 +537,8 @@ export default function UnauthorizedMovementReportPage() {
       </Card>
 
       {/* Report Data Log Grid */}
-      <Card className="flex-1 flex flex-col overflow-hidden border border-theme-border shadow-sm">
-        <CardContent className="p-0 flex-1 overflow-hidden">
-          <div className="h-full overflow-y-auto custom-scrollbar">
+      <Card className="overflow-hidden border border-theme-border shadow-sm">
+        <CardContent className="p-0">
             <Table
               headers={[
                 <div key="s" className="text-center w-12">S. No.</div>,
@@ -605,9 +589,9 @@ export default function UnauthorizedMovementReportPage() {
                 </tr>
               ))}
             </Table>
-          </div>
         </CardContent>
       </Card>
+      </div>
       
     </div>
   );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 import Button from "@/components/ui/Button";
+import ReportHeader from "@/components/shared/ReportHeader";
 import Table from "@/components/shared/Table";
 import { Card, CardContent } from "@/components/ui/Card";
 
@@ -91,21 +92,15 @@ export default function WardGeofenceReportPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 overflow-hidden font-sans">
-      {/* Sub-header / Playback Title with Green Line */}
-      <div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-slate-700">Ward Geofance Report</h2>
-          <div className="h-[3px] w-8 bg-emerald-500 mt-1"></div>
-        </div>
-        <div className="flex gap-2 print:hidden">
-          <Button onClick={() => window.print()} variant="outline" className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200">
-            PDF
-          </Button>
-          <Button onClick={handleExportCSV} variant="outline" className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-slate-300 hover:bg-slate-200">
-            CSV
-          </Button>
-        </div>
-      </div>
+      <ReportHeader
+        title="Ward Geofance Report"
+        actions={
+          <div className="flex gap-2">
+            <Button onClick={() => window.print()} variant="outline" className="px-3 py-1.5 text-xs font-semibold">PDF</Button>
+            <Button onClick={handleExportCSV} variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV</Button>
+          </div>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
         {/* Filter controls matching layout */}

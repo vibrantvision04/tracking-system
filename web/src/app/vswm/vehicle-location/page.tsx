@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useStore } from "@/lib/store";
+import ReportHeader from "@/components/shared/ReportHeader";
 
 const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false });
 
@@ -21,13 +22,7 @@ export default function VehicleLocationPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none">
-      {/* Sub-header with Title */}
-      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-theme-text">Vehicle Live Location Tracking</h2>
-          <div className="h-[3px] w-8 bg-theme-accent mt-1"></div>
-        </div>
-      </div>
+      <ReportHeader title="Vehicle Live Location Tracking" />
 
       {/* Main full-screen viewport */}
       <div className="flex-1 flex min-h-0 relative bg-theme-base">

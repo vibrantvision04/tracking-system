@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 
-import PageHeader from "@/components/shared/PageHeader";
+import ReportHeader from "@/components/shared/ReportHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Table from "@/components/shared/Table";
@@ -214,27 +214,19 @@ export default function GeofenceEventReportPage() {
   const selectedShiftName = shifts.find(s => s.id === selectedShiftId)?.shift_name || "Select Shift";
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans space-y-6 p-6 lg:p-8 print:p-0 print:bg-white print:text-black">
-      <PageHeader
-        title="Geofence Event Report"
-        description="Track vehicle enter and exit events across geofenced areas like transfer stations, parking lots, and workshops."
-        breadcrumbs={[{ label: "Reports", href: "/reports" }, { label: "Geofence Event Report" }]}
-        actions={
-          <div className="flex gap-2 print:hidden">
-            <Button onClick={() => window.print()} variant="outline">
-              PDF
-            </Button>
-            <Button onClick={handleExportSummaryCSV} variant="outline" className="text-xs">
-              CSV (Summary)
-            </Button>
-            <Button onClick={handleExportDetailsCSV} variant="outline" className="text-xs">
-              CSV (Details)
-            </Button>
-          </div>
-        }
-      />
+    <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans w-full">
+  <ReportHeader
+    title="Geofence Event Report"
+    actions={
+      <div className="flex gap-2">
+        <Button onClick={() => window.print()} variant="outline" className="px-3 py-1.5 text-xs font-semibold">PDF</Button>
+        <Button onClick={handleExportSummaryCSV} variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV (Summary)</Button>
+        <Button onClick={handleExportDetailsCSV} variant="outline" className="px-3 py-1.5 text-xs font-semibold">CSV (Details)</Button>
+      </div>
+    }
+  />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8 print:overflow-visible print:pb-0">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8 print:overflow-visible print:pb-0 print:p-0">
         <Card className="relative z-20 !overflow-visible print:hidden">
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
