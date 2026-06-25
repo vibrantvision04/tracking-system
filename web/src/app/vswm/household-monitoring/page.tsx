@@ -429,7 +429,7 @@ export default function HouseholdMonitoringPage() {
       </div>
 
       {/* Map */}
-      <div className="flex-1 relative min-h-0">
+      <div className="flex-1 relative min-h-[300px]">
         {filtered.length === 0 && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-theme-base/80 backdrop-blur-sm">
             <span className="text-4xl">🏚️</span>

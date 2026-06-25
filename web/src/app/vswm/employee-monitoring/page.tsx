@@ -347,9 +347,9 @@ export default function EmployeeMonitoringPage() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Map */}
-        <div className="flex-1 relative min-h-0">
+        <div className="flex-1 relative min-h-[250px] sm:min-h-[300px]">
           {!hasLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-theme-base">
               <div className="text-center">
@@ -381,7 +381,7 @@ export default function EmployeeMonitoringPage() {
 
         {/* Employee List Panel */}
         {hasLoaded && (
-          <div className="w-96 bg-theme-surface border-l border-theme-border flex flex-col shrink-0 overflow-hidden">
+          <div className="w-full lg:w-96 bg-theme-surface border-t lg:border-t-0 lg:border-l border-theme-border flex flex-col shrink-0 overflow-hidden max-h-[300px] lg:max-h-none">
             <div className="px-4 py-3 border-b border-theme-border">
               <h3 className="text-sm font-bold text-theme-text uppercase tracking-wider flex items-center gap-2">
                 <Users size={16} />

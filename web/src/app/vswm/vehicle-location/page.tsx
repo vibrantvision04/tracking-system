@@ -25,7 +25,7 @@ export default function VehicleLocationPage() {
       <ReportHeader title="Vehicle Live Location Tracking" />
 
       {/* Main full-screen viewport */}
-      <div className="flex-1 flex min-h-0 relative bg-theme-base">
+      <div className="flex-1 flex min-h-[300px] relative bg-theme-base">
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-theme-surface gap-3">
             <div className="w-8 h-8 rounded-full border-4 border-theme-border border-t-emerald-600 animate-spin" />

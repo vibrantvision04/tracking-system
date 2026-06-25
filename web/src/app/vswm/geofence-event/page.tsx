@@ -352,9 +352,9 @@ export default function GeofenceEventReportPage() {
           />
 
           {/* Panel */}
-          <div className="relative w-screen max-w-md bg-theme-surface border-l border-theme-border flex flex-col shadow-2xl h-full animate-slide-in">
+          <div className="relative w-full sm:w-[80%] sm:max-w-[80vw] lg:max-w-md bg-theme-surface border-l border-theme-border flex flex-col shadow-2xl h-full animate-slide-in">
             {/* Header */}
-            <div className="p-6 border-b border-theme-border flex justify-between items-center bg-theme-base/30">
+            <div className="p-4 sm:p-6 border-b border-theme-border flex justify-between items-center shrink-0 sticky top-0 bg-theme-surface z-10">
               <div>
                 <span className="text-[9px] font-extrabold uppercase tracking-widest text-theme-accent bg-theme-accent/15 px-2 py-0.5 rounded-md">
                   Vehicle Report
@@ -368,18 +368,18 @@ export default function GeofenceEventReportPage() {
               </div>
               <button
                 onClick={() => setSelectedVehicle(null)}
-                className="w-8 h-8 rounded-full flex items-center justify-center bg-theme-base/50 text-theme-text-dim hover:bg-theme-border hover:text-theme-text transition cursor-pointer"
+                className="min-w-[44px] min-h-[44px] w-10 h-10 rounded-full flex items-center justify-center bg-theme-base/50 text-theme-text-dim hover:bg-theme-border hover:text-theme-text transition cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {/* Visit Stats Grid */}
-            <div className="p-5 border-b border-theme-border bg-theme-base/10">
+            <div className="p-4 sm:p-5 border-b border-theme-border bg-theme-base/10">
               <h4 className="text-[10px] font-bold text-theme-text uppercase tracking-wider mb-2.5">
                 Summary of Visits
               </h4>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {[
                   { label: "Zone", count: selectedVehicle.total_zone_visits, color: "border-l-emerald-500 bg-emerald-500/5 text-emerald-400" },
                   { label: "Ward", count: selectedVehicle.total_ward_visits, color: "border-l-emerald-500 bg-emerald-500/5 text-emerald-400" },
@@ -404,7 +404,7 @@ export default function GeofenceEventReportPage() {
             </div>
 
             {/* Chronological Timeline */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-5">
               <div className="flex justify-between items-center mb-1">
                 <h4 className="text-[10px] font-bold text-theme-text uppercase tracking-wider">
                   Detailed Timeline

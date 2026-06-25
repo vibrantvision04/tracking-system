@@ -269,50 +269,58 @@ export default function HomePage() {
           {/* Backdrop Overlay */}
           <div 
             onClick={() => setIsDrawerOpen(false)}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
           />
           
           {/* Drawer Panel */}
-          <div className="relative w-full max-w-md bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0">
+          <div className="relative w-full sm:w-[80%] sm:max-w-[80vw] lg:max-w-md bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0">
             {/* Drawer Header */}
-            <div className="px-6 py-5 border-b border-theme-border flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-lg font-bold text-theme-text">D2D Zone Coverage</h3>
-                <p className="text-xs text-theme-text-dim font-medium mt-0.5">Today's breakdown by zone</p>
+            <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-200/60 flex items-center justify-center shrink-0">
+                  <span className="text-lg">🗺️</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-theme-text leading-tight">D2D Zone Coverage</h3>
+                  <p className="text-[10px] text-theme-text-dim font-semibold mt-0.5 uppercase tracking-wider">Today's breakdown by zone</p>
+                </div>
               </div>
               <button 
                 onClick={() => setIsDrawerOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
+                className="min-w-[44px] min-h-[44px] w-10 h-10 rounded-full flex items-center justify-center bg-theme-base/60 hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
               >
-                <X size={20} strokeWidth={2.5} />
+                <X size={18} strokeWidth={2.5} />
               </button>
             </div>
             
             {/* Drawer Body - List of Zones */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-3 custom-scrollbar">
               {zoneCoverages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-theme-text-dim gap-2 py-10">
-                  <div className="w-6 h-6 border-2 border-theme-border border-t-emerald-600 rounded-full animate-spin" />
+                <div className="h-full flex flex-col items-center justify-center text-theme-text-dim gap-3 py-10">
+                  <div className="w-7 h-7 border-2 border-theme-border border-t-emerald-600 rounded-full animate-spin" />
                   <span className="text-xs font-semibold">Loading zone coverages...</span>
                 </div>
               ) : (
                 zoneCoverages.map((zone) => (
-                  <div key={zone.id} className="bg-theme-elevated border border-theme-border rounded-xl p-4 flex flex-col gap-2">
+                  <div key={zone.id} className="bg-theme-elevated/50 border border-theme-border/60 rounded-xl p-4 flex flex-col gap-2.5 hover:border-emerald-200/60 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <span 
-                          className="w-3.5 h-3.5 rounded-full shrink-0 border border-theme-border shadow-sm" 
+                          className="w-3 h-3 rounded-full shrink-0 ring-2 ring-white shadow-sm" 
                           style={{ backgroundColor: zone.color }}
                         />
                         <span className="font-bold text-theme-text text-sm">{zone.name}</span>
                       </div>
-                      <span className="font-extrabold text-theme-text text-sm">{zone.percentage}%</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-lg font-black text-theme-text leading-none">{zone.percentage}</span>
+                        <span className="text-[10px] font-bold text-theme-text-dim">%</span>
+                      </div>
                     </div>
                     
                     {/* Progress Bar */}
                     <div className="w-full bg-theme-base h-2 rounded-full overflow-hidden">
                       <div 
-                        className="h-full rounded-full transition-all duration-500 ease-out"
+                        className="h-full rounded-full transition-all duration-700 ease-out"
                         style={{ 
                           width: `${zone.percentage}%`,
                           backgroundColor: zone.color 
@@ -331,67 +339,78 @@ export default function HomePage() {
         <div className="fixed inset-0 z-[9999] flex justify-end">
           <div 
             onClick={() => setIsOpenDepotDrawerOpen(false)}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
           />
           
-          <div className="relative w-full max-w-lg bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0">
+          <div className="relative w-full sm:w-[80%] sm:max-w-[80vw] lg:max-w-lg bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0">
             {/* Header */}
-            <div className="px-6 py-5 border-b border-theme-border flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-lg font-bold text-theme-text">Open Depot Live Coverage</h3>
-                <p className="text-xs text-theme-text-dim font-medium mt-0.5">
-                  Shift: <span className="text-amber-500 font-bold">{openDepotDashboard?.active_shift?.shift_name || "No Active Shift"}</span> | Date: {openDepotDashboard?.operational_date || todayStr}
-                </p>
+            <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200/60 flex items-center justify-center shrink-0">
+                  <span className="text-lg">🏭</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-theme-text leading-tight">Open Depot Live Coverage</h3>
+                  <p className="text-[10px] text-theme-text-dim font-semibold mt-0.5">
+                    <span className="text-amber-500 font-bold">{openDepotDashboard?.active_shift?.shift_name || "No Active Shift"}</span> · {openDepotDashboard?.operational_date || todayStr}
+                  </p>
+                </div>
               </div>
               <button 
                 onClick={() => setIsOpenDepotDrawerOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
+                className="min-w-[44px] min-h-[44px] w-10 h-10 rounded-full flex items-center justify-center bg-theme-base/60 hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
               >
-                <X size={20} strokeWidth={2.5} />
+                <X size={18} strokeWidth={2.5} />
               </button>
             </div>
             
             {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-5 custom-scrollbar">
               {/* Overall Shift KPIs */}
-              <div className="bg-theme-elevated border border-theme-border rounded-2xl p-5 flex flex-col gap-4">
+              <div className="bg-linear-to-br from-amber-50/80 to-theme-elevated border border-amber-200/30 rounded-2xl p-5 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-theme-text-dim uppercase tracking-wider">Overall Shift Coverage</span>
-                  <span className="text-2xl font-black text-amber-500">{openDepotDashboard?.kpis?.coverage_percentage ?? 0}%</span>
+                  <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider">Overall Shift Coverage</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-amber-500 leading-none">{openDepotDashboard?.kpis?.coverage_percentage ?? 0}</span>
+                    <span className="text-xs font-bold text-amber-400">%</span>
+                  </div>
                 </div>
                 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase">Total Depots</span>
-                    <span className="text-lg font-extrabold text-theme-text mt-1">{openDepotDashboard?.kpis?.total_open_depots ?? 0}</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="bg-theme-card/80 border border-theme-border rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Total</span>
+                    <span className="text-lg font-black text-theme-text">{openDepotDashboard?.kpis?.total_open_depots ?? 0}</span>
                   </div>
-                  <div className="bg-[#16A34A]/10 border border-[#16A34A]/20 rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-[#16A34A] uppercase">Complete</span>
-                    <span className="text-lg font-extrabold text-[#16A34A] mt-1">{openDepotDashboard?.kpis?.approved_complete ?? 0}</span>
+                  <div className="bg-emerald-50/60 border border-emerald-200/40 rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">Complete</span>
+                    <span className="text-lg font-black text-emerald-600">{openDepotDashboard?.kpis?.approved_complete ?? 0}</span>
                   </div>
-                  <div className="bg-[#F59E0B]/10 border border-[#F59E0B]/20 rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-[#F59E0B] uppercase">Partial</span>
-                    <span className="text-lg font-extrabold text-[#F59E0B] mt-1">{openDepotDashboard?.kpis?.approved_partial ?? 0}</span>
+                  <div className="bg-amber-50/60 border border-amber-200/40 rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Partial</span>
+                    <span className="text-lg font-black text-amber-600">{openDepotDashboard?.kpis?.approved_partial ?? 0}</span>
                   </div>
-                  <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-[#EF4444] uppercase">Rejected</span>
-                    <span className="text-lg font-extrabold text-[#EF4444] mt-1">{openDepotDashboard?.kpis?.rejected ?? 0}</span>
+                  <div className="bg-red-50/60 border border-red-200/40 rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Rejected</span>
+                    <span className="text-lg font-black text-red-600">{openDepotDashboard?.kpis?.rejected ?? 0}</span>
                   </div>
-                  <div className="bg-[#F59E0B]/10 border border-[#F59E0B]/20 rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-[#F59E0B] uppercase">Pending</span>
-                    <span className="text-lg font-extrabold text-[#F59E0B] mt-1">{openDepotDashboard?.kpis?.pending ?? 0}</span>
+                  <div className="bg-amber-50/60 border border-amber-200/40 rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Pending</span>
+                    <span className="text-lg font-black text-amber-600">{openDepotDashboard?.kpis?.pending ?? 0}</span>
                   </div>
-                  <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase">Not Covered</span>
-                    <span className="text-lg font-extrabold text-theme-text mt-1">{openDepotDashboard?.kpis?.not_covered ?? 0}</span>
+                  <div className="bg-theme-card/80 border border-theme-border rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Not Covered</span>
+                    <span className="text-lg font-black text-theme-text">{openDepotDashboard?.kpis?.not_covered ?? 0}</span>
                   </div>
                 </div>
               </div>
 
               {/* Zone Breakdown */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold text-theme-text-dim uppercase tracking-wider px-1">Zone Wise Breakdown</h4>
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider px-1 flex items-center gap-2">
+                  <span className="w-4 h-[2px] bg-amber-400 rounded-full" />
+                  Zone Wise Breakdown
+                </h4>
                 
                 {!openDepotDashboard?.zone_coverages || openDepotDashboard.zone_coverages.length === 0 ? (
                   <div className="text-center py-6 text-theme-text-dim text-xs font-semibold">
@@ -399,41 +418,44 @@ export default function HomePage() {
                   </div>
                 ) : (
                   openDepotDashboard.zone_coverages.map((zone: any) => (
-                    <div key={zone.zone_id} className="bg-theme-elevated border border-theme-border rounded-2xl p-4 flex flex-col gap-3">
+                    <div key={zone.zone_id} className="bg-theme-elevated/50 border border-theme-border/60 rounded-xl p-4 flex flex-col gap-3 hover:border-amber-200/60 transition-colors">
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="font-bold text-theme-text text-sm block">{zone.zone_name}</span>
-                          <span className="text-[10px] text-theme-text-dim font-bold mt-0.5 block">
-                            Resolved: {zone.resolved_depots} / {zone.total_depots}
+                          <span className="text-[10px] text-theme-text-dim font-semibold mt-0.5 block">
+                            {zone.resolved_depots} / {zone.total_depots} resolved
                           </span>
                         </div>
-                        <span className="font-extrabold text-theme-text text-base">{zone.coverage_percentage}%</span>
+                        <div className="flex items-baseline gap-0.5">
+                          <span className="text-lg font-black text-theme-text leading-none">{zone.coverage_percentage}</span>
+                          <span className="text-[10px] font-bold text-theme-text-dim">%</span>
+                        </div>
                       </div>
                       
                       {/* Progress Bar */}
-                      <div className="w-full bg-theme-base h-2 rounded-full overflow-hidden">
+                      <div className="w-full bg-theme-base h-1.5 rounded-full overflow-hidden">
                         <div 
-                          className="h-full rounded-full bg-amber-500 transition-all duration-500 ease-out"
+                          className="h-full rounded-full bg-amber-500 transition-all duration-700 ease-out"
                           style={{ width: `${zone.coverage_percentage}%` }}
                         />
                       </div>
                       
                       {/* Sub-KPI Badges */}
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        <span className="text-[9px] font-bold bg-[#16A34A]/10 text-[#16A34A] px-2 py-0.5 rounded border border-[#16A34A]/20">
-                          Complete: {zone.approved_complete}
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="text-[9px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md border border-emerald-200/40">
+                          ✓ {zone.approved_complete}
                         </span>
-                        <span className="text-[9px] font-bold bg-[#F59E0B]/10 text-[#F59E0B] px-2 py-0.5 rounded border border-[#F59E0B]/20">
-                          Partial: {zone.approved_partial}
+                        <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-md border border-amber-200/40">
+                          ◐ {zone.approved_partial}
                         </span>
-                        <span className="text-[9px] font-bold bg-[#EF4444]/10 text-[#EF4444] px-2 py-0.5 rounded border border-[#EF4444]/20">
-                          Rejected: {zone.rejected}
+                        <span className="text-[9px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-md border border-red-200/40">
+                          ✕ {zone.rejected}
                         </span>
-                        <span className="text-[9px] font-bold bg-[#F59E0B]/10 text-[#F59E0B] px-2 py-0.5 rounded border border-[#F59E0B]/20">
-                          Pending: {zone.pending}
+                        <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-md border border-amber-200/40">
+                          ⏳ {zone.pending}
                         </span>
-                        <span className="text-[9px] font-bold bg-theme-card text-slate-300 px-2 py-0.5 rounded border border-theme-border">
-                          Not Mapped: {zone.not_covered}
+                        <span className="text-[9px] font-bold bg-theme-base text-theme-text-dim px-2 py-0.5 rounded-md border border-theme-border">
+                          — {zone.not_covered}
                         </span>
                       </div>
                     </div>
@@ -451,52 +473,61 @@ export default function HomePage() {
           {/* Backdrop */}
           <div 
             onClick={() => setIsGarbageDrawerOpen(false)}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
           />
           
           {/* Drawer Panel */}
-          <div className="relative w-full max-w-lg bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0">
+          <div className="relative w-full sm:w-[80%] sm:max-w-[80vw] lg:max-w-lg bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0">
             {/* Header */}
-            <div className="px-6 py-5 border-b border-theme-border flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-lg font-bold text-theme-text">Garbage Collection Tonnage</h3>
-                <p className="text-xs text-theme-text-dim font-medium mt-0.5">
-                  Today's zone-wise garbage collection breakdown
-                </p>
+            <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-200/60 flex items-center justify-center shrink-0">
+                  <span className="text-lg">🚛</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-theme-text leading-tight">Garbage Collection Tonnage</h3>
+                  <p className="text-[10px] text-theme-text-dim font-semibold mt-0.5 uppercase tracking-wider">Today's zone-wise breakdown</p>
+                </div>
               </div>
               <button 
                 onClick={() => setIsGarbageDrawerOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
+                className="min-w-[44px] min-h-[44px] w-10 h-10 rounded-full flex items-center justify-center bg-theme-base/60 hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
               >
-                <X size={20} strokeWidth={2.5} />
+                <X size={18} strokeWidth={2.5} />
               </button>
             </div>
             
             {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-5 custom-scrollbar">
               {/* Overall KPIs */}
-              <div className="bg-theme-elevated border border-theme-border rounded-2xl p-5 flex flex-col gap-4">
+              <div className="bg-linear-to-br from-emerald-50/80 to-theme-elevated border border-emerald-200/30 rounded-2xl p-5 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-theme-text-dim uppercase tracking-wider">Total Tonnage Collected</span>
-                  <span className="text-2xl font-black text-amber-500">{totalTonsCollected.toFixed(1)} Tons</span>
+                  <span className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider">Total Tonnage Collected</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-emerald-600 leading-none">{totalTonsCollected.toFixed(1)}</span>
+                    <span className="text-xs font-bold text-emerald-400">Tons</span>
+                  </div>
                 </div>
                 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase">Total Valid Trips</span>
-                    <span className="text-lg font-extrabold text-theme-text mt-1">{totalValidTrips}</span>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="bg-theme-card/80 border border-theme-border rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Valid Trips</span>
+                    <span className="text-lg font-black text-theme-text">{totalValidTrips}</span>
                   </div>
-                  <div className="bg-theme-card border border-theme-border rounded-xl p-3 flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase">Active Compactor Zones</span>
-                    <span className="text-lg font-extrabold text-theme-text mt-1">{zoneTonnages.length}</span>
+                  <div className="bg-theme-card/80 border border-theme-border rounded-xl p-3 flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">Active Zones</span>
+                    <span className="text-lg font-black text-theme-text">{zoneTonnages.length}</span>
                   </div>
                 </div>
               </div>
 
               {/* Zone Breakdown */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold text-theme-text-dim uppercase tracking-wider px-1">Zone Wise Breakdown</h4>
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider px-1 flex items-center gap-2">
+                  <span className="w-4 h-[2px] bg-emerald-400 rounded-full" />
+                  Zone Wise Breakdown
+                </h4>
                 
                 {zoneTonnages.length === 0 ? (
                   <div className="text-center py-10 text-theme-text-dim text-xs font-semibold">
@@ -506,21 +537,24 @@ export default function HomePage() {
                   zoneTonnages.map((zone) => {
                     const pctOfTotal = totalTonsCollected > 0 ? (zone.tons / totalTonsCollected) * 100 : 0;
                     return (
-                      <div key={zone.name} className="bg-theme-elevated border border-theme-border rounded-2xl p-4 flex flex-col gap-3">
+                      <div key={zone.name} className="bg-theme-elevated/50 border border-theme-border/60 rounded-xl p-4 flex flex-col gap-3 hover:border-emerald-200/60 transition-colors">
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="font-bold text-theme-text text-sm block">{zone.name}</span>
-                            <span className="text-[10px] text-theme-text-dim font-bold mt-0.5 block">
-                              Valid Trips: {zone.trips}
+                            <span className="text-[10px] text-theme-text-dim font-semibold mt-0.5 block">
+                              {zone.trips} valid trips
                             </span>
                           </div>
-                          <span className="font-extrabold text-theme-text text-base">{zone.tons.toFixed(1)} Tons</span>
+                          <div className="flex items-baseline gap-0.5">
+                            <span className="text-lg font-black text-theme-text leading-none">{zone.tons.toFixed(1)}</span>
+                            <span className="text-[10px] font-bold text-theme-text-dim ml-0.5">T</span>
+                          </div>
                         </div>
                         
                         {/* Progress Bar */}
-                        <div className="w-full bg-theme-base h-2 rounded-full overflow-hidden">
+                        <div className="w-full bg-theme-base h-1.5 rounded-full overflow-hidden">
                           <div 
-                            className="h-full rounded-full bg-amber-500 transition-all duration-500 ease-out"
+                            className="h-full rounded-full bg-emerald-500 transition-all duration-700 ease-out"
                             style={{ width: `${pctOfTotal}%` }}
                           />
                         </div>

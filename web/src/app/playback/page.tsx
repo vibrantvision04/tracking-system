@@ -3070,7 +3070,7 @@ export default function PlaybackPage() {
       </div>
 
       {/* Map and Floating Panels Area */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative min-h-[300px] overflow-hidden">
         
         {/* Leaflet Map takes full size and serves as the background */}
         <div ref={box} className="absolute inset-0 z-0 bg-theme-base w-full h-full" />

@@ -17,20 +17,20 @@ export default function DashboardGrid({
   return (
     <div className="flex-1 flex flex-col xl:flex-row min-h-0 relative bg-theme-base">
       {/* Left Column: Data Rows */}
-      <div className="w-full xl:w-[50%] flex flex-col h-full overflow-y-auto custom-scrollbar p-6 bg-transparent border-r border-theme-border">
-        <div className="max-w-5xl mx-auto w-full space-y-6">
+      <div className="w-full xl:w-[50%] flex flex-col h-full overflow-y-auto custom-scrollbar p-4 sm:p-5 lg:p-6 bg-transparent border-r border-theme-border">
+        <div className="max-w-5xl mx-auto w-full space-y-4 sm:space-y-5 lg:space-y-6">
           
           {/* Greeting Card */}
           {greetingCard}
           
-          {/* Row 1: Summary KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {/* Row 1: Summary KPI Cards - 1-col mobile, 2-col tablet, 3-col desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
             {row1}
           </div>
 
-          {/* Row 2 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="flex flex-col gap-6">
+          {/* Row 2: 1-col mobile, 2-col desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
+            <div className="flex flex-col gap-4 sm:gap-5 lg:gap-6">
               {row2Left}
             </div>
             <div className="h-full">
@@ -45,9 +45,9 @@ export default function DashboardGrid({
             </div>
           )}
 
-          {/* Row 3 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
-            <div className="flex flex-col gap-6">
+          {/* Row 3: 1-col mobile, 2-col desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 lg:gap-6 pb-4 sm:pb-5 lg:pb-6">
+            <div className="flex flex-col gap-4 sm:gap-5 lg:gap-6">
               {row3Left}
             </div>
             <div className="h-full">
@@ -58,8 +58,8 @@ export default function DashboardGrid({
         </div>
       </div>
 
-      {/* Right Column: Map */}
-      <div className="w-full xl:w-[50%] flex flex-col p-6 h-[600px] xl:h-full shrink-0 xl:shrink bg-transparent">
+      {/* Right Column: Map - full-width stacked below on mobile/tablet, side-by-side at xl: */}
+      <div className="w-full xl:w-[50%] flex flex-col p-4 sm:p-5 lg:p-6 min-h-[300px] sm:min-h-[350px] h-[350px] sm:h-[400px] xl:h-full shrink-0 xl:shrink bg-transparent">
         {mapCard}
       </div>
     </div>

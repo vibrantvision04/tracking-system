@@ -85,7 +85,7 @@ export default function CrudDirectory({
   const defaultFormDesc = isEditing ? "Modify the fields below. Press Escape to close." : "Enter the details below. Press Escape to close.";
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-6 lg:p-8">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-4 sm:p-5 lg:p-8">
       
       <PageHeader
         title={title}
@@ -109,12 +109,16 @@ export default function CrudDirectory({
             </CardHeader>
             <CardContent>
               <form onSubmit={onSubmit} className="space-y-4">
-                {formFields}
-                <div className="flex items-center gap-3 pt-2 border-t border-theme-border">
-                  <Button type="submit" variant="success" loading={submitting} loadingText="Submitting...">
+                {/* Form fields grid: 1-col on mobile, 2-col on tablet+.
+                    Wide fields (address, textarea, description) should use className="sm:col-span-2" */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {formFields}
+                </div>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2 border-t border-theme-border">
+                  <Button type="submit" variant="success" className="w-full sm:w-auto min-h-[44px]" loading={submitting} loadingText="Submitting...">
                     Submit
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => onFormOpenChange(false)}>
+                  <Button type="button" variant="outline" className="w-full sm:w-auto min-h-[44px]" onClick={() => onFormOpenChange(false)}>
                     Close
                   </Button>
                 </div>

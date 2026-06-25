@@ -46,7 +46,7 @@ export default function PageHeader({
           </nav>
         )}
         
-        <h1 className="text-2xl lg:text-3xl font-black text-slate-800 tracking-tight font-sans select-none leading-none pt-1">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-800 tracking-tight font-sans select-none leading-none pt-1">
           {title}
         </h1>
         
@@ -58,7 +58,7 @@ export default function PageHeader({
       </div>
 
       {actions && (
-        <div className="flex items-center gap-3 self-start md:self-center shrink-0">
+        <div className="flex items-center gap-3 self-stretch sm:self-start md:self-center shrink-0 *:w-full sm:*:w-auto">
           {actions}
         </div>
       )}

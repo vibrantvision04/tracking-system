@@ -41,7 +41,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden mx-4 sm:mx-0">
           <div className="px-8 pt-10 pb-6 text-center border-b border-slate-100">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center shadow-sm">
               <img src="/Jaipur_Municipal_Corporation_Logo.png" alt="JMC Logo" className="w-10 h-10 object-contain" />
@@ -61,7 +61,7 @@ export default function LoginPage() {
             )}
 
             <div className="space-y-1.5">
-              <label htmlFor="email" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              <label htmlFor="email" className="text-[13px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Email Address
               </label>
               <input
@@ -70,14 +70,14 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email"
-                className="w-full h-11 px-4 rounded-xl border border-slate-300 bg-slate-50 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+                className="w-full h-11 px-4 rounded-xl border border-slate-300 bg-slate-50 text-[16px] sm:text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
                 autoComplete="email"
                 autoFocus
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="password" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              <label htmlFor="password" className="text-[13px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Password
               </label>
               <div className="relative">
@@ -87,7 +87,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
-                  className="w-full h-11 px-4 pr-11 rounded-xl border border-slate-300 bg-slate-50 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+                  className="w-full h-11 px-4 pr-11 rounded-xl border border-slate-300 bg-slate-50 text-[16px] sm:text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
                   autoComplete="current-password"
                 />
                 <button

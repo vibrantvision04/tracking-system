@@ -33,8 +33,8 @@ export default function CoverageChart({
       }`}
     >
       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 leading-none">{title}</h3>
-      <div className="flex-1 relative min-h-[145px] flex items-center justify-center">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="flex-1 relative min-h-[120px] flex items-center justify-center w-full max-w-[90%] mx-auto">
+        <ResponsiveContainer width="100%" height="100%" minWidth={120}>
           <PieChart>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">

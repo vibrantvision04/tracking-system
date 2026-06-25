@@ -90,7 +90,7 @@ export default function Table({
                   <th
                     key={idx}
                     className={`${
-                      dense ? "px-2 py-2.5 text-[9px] font-black" : "px-3 sm:px-5 py-3.5 text-[10px] font-black"
+                      dense ? "px-2 py-2.5 text-[9px] font-black" : "px-2 py-2.5 sm:px-3 sm:py-3.5 text-[9px] sm:text-[10px] font-black"
                     } uppercase tracking-widest text-slate-400 whitespace-nowrap`}
                   >
                     {header}
@@ -125,7 +125,7 @@ export default function Table({
                   if (!React.isValidElement(child)) return child;
                   const existingClass: string = (child.props as { className?: string }).className ?? '';
                   return React.cloneElement(child as React.ReactElement<{ className?: string }>, {
-                    className: `${existingClass} ${dense ? "text-[11px]" : "text-xs"} hover:bg-slate-50 transition-colors duration-150`.trim(),
+                    className: `${existingClass} ${dense ? "text-[11px]" : "text-[11px] sm:text-xs"} hover:bg-slate-50 transition-colors duration-150`.trim(),
                   });
                 })
               )}

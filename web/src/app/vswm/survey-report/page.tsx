@@ -633,9 +633,9 @@ export default function SurveyReportPage() {
             onClick={() => setViewSupervisor(null)}
             className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
           />
-          <div className="relative w-full max-w-2xl bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0 overflow-y-auto custom-scrollbar">
+          <div className="relative w-full sm:w-[80%] sm:max-w-[80vw] lg:max-w-2xl bg-theme-card h-full shadow-2xl flex flex-col z-10 transition-transform duration-300 transform translate-x-0">
             {/* Header */}
-            <div className="px-6 py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
               <div>
                 <h3 className="text-lg font-bold text-theme-text">Supervisor Details</h3>
                 <p className="text-xs text-theme-text-dim font-medium mt-0.5">
@@ -644,14 +644,14 @@ export default function SurveyReportPage() {
               </div>
               <button
                 onClick={() => setViewSupervisor(null)}
-                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
+                className="min-w-[44px] min-h-[44px] w-10 h-10 rounded-full flex items-center justify-center hover:bg-theme-elevated transition text-theme-text-dim hover:text-theme-text"
               >
                 <X size={20} strokeWidth={2.5} />
               </button>
             </div>
 
             {/* Body */}
-            <div className="flex-1 px-6 py-5 space-y-6">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-6 custom-scrollbar">
               {/* Supervisor Information */}
               <div className="bg-theme-elevated border border-theme-border rounded-2xl p-5">
                 <h4 className="text-xs font-bold text-theme-text-dim uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -714,7 +714,7 @@ export default function SurveyReportPage() {
                   <MapPin size={14} />
                   Survey Map Statistics
                 </h4>
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                   <div className="text-center">
                     <span className="text-[10px] font-bold text-theme-text-dim uppercase block mb-1">Total Coordinates Captured</span>
                     <span className="font-bold text-xl text-emerald-600">

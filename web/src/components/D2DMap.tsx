@@ -1604,13 +1604,13 @@ export default function D2DMap() {
       </header>
 
       {/* Main Body */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         
         {/* Left Side: Map + Bottom Tables */}
         <div className="flex-1 flex flex-col min-w-0 h-full">
           
           {/* Map area */}
-          <div className="flex-1 relative bg-theme-surface">
+          <div className="flex-1 relative min-h-[250px] sm:min-h-[300px] bg-theme-surface">
             <div ref={containerRef} className="absolute inset-0 z-0" />
             
             {/* Quick search floating overlay */}

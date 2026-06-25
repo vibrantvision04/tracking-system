@@ -21,7 +21,7 @@ export default function MainHeader() {
       <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-theme-text-dim hover:text-theme-text rounded-lg hover:bg-theme-elevated transition-colors shrink-0"
+          className="w-9 h-9 sm:w-10 sm:h-10 min-w-[44px] min-h-[44px] flex items-center justify-center text-theme-text-dim hover:text-theme-text rounded-lg hover:bg-theme-elevated transition-colors shrink-0"
           title="Toggle Navigation Menu"
         >
           <Menu className="w-5 h-5 text-emerald-600" />
@@ -33,6 +33,9 @@ export default function MainHeader() {
             className="h-10 w-[52px] sm:h-12 sm:w-[62px] object-contain shrink-0 hover:scale-105 transition-transform duration-200"
           />
         </a>
+        {/* Mobile-only compact title */}
+        <span className="text-xs font-black text-theme-text uppercase sm:hidden">SWIFT</span>
+        {/* Desktop title - hidden on mobile */}
         <div className="flex-col min-w-0 hidden sm:flex">
           <h1 className="text-[10px] sm:text-sm font-extrabold text-theme-text tracking-tight leading-none uppercase truncate">
             SWIFT - NAGAR NIGAM JAIPUR

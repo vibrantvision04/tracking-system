@@ -378,7 +378,7 @@ export default function Sidebar() {
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="text-theme-text-dim hover:text-theme-text transition-colors absolute top-4 right-4 hover:bg-theme-elevated p-1 rounded-lg"
+            className="text-theme-text-dim hover:text-theme-text transition-colors absolute top-4 right-4 hover:bg-theme-elevated p-1 rounded-lg min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
@@ -456,6 +456,62 @@ export default function Sidebar() {
                     )}
                   </button>
                 )}
+
+                {/* Mobile/Tablet inline sub-menu (accordion) - hidden on desktop where flyout is used */}
+                {hasChildren && isActive && (
+                  <div className="lg:hidden mt-0.5 ml-4 pl-3 border-l-2 border-emerald-200/60 space-y-0.5 py-1">
+                    {category.children.map((sub: any) => {
+                      const hasSubChildren = sub.children && sub.children.length > 0;
+                      return (
+                        <div key={sub.label}>
+                          {sub.href ? (
+                            <Link
+                              href={sub.href}
+                              prefetch={false}
+                              onClick={() => {
+                                setSidebarOpen(false);
+                                setActiveCategory(null);
+                              }}
+                              className={`block px-2.5 py-1.5 rounded-md text-[11px] transition-colors ${
+                                path === sub.href
+                                  ? "text-[#10B981] font-semibold bg-emerald-50/50"
+                                  : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated"
+                              }`}
+                            >
+                              {sub.label}
+                            </Link>
+                          ) : (
+                            <div className="px-2.5 pt-2 pb-1 text-[9px] font-bold text-theme-text-dim uppercase tracking-wider">
+                              {sub.label}
+                            </div>
+                          )}
+                          {hasSubChildren && (
+                            <div className="ml-2 space-y-0.5">
+                              {sub.children.map((item: any) => (
+                                <Link
+                                  key={item.label}
+                                  href={item.href}
+                                  prefetch={false}
+                                  onClick={() => {
+                                    setSidebarOpen(false);
+                                    setActiveCategory(null);
+                                  }}
+                                  className={`block px-2.5 py-1.5 rounded-md text-[11px] transition-colors ${
+                                    path === item.href
+                                      ? "text-[#10B981] font-semibold bg-emerald-50/50"
+                                      : "text-theme-text-dim hover:text-theme-text hover:bg-theme-elevated"
+                                  }`}
+                                >
+                                  {item.label}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -487,33 +543,35 @@ export default function Sidebar() {
       </aside>
 
       {/* Flyout Mega Menu - Glassmorphism & Slide-in Animation */}
-      <div
-        ref={flyoutRef}
-        onMouseEnter={() => {
-          if (closeTimeoutRef.current) {
-            clearTimeout(closeTimeoutRef.current);
-            closeTimeoutRef.current = null;
-          }
-        }}
-        onMouseLeave={() => {
-          closeTimeoutRef.current = setTimeout(() => {
-            setActiveCategory(null);
-          }, 250);
-        }}
-        className={`fixed z-[10003] bg-theme-surface/95 backdrop-blur-xl border border-theme-border rounded-xl shadow-2xl flex flex-col h-fit
-          transition-all duration-300 ease-out
-          left-[260px]
-          ${activeCategory
-            ? "opacity-100 translate-x-0"
-            : "opacity-0 -translate-x-4 pointer-events-none"
-          }
-        `}
-        style={{
-          top: `${flyoutTop}px`,
-          maxHeight: `calc(100vh - ${flyoutTop + 16}px)`,
-          width: (activeCategory || renderedCategory) === "Reports" ? "600px" : "350px"
-        }}
-      >
+      {/* Hidden on mobile/tablet, visible on desktop only */}
+      <div className="hidden lg:block">
+        <div
+          ref={flyoutRef}
+          onMouseEnter={() => {
+            if (closeTimeoutRef.current) {
+              clearTimeout(closeTimeoutRef.current);
+              closeTimeoutRef.current = null;
+            }
+          }}
+          onMouseLeave={() => {
+            closeTimeoutRef.current = setTimeout(() => {
+              setActiveCategory(null);
+            }, 250);
+          }}
+          className={`fixed z-[10003] bg-theme-surface/95 backdrop-blur-xl border border-theme-border rounded-xl shadow-2xl flex flex-col h-fit
+            transition-all duration-300 ease-out
+            left-[260px]
+            ${activeCategory
+              ? "opacity-100 translate-x-0"
+              : "opacity-0 -translate-x-4 pointer-events-none"
+            }
+          `}
+          style={{
+            top: `${flyoutTop}px`,
+            maxHeight: `calc(100vh - ${flyoutTop + 16}px)`,
+            width: (activeCategory || renderedCategory) === "Reports" ? "600px" : "350px"
+          }}
+        >
         {currentCategoryData && (
           <>
             {/* Header */}
@@ -587,6 +645,7 @@ export default function Sidebar() {
             </div>
           </>
         )}
+        </div>
       </div>
     </>
   );
