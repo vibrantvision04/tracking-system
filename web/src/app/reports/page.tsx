@@ -7,6 +7,7 @@ import Table from "@/components/shared/Table";
 import { DatePicker } from "@/components/ui/DatePicker";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import ReportHeader from "@/components/shared/ReportHeader";
 
 interface MovementReport {
   id: number;
@@ -235,13 +236,7 @@ export default function ReportsPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-theme-base text-theme-text overflow-hidden font-sans">
-      {/* Sub-header with Title */}
-      <div className="bg-theme-surface px-6 py-3 border-b border-theme-border shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-theme-text">Vehicle Movement Report</h2>
-          <div className="h-[3px] w-8 bg-[#16A34A] mt-1"></div>
-        </div>
-      </div>
+      <ReportHeader title="Vehicle Movement Report" />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
         <div className="w-full mx-auto">
