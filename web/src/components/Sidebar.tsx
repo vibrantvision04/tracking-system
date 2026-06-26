@@ -26,11 +26,7 @@ import {
 } from "lucide-react";
 
 const fullNavData = [
-  {
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    href: "/",
-  },
+ 
 
   {
     label: "Vehicles",
@@ -244,11 +240,7 @@ const fullNavData = [
     icon: Rewind,
     href: "/playback",
   },
-  {
-    label: "Users",
-    icon: Users,
-    href: "/vswm/role-user",
-  },
+
 ];
 
 const adminOnlySections = new Set(["Users"]);
