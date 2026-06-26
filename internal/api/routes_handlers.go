@@ -689,6 +689,16 @@ func (h *Handler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 	// Sync checkpoints and lane points (from Lanes or GeoJSON)
 	syncRouteCheckpointsAndLanePoints(ctx, h, routeID, req.RouteName, req.Lanes, req.GeoJSON)
 
+	// The route's lane points were just deleted and re-created with new IDs, so any
+	// previously stored coverage now references stale IDs and would show wrong/zero
+	// values. Invalidate it; the next report Load recomputes fresh from GPS.
+	// (No calculation logic is changed — only the stale cache is cleared.)
+	if err := h.routeRepo.InvalidateRouteCoverage(ctx, routeID); err != nil {
+		// Non-fatal: the route update itself succeeded. Log and continue; a forced
+		// recompute on next Load will still correct the data.
+		fmt.Println("UpdateRoute: failed to invalidate stale coverage for route", routeID, ":", err)
+	}
+
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 	})

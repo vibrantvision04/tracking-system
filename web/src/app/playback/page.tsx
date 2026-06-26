@@ -853,6 +853,8 @@ export default function PlaybackPage() {
     layer.clearLayers();
 
     if (!showPlannedRoute) return;
+    // Don't draw all routes when nothing is selected (e.g., after reset)
+    if (!selectedImei && (!selectedRouteId || selectedRouteId === "")) return;
 
     const L = require("leaflet");
 
@@ -2840,7 +2842,7 @@ export default function PlaybackPage() {
   const handleReset = () => {
     setSelectedZoneId("");
     setSelectedWardId("");
-    setSelectedShift("Morning Shift");
+    setSelectedShift("");
     setSelectedImei("");
     setDate(new Date().toISOString().split("T")[0]);
     setSelectedRouteId("");
@@ -2848,18 +2850,18 @@ export default function PlaybackPage() {
     setDriverDetails(null);
     setTransferStationTrips(0);
     
-    // Reset all visibility toggles
-    setShowPlannedRoute(true);
-    setShowActualMovement(true);
-    setShowRawPlayback(true);
+    // Reset all visibility toggles — set to false so no leftover layers appear
+    setShowPlannedRoute(false);
+    setShowActualMovement(false);
+    setShowRawPlayback(false);
     setShowRawGpsTrace(false);
     setShowRegionBoundary(true);
-    setShowStartEndPoint(true);
-    setShowStoppages(true);
-    setShowMajorStoppages(true);
-    setShowMiniStoppages(true);
-    setShowCoveredCheckpoints(true);
-    setShowUncoveredCheckpoints(true);
+    setShowStartEndPoint(false);
+    setShowStoppages(false);
+    setShowMajorStoppages(false);
+    setShowMiniStoppages(false);
+    setShowCoveredCheckpoints(false);
+    setShowUncoveredCheckpoints(false);
     
     clearPlaybackLayers();
   };
