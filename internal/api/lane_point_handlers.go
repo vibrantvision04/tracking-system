@@ -161,7 +161,7 @@ func (h *Handler) GetVehicleLanePointCoverage(w http.ResponseWriter, r *http.Req
 	}
 
 	if localForceRecalc || !hasHistory {
-		proximityMeters := 10.0
+		proximityMeters := CoverageProximityMeters()
 		err = RecalculateLanePointCoverage(ctx, h.gpsRepo, h.routeRepo, vehicleID, routeID, dateStr, proximityMeters, useReconstructed)
 		if err != nil {
 			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to recalculate lane point coverage: " + err.Error()})

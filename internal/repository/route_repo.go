@@ -534,6 +534,92 @@ type CheckpointHitLog struct {
 	HitTime       time.Time
 }
 
+// GetLanePointCountsByRoutes returns a map of routeID -> lane point count for the
+// given routes in a single query. Used by the D2D report to avoid an N+1
+// GetCheckpointsByRoute call per (vehicle, route, date) row.
+func (r *RouteRepository) GetLanePointCountsByRoutes(ctx context.Context, routeIDs []int) (map[int]int, error) {
+	counts := make(map[int]int)
+	if len(routeIDs) == 0 {
+		return counts, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT route_id, COUNT(*)
+		FROM route_lane_points
+		WHERE route_id = ANY($1)
+		GROUP BY route_id
+	`, routeIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var routeID, cnt int
+		if err := rows.Scan(&routeID, &cnt); err != nil {
+			return nil, err
+		}
+		counts[routeID] = cnt
+	}
+	return counts, rows.Err()
+}
+
+// CoverageRangeKey builds the map key used by GetCoverageHitLogsForRange.
+func CoverageRangeKey(vehicleID, routeID int, date string) string {
+	return fmt.Sprintf("%d|%d|%s", vehicleID, routeID, date)
+}
+
+// GetCoverageHitLogsForRange batch-loads achieved coverage hit logs for every
+// (vehicle, route, date) in the date range in a single query, keyed by
+// coverageRangeKey. This replaces the per-row GetCoverageHitLogs query in the D2D
+// report for the common case where coverage is already computed. Parsing matches
+// GetCoverageHitLogs exactly so computed percentages are identical.
+func (r *RouteRepository) GetCoverageHitLogsForRange(ctx context.Context, fromDate, toDate string) (map[string][]CheckpointHitLog, error) {
+	result := make(map[string][]CheckpointHitLog)
+	rows, err := r.db.Query(ctx, `
+		SELECT vehicle_id, route_id, TO_CHAR(report_date, 'YYYY-MM-DD'), details
+		FROM vehicle_lane_point_coverage
+		WHERE report_date >= $1 AND report_date <= $2
+	`, fromDate, toDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type Detail struct {
+		LanePointID int        `json:"lane_point_id"`
+		Status      string     `json:"status"`
+		HitTime     *time.Time `json:"hit_time"`
+	}
+
+	for rows.Next() {
+		var vehicleID, routeID int
+		var date string
+		var detailsJSON []byte
+		if err := rows.Scan(&vehicleID, &routeID, &date, &detailsJSON); err != nil {
+			return nil, err
+		}
+
+		var details []Detail
+		if len(detailsJSON) > 0 {
+			if err := json.Unmarshal(detailsJSON, &details); err != nil {
+				continue
+			}
+		}
+
+		var logs []CheckpointHitLog
+		for _, d := range details {
+			if d.Status == "achieved" && d.HitTime != nil {
+				logs = append(logs, CheckpointHitLog{
+					CheckpointID:  d.LanePointID,
+					SequenceOrder: d.LanePointID,
+					HitTime:       *d.HitTime,
+				})
+			}
+		}
+		result[CoverageRangeKey(vehicleID, routeID, date)] = logs
+	}
+	return result, rows.Err()
+}
+
 func (r *RouteRepository) GetCoverageHitLogs(ctx context.Context, vehicleID, routeID int, date string) ([]CheckpointHitLog, error) {
 	var detailsJSON []byte
 	err := r.db.QueryRow(ctx, `
@@ -636,6 +722,42 @@ func (r *RouteRepository) HasCoverageRecords(ctx context.Context, vehicleID, rou
 	`
 	var exists bool
 	err := r.db.QueryRow(ctx, query, vehicleID, routeID, date).Scan(&exists)
+	return exists, err
+}
+
+// InvalidateRouteCoverage deletes all stored coverage for a route across both the
+// SSOT (vehicle_lane_point_coverage) and the legacy tables. It is called when a
+// route's geometry/lane points change, because the stored coverage references the
+// old lane-point IDs and would otherwise show stale/zero values. Coverage is
+// derived data and is fully recomputed from raw GPS on the next report Load, so
+// this is safe and reversible. It does NOT change any calculation logic.
+func (r *RouteRepository) InvalidateRouteCoverage(ctx context.Context, routeID int) error {
+	stmts := []string{
+		"DELETE FROM vehicle_lane_point_coverage WHERE route_id = $1",
+		"DELETE FROM vehicle_lane_point_logs WHERE route_id = $1",
+		"DELETE FROM route_coverage_logs WHERE route_id = $1",
+		"DELETE FROM route_coverage_miss_reasons WHERE route_id = $1",
+	}
+	for _, q := range stmts {
+		if _, err := r.db.Exec(ctx, q, routeID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HasLanePointCoverage reports whether a coverage row exists in the single source
+// of truth (vehicle_lane_point_coverage) for the given vehicle, route, and date.
+// This is the SSOT-aware "has history" check used by reports that read coverage
+// from vehicle_lane_point_coverage (D2D, Shift-Based Ops).
+func (r *RouteRepository) HasLanePointCoverage(ctx context.Context, vehicleID, routeID int, date string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM vehicle_lane_point_coverage
+			WHERE vehicle_id = $1 AND route_id = $2 AND report_date = $3
+		)
+	`, vehicleID, routeID, date).Scan(&exists)
 	return exists, err
 }
 

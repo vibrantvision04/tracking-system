@@ -167,12 +167,44 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 
 	startTime := time.Now()
 
+	// Performance: batch-load the two things every row otherwise queries individually.
+	// 1) Lane-point counts per distinct route (replaces per-row GetCheckpointsByRoute).
+	// 2) All existing coverage hit logs for the date range (replaces per-row reads on
+	//    the common "already computed" path). This collapses an N+1 query pattern over
+	//    (vehicle, route, date) into two queries. Calculation logic is unchanged.
+	routeIDSet := make(map[int]struct{})
+	for _, a := range assignments {
+		routeIDSet[a.RouteID] = struct{}{}
+	}
+	distinctRouteIDs := make([]int, 0, len(routeIDSet))
+	for id := range routeIDSet {
+		distinctRouteIDs = append(distinctRouteIDs, id)
+	}
+	checkpointCounts, err := h.routeRepo.GetLanePointCountsByRoutes(ctx, distinctRouteIDs)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch lane point counts: " + err.Error()})
+		return
+	}
+	coverageByKey, err := h.routeRepo.GetCoverageHitLogsForRange(ctx, fromDate.Format("2006-01-02"), toDate.Format("2006-01-02"))
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch coverage logs: " + err.Error()})
+		return
+	}
+
 	var filtered []interface{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
 	var vehiclesProcessed int64
 	var vehiclesFailed int64
+
+	// Bound the per-vehicle recompute fan-out. Without this cap, every vehicle
+	// assignment spawned a goroutine that could trigger a full GPS recalculation
+	// simultaneously, exhausting the DB connection pool and causing the request
+	// to hang ("spins forever") at production scale, especially on today's date
+	// where recompute is forced. A small worker pool keeps DB pressure bounded.
+	const maxConcurrentVehicles = 12
+	sem := make(chan struct{}, maxConcurrentVehicles)
 
 	for _, a := range assignments {
 		// Apply filters
@@ -196,36 +228,19 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 		go func(a repository.CoverageReportRow) {
 			defer wg.Done()
 
+			// Acquire a worker slot; release on completion. This bounds the
+			// number of concurrent GPS recalculations to maxConcurrentVehicles.
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			// Create a separate context with a 30-second timeout for the goroutine
 			// to prevent HTTP request cancellation from truncating DB operations
 			runCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			// Calculate Coverage
-			cps, err := h.routeRepo.GetCheckpointsByRoute(runCtx, a.RouteID)
-			if err != nil {
-				log.Error().Err(err).
-					Int("vehicle_id", a.VehicleID).
-					Int("route_id", a.RouteID).
-					Str("date", a.Date).
-					Msg("Failed to get checkpoints for D2D report")
-				a.CoveredPercentage = 0
-				a.InOrderPercentage = 0
-
-				atomic.AddInt64(&vehiclesFailed, 1)
-				atomic.AddInt64(&vehiclesProcessed, 1)
-
-				dbg.Log("[D2D][RESPONSE_ROW] request_id=%s vehicle_id=%d included_in_response=true coverage_percentage=0.0 hit_count=0 reason_if_skipped=%q",
-					requestID, a.VehicleID, "GetCheckpointsByRoute failed: " + err.Error())
-				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=VEHICLE_SKIPPED reason=%q", requestID, a.VehicleID, "GetCheckpointsByRoute failed: " + err.Error()))
-
-				mu.Lock()
-				filtered = append(filtered, a)
-				mu.Unlock()
-				return
-			}
-
-			a.TotalCheckpoints = len(cps)
+			// Calculate Coverage — lane-point count from the prefetched map
+			// (replaces a per-row GetCheckpointsByRoute query; identical to len(cps)).
+			a.TotalCheckpoints = checkpointCounts[a.RouteID]
 			if a.TotalCheckpoints == 0 {
 				a.CoveredPercentage = 0
 				a.InOrderPercentage = 0
@@ -241,57 +256,75 @@ func (h *Handler) GetD2DRouteCoverageReport(w http.ResponseWriter, r *http.Reque
 				return
 			}
 
-			// Check if we already have coverage records for this vehicle, route, and date
+			coverageKey := repository.CoverageRangeKey(a.VehicleID, a.RouteID, a.Date)
+
+			// Check if we already have coverage records for this vehicle, route, and date.
+			// U1: read/write the single source of truth (vehicle_lane_point_coverage) via
+			// Engine B, so Recalculate refreshes exactly what Load later reads.
 			isToday := (a.Date == utils.CurrentTimeInIndia().Format("2006-01-02"))
 			localForceRecalc := forceRecalc || isToday
 
-			var hasHistory bool
-			var histErr error
-			if !localForceRecalc {
-				hasHistory, histErr = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
-				if histErr != nil {
-					log.Error().Err(histErr).Int("vehicle_id", a.VehicleID).Str("date", a.Date).Msg("Failed to check coverage history")
-					hasHistory = false
-				}
-			}
+			// hasHistory comes from the prefetched coverage map (no per-row query).
+			_, hasHistory := coverageByKey[coverageKey]
+			recomputed := false
 
 			if localForceRecalc || !hasHistory {
 				// Acquire lock for this vehicle/route/date
 				recalcMu := getRecalcMutex(a.VehicleID, a.RouteID, a.Date)
 				recalcMu.Lock()
 
-				// Re-check hasHistory under the lock to avoid redundant calculation
-				if !localForceRecalc && histErr == nil {
-					hasHistory, _ = h.routeRepo.HasCoverageRecords(runCtx, a.VehicleID, a.RouteID, a.Date)
+				// Re-check under the lock against the SSOT to avoid a redundant
+				// recompute if another request already populated this key.
+				doRecalc := localForceRecalc
+				if !localForceRecalc {
+					if exists, _ := h.routeRepo.HasLanePointCoverage(runCtx, a.VehicleID, a.RouteID, a.Date); !exists {
+						doRecalc = true
+					}
 				}
 
-				if localForceRecalc || !hasHistory {
-					recalculateCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh, a.Imei, dbg)
+				if doRecalc {
+					useRecon := RouteUsesReconstruction(runCtx, h.gpsRepo, a.RouteID)
+					if err := RecalculateLanePointCoverage(runCtx, h.gpsRepo, h.routeRepo, a.VehicleID, a.RouteID, a.Date, CoverageProximityMeters(), useRecon); err != nil {
+						log.Error().Err(err).Int("vehicle_id", a.VehicleID).Int("route_id", a.RouteID).Str("date", a.Date).Msg("Engine B coverage recalculation failed for D2D report")
+						if dbg != nil {
+							dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=ENGINE_B_RECALC_FAILED err=%q", requestID, a.VehicleID, err.Error()))
+						}
+					} else {
+						recomputed = true
+					}
 				}
 				recalcMu.Unlock()
 			}
 
-			logs, err := h.routeRepo.GetCoverageHitLogs(runCtx, a.VehicleID, a.RouteID, a.Date)
-			if err != nil {
-				log.Error().Err(err).
-					Int("vehicle_id", a.VehicleID).
-					Int("route_id", a.RouteID).
-					Str("date", a.Date).
-					Msg("Failed to get coverage logs for D2D report")
-				a.CoveredPercentage = 0
-				a.InOrderPercentage = 0
+			// Use prefetched logs on the cached path; query individually only when this
+			// key was (re)computed during this request.
+			var logs []repository.CheckpointHitLog
+			if recomputed {
+				freshLogs, err := h.routeRepo.GetCoverageHitLogs(runCtx, a.VehicleID, a.RouteID, a.Date)
+				if err != nil {
+					log.Error().Err(err).
+						Int("vehicle_id", a.VehicleID).
+						Int("route_id", a.RouteID).
+						Str("date", a.Date).
+						Msg("Failed to get coverage logs for D2D report")
+					a.CoveredPercentage = 0
+					a.InOrderPercentage = 0
 
-				atomic.AddInt64(&vehiclesFailed, 1)
-				atomic.AddInt64(&vehiclesProcessed, 1)
+					atomic.AddInt64(&vehiclesFailed, 1)
+					atomic.AddInt64(&vehiclesProcessed, 1)
 
-				dbg.Log("[D2D][RESPONSE_ROW] request_id=%s vehicle_id=%d included_in_response=true coverage_percentage=0.0 hit_count=0 reason_if_skipped=%q",
-					requestID, a.VehicleID, "GetCoverageHitLogs failed: " + err.Error())
-				dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=VEHICLE_SKIPPED reason=%q", requestID, a.VehicleID, "GetCoverageHitLogs failed: " + err.Error()))
+					dbg.Log("[D2D][RESPONSE_ROW] request_id=%s vehicle_id=%d included_in_response=true coverage_percentage=0.0 hit_count=0 reason_if_skipped=%q",
+						requestID, a.VehicleID, "GetCoverageHitLogs failed: "+err.Error())
+					dbg.LogCritical(fmt.Sprintf("request_id=%s vehicle_id=%d event=VEHICLE_SKIPPED reason=%q", requestID, a.VehicleID, "GetCoverageHitLogs failed: "+err.Error()))
 
-				mu.Lock()
-				filtered = append(filtered, a)
-				mu.Unlock()
-				return
+					mu.Lock()
+					filtered = append(filtered, a)
+					mu.Unlock()
+					return
+				}
+				logs = freshLogs
+			} else {
+				logs = coverageByKey[coverageKey]
 			}
 
 			uniqueHits := make(map[int]bool)
@@ -1095,17 +1128,23 @@ func (h *Handler) GetShiftBasedOpsReport(w http.ResponseWriter, r *http.Request)
 			if err == nil && len(cps) > 0 {
 				opDateStr := opDate.Format("2006-01-02")
 				
-				// Re-calculate if today, or if force is true, or if no logs exist
+				// Re-calculate if today, or if force is true, or if no logs exist.
+				// U1: read/write the single source of truth via Engine B (full-day),
+				// matching what GetCoverageHitLogs reads below. Shift-window coverage
+				// is intentionally deferred to a later feature.
 				isToday := opDateStr == utils.CurrentTimeInIndia().Format("2006-01-02")
 				localForceRecalc := forceRecalc || isToday
 				
 				hasHistory := false
 				if !localForceRecalc {
-					hasHistory, _ = h.routeRepo.HasCoverageRecords(ctx, v.ID, routeID, opDateStr)
+					hasHistory, _ = h.routeRepo.HasLanePointCoverage(ctx, v.ID, routeID, opDateStr)
 				}
 
 				if localForceRecalc || !hasHistory {
-					recalculateShiftCoverage(ctx, h.gpsRepo, h.routeRepo, v.ID, routeID, opDateStr, actualStart, actualEnd, h.routeEngine.RequireSequentialCheckpoints, h.routeEngine.MaxCheckpointSpeedKmh, v.GpsDevice.IMEI, nil)
+					useRecon := RouteUsesReconstruction(ctx, h.gpsRepo, routeID)
+					if err := RecalculateLanePointCoverage(ctx, h.gpsRepo, h.routeRepo, v.ID, routeID, opDateStr, CoverageProximityMeters(), useRecon); err != nil {
+						log.Error().Err(err).Int("vehicle_id", v.ID).Int("route_id", routeID).Str("date", opDateStr).Msg("Engine B coverage recalculation failed for Shift-Based Ops report")
+					}
 				}
 
 				// Query hits

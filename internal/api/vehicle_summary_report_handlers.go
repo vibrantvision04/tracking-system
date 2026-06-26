@@ -208,7 +208,7 @@ func (h *Handler) GetVehicleSummaryReport(w http.ResponseWriter, r *http.Request
 
 				// Recalculate route coverage if route is resolved
 				if rv.RouteID != nil {
-					_ = RecalculateLanePointCoverage(context.Background(), h.gpsRepo, h.routeRepo, rv.ID, *rv.RouteID, dateStr, 50.0, false)
+					_ = RecalculateLanePointCoverage(context.Background(), h.gpsRepo, h.routeRepo, rv.ID, *rv.RouteID, dateStr, CoverageProximityMeters(), RouteUsesReconstruction(context.Background(), h.gpsRepo, *rv.RouteID))
 				}
 			}
 		}(rv)

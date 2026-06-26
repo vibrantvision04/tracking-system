@@ -349,3 +349,64 @@ rest is reviewed.
 5. Do Class C (live) reports need any caching, or is their current direct-query performance
    acceptable at production scale?
 ```
+
+---
+
+## 11. Implementation Findings (Phase 0 done; Phase 1 blocker discovered)
+
+### 11.1 Phase 0 — shipped
+- **Bounded worker pool** added to `GetD2DRouteCoverageReport` (`maxConcurrentVehicles = 12`)
+  to stop the unbounded goroutine fan-out that caused today's report to hang. Builds clean.
+- **Force Recalculate button** restored on the D2D report page (gated by
+  `allowHistoricalRecalculation`, wired to `handleLoad(true)`), giving operators immediate
+  manual relief for stale/zero historical data.
+
+### 11.2 Discovery that changes Phase 1 design — DUAL coverage subsystems
+
+D2D's read path and recompute path use **different tables**:
+
+| Concern | Function | Table(s) |
+|---------|----------|----------|
+| "Has history?" | `HasCoverageRecords` | `route_coverage_logs`, `route_coverage_miss_reasons` |
+| Recompute writes | `recalculateCoverage` | `route_coverage_logs`, `route_coverage_miss_reasons` (NOT `vehicle_lane_point_coverage`) |
+| **Data actually read for %** | `GetCoverageHitLogs` | **`vehicle_lane_point_coverage.details`** |
+
+`vehicle_lane_point_coverage` is populated by a **separate** lane-point engine
+(`RecalculateLanePointCoverage` / `UpsertVehicleLanePointLogs`), not by `recalculateCoverage`.
+So D2D recomputes one store but reports from another. This pre-existing inconsistency means the
+original §5–§7 plan (which assumed a single coverage store to version) must be revised.
+
+### 11.3 Revised, lower-risk Phase 1 plan (recommended)
+
+Do **not** alter the read/write semantics of the existing coverage tables. Instead add an
+**additive, separate validity table** that both engines stamp and the loader consults:
+
+```sql
+CREATE TABLE IF NOT EXISTS coverage_validity (
+  vehicle_id    INT  NOT NULL,
+  route_id      INT  NOT NULL,
+  report_date   DATE NOT NULL,
+  route_version INT  NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'valid',  -- valid | stale
+  computed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (vehicle_id, route_id, report_date)
+);
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS current_version INT NOT NULL DEFAULT 1;
+```
+
+- **Route edit** → bump `routes.current_version`; `UPDATE coverage_validity SET status='stale'
+  WHERE route_id=$1 AND report_date < CURRENT_DATE`.
+- **Both recompute engines** → upsert `coverage_validity` with the route's current version and
+  `status='valid'` after a successful recompute.
+- **Smart Load** → if no validity row, or `status='stale'`, or `route_version <> current_version`
+  (and the date is historical) → trigger the existing recompute path; otherwise serve stored.
+
+This isolates the new logic from the tangled coverage internals and is fully reversible.
+
+### 11.4 Recommendation before proceeding
+The dual-subsystem inconsistency should be confirmed/acknowledged before building the validity
+layer, because the "correct" recompute path for D2D may itself need reconciliation (it currently
+recomputes a table it does not read for the percentage). Options:
+1. Proceed with the additive `coverage_validity` table approach above (safe, no behavior change
+   to existing reads), then separately reconcile the dual engines.
+2. First reconcile D2D to read and write the same store, then add versioning.

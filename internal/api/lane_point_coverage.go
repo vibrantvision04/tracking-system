@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"os"
+	"strconv"
 	"time"
 
 	"gps-tracking-system/internal/decoder"
@@ -227,6 +229,34 @@ func ValidateNonSequential(points []LanePoint, gpsPath []GPSCoord, proximityMete
 
 // RecalculateLanePointCoverage recalculates sequential lane point coverage for a vehicle,
 // route, and date and upserts the logs into the database.
+
+// CoverageProximityMeters returns the lane-point hit radius used by the unified
+// coverage engine (Engine B). It defaults to 10 m and can be tuned without a code
+// change via the COVERAGE_PROXIMITY_METERS environment variable.
+func CoverageProximityMeters() float64 {
+	if v := os.Getenv("COVERAGE_PROXIMITY_METERS"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			return f
+		}
+	}
+	return 10.0
+}
+
+// RouteUsesReconstruction reports whether coverage for the given route should use
+// the AI-reconstructed GPS path (when one exists for the date). It is driven by the
+// route's ai_coverage_recovery_enabled flag; when disabled or unreadable, coverage
+// falls back to raw GPS. This keeps coverage consistent with the route's AI config.
+func RouteUsesReconstruction(ctx context.Context, gpsRepo *repository.GPSRepository, routeID int) bool {
+	var enabled bool
+	err := gpsRepo.Pool().QueryRow(ctx,
+		"SELECT COALESCE(ai_coverage_recovery_enabled, false) FROM routes WHERE id = $1", routeID,
+	).Scan(&enabled)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
 func RecalculateLanePointCoverage(
 	ctx context.Context,
 	gpsRepo *repository.GPSRepository,

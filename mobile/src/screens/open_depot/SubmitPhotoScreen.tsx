@@ -153,7 +153,7 @@ export default function SubmitPhotoScreen({ navigation }: any) {
         facing="back"
         title="Open Depot Photo"
         onCapture={handlePhotoCaptured}
-        onCancel={() => navigation?.goBack()}
+        onCancel={() => navigation?.navigate('OpenDepotHome')}
       />
     );
   }
@@ -280,6 +280,12 @@ export default function SubmitPhotoScreen({ navigation }: any) {
               onPress={handleRetake}
             >
               <Text style={styles.submitButtonText}>Submit Another</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.homeButton}
+              onPress={() => navigation?.navigate('OpenDepotHome')}
+            >
+              <Text style={styles.homeButtonText}>Back to Home</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -432,6 +438,22 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  homeButton: {
+    height: theme.sizes.buttonHeight,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.button,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    width: '100%',
+  },
+  homeButtonText: {
+    color: theme.colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },

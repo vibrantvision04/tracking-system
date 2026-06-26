@@ -40,8 +40,6 @@ export default function D2DRouteCoverageReport() {
     api('/api/routes').then((d: any) => d.success && setRoutes(d.data || [])).catch(console.error);
   }, []);
 
-  const allowHistoricalRecalculation = true; // Set to false to disable recalculation in UI
-
   const handleLoad = async (forceRecalc: boolean = false) => {
     setLoading(true);
     

@@ -5,7 +5,7 @@ import { CameraView } from 'expo-camera';
 interface CameraCaptureProps {
   facing?: 'front' | 'back';
   onCapture: (base64: string) => void;
-  onCancel: () => void;
+  onCancel?: () => void;
   title?: string;
 }
 
@@ -67,11 +67,13 @@ export default function CameraCapture({ facing = 'back', onCapture, onCancel, ti
       
       <View style={styles.cameraContainer}>
         <CameraView style={styles.camera} facing={facing} ref={cameraRef} />
-        <View style={styles.overlayContainer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelText}>✕ Close</Text>
-          </TouchableOpacity>
-        </View>
+        {onCancel && (
+          <View style={styles.overlayContainer}>
+            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+              <Text style={styles.cancelText}>✕ Close</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <TouchableOpacity style={styles.captureButton} onPress={takePicture}>

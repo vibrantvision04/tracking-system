@@ -33,6 +33,7 @@ import ZoneManagerLiveTracking from '../screens/zone_manager/LiveTrackingScreen'
 import ZoneManagerAttendance from '../screens/zone_manager/AttendanceScreen';
 
 // Open Depot Screens
+import OpenDepotHome from '../screens/open_depot/HomeScreen';
 import OpenDepotSubmit from '../screens/open_depot/SubmitPhotoScreen';
 
 const Stack = createStackNavigator();
@@ -77,6 +78,7 @@ export default function RootNavigator() {
           </>
         ) : (
           <>
+            <Stack.Screen name="OpenDepotHome" component={OpenDepotHome} />
             <Stack.Screen name="OpenDepotSubmit" component={OpenDepotSubmit} />
           </>
         )}
