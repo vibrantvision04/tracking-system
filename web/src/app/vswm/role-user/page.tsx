@@ -162,7 +162,7 @@ export default function RoleUserPage() {
     .filter(email => email.toLowerCase().includes(userSearch.toLowerCase()));
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans space-y-6 p-6 lg:p-8">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans p-6 lg:p-8">
       <PageHeader
         title="Role To User"
         description="Configure dynamic access controls by mapping administrative roles to registered user accounts."
@@ -174,7 +174,7 @@ export default function RoleUserPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8">
+      <div className="flex-1 overflow-hidden space-y-6">
         {formOpen && (
           <Card className="animate-fade-in relative z-20 !overflow-visible">
             <CardHeader>

@@ -247,8 +247,11 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 	from = time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, utils.IndianLocation)
 	to = time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, utils.IndianLocation)
 
-	// If using shift or custom time filter, run the dynamic report generation path
-	if shiftID > 0 || useTime {
+	// If using shift, custom time filter, or today's date (which needs on-the-fly calculation
+	// since the pre-computed standard path's 60s timeout can't handle many vehicles on production),
+	// run the dynamic report generation path which uses the request context (no artificial timeout).
+	isTodayRange := from.Format("2006-01-02") == todayStr || to.Format("2006-01-02") == todayStr
+	if shiftID > 0 || useTime || isTodayRange {
 		reports, total, err := h.rService.GetReportsDynamic(r.Context(), vehicleID, from, to, limit, offset, zoneID, wardID, shiftID, useTime, startTimeStr, endTimeStr)
 		if err != nil {
 			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -300,6 +303,8 @@ func (h *Handler) GetReports(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+
 
 	// 3. For each date and vehicle, decide if we need to generate it
 	type regenTask struct {

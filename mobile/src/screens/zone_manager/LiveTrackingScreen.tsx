@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl, Modal } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { LiveVehicle } from '../../types';
@@ -42,7 +43,8 @@ export default function ZoneManagerLiveTrackingScreen({ navigation }: any) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Back</Text>
+          <Ionicons name="arrow-back" size={20} color="#059669" />
+          <Text style={styles.backText}> Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Zone Live Tracking</Text>
         <View style={{ width: 60 }} />
@@ -56,7 +58,10 @@ export default function ZoneManagerLiveTrackingScreen({ navigation }: any) {
       >
         {/* Simulated Map */}
         <View style={styles.mapCanvas}>
-          <Text style={styles.mapCanvasText}>🗺️ Live Map Tracking (Zone-Wide)</Text>
+          <View style={styles.mapCanvasHeader}>
+            <Ionicons name="map-outline" size={14} color="#059669" />
+            <Text style={styles.mapCanvasText}> Live Map Tracking (Zone-Wide)</Text>
+          </View>
           <View style={styles.simulatedVehicles}>
             {vehicles.map((v: any, i: number) => {
               const statusStyle = getStatusStyle(v.status, v.speed);
@@ -195,7 +200,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   backText: {
-    color: '#1565C0',
+    color: '#059669',
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -218,13 +223,18 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: 20,
   },
-  mapCanvasText: {
+  mapCanvasHeader: {
     position: 'absolute',
     top: 8,
     left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mapCanvasText: {
     fontSize: 12,
     fontWeight: 'bold',
     color: '#37474f',
+    marginLeft: 2,
   },
   mapCanvasSubtitle: {
     position: 'absolute',

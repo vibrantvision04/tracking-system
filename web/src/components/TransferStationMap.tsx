@@ -549,7 +549,7 @@ export default function TransferStationMap({
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md text-white text-[11px] font-semibold px-4 py-2 rounded-xl shadow-lg border border-slate-700/60 select-none animate-slide-in">
           {activeTool === "boundary" && (
             <div className="flex items-center gap-3">
-              <span>🖱️ Click on map to add boundary vertices.</span>
+              <span>Click on map to add boundary vertices.</span>
               <div className="flex gap-1.5 ml-2">
                 <button type="button" onClick={handleUndo} disabled={tempPoints.length === 0} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 px-2.5 py-1 rounded text-[9px] font-black uppercase">Undo</button>
                 <button type="button" onClick={handleClear} disabled={tempPoints.length === 0} className="bg-rose-950/70 hover:bg-rose-900 text-rose-300 px-2.5 py-1 rounded text-[9px] font-black uppercase">Clear</button>
@@ -557,9 +557,9 @@ export default function TransferStationMap({
               </div>
             </div>
           )}
-          {activeTool === "dump" && "📍 Click on the map inside boundary to set the Dump Zone center."}
-          {activeTool === "entry" && "📥 Click on the map inside boundary to set the Entry point."}
-          {activeTool === "exit" && "📤 Click on the map inside boundary to set the Exit point."}
+          {activeTool === "dump" && "Click on the map inside boundary to set the Dump Zone center."}
+          {activeTool === "entry" && "Click on the map inside boundary to set the Entry point."}
+          {activeTool === "exit" && "Click on the map inside boundary to set the Exit point."}
         </div>
       )}
     </div>

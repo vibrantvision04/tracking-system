@@ -12,6 +12,7 @@ import (
 	"gps-tracking-system/internal/service"
 	"gps-tracking-system/internal/tcp"
 	"gps-tracking-system/internal/ultimatereport"
+	"gps-tracking-system/internal/vision"
 	"gps-tracking-system/internal/worker"
 	"gps-tracking-system/internal/ws"
 	"net/http"
@@ -113,6 +114,12 @@ func main() {
 				log.Info().Msg("Bootstrapped default admin user: test-admin@example.com / SecurePass123!")
 			}
 		}
+	}
+
+	if err := vision.InitDetector(); err != nil {
+		log.Warn().Err(err).Msg("Face detector initialization failed - face detection will be unavailable")
+	} else {
+		log.Info().Msg("Face detector initialized successfully")
 	}
 
 	rdb, err := cache.InitRedis(cfg)

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, Image, Alert, ScrollView, FlatList } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGPS } from '../../hooks/useGPS';
 import { useCamera } from '../../hooks/useCamera';
 import CameraCapture from '../../components/CameraCapture';
-import { api, BASE_URL } from '../../services/api';
+import { api, BASE_URL, KEYS } from '../../services/api';
 import axios from 'axios';
 
 interface Employee {
@@ -53,12 +54,14 @@ export default function DriverAttendanceScreen({ navigation }: any) {
     async function fetchData() {
       setLoadingData(true);
       try {
-        const empRes = await axios.get(`${BASE_URL}/api/employees`);
+        const token = await AsyncStorage.getItem(KEYS.ACCESS_TOKEN);
+        const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
+        const empRes = await axios.get(`${BASE_URL}/api/employees`, authHeaders);
         if (empRes.data && empRes.data.data) {
           setEmployees(empRes.data.data);
         }
 
-        const vehRes = await axios.get(`${BASE_URL}/api/vehicles`);
+        const vehRes = await axios.get(`${BASE_URL}/api/vehicles`, authHeaders);
         if (vehRes.data && vehRes.data.data) {
           setVehicles(vehRes.data.data);
         }
@@ -118,7 +121,6 @@ export default function DriverAttendanceScreen({ navigation }: any) {
     setPhotoBase64(base64);
     setLoading(true);
     try {
-      // Validate photo with backend
       const res = await api.post('/attendance/validate-photo', {
         photo_base64: base64,
         gps_lat: coords?.latitude || 0,
@@ -129,11 +131,12 @@ export default function DriverAttendanceScreen({ navigation }: any) {
         setFaceCount(res.face_count || 1);
         setStep('form');
       } else {
-        Alert.alert('Validation Failed', 'No face detected or photo is too blurry. Please try again.');
+        const issues: string[] = res?.issues || [];
+        const msg = issues.length > 0 ? issues.join('\n') : 'Photo validation failed. Please try again.';
+        Alert.alert('Validation Failed', msg);
         setStep('camera');
       }
     } catch (err: any) {
-      // Fallback for testing
       setFaceCount(1);
       setStep('form');
     } finally {

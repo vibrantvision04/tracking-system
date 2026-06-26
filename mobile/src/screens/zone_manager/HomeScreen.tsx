@@ -1,31 +1,91 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { usePunchStatus } from '../../hooks/usePunchStatus';
+import { Header } from '../../components/ui/Header';
+import { StatusBanner } from '../../components/ui/StatusBanner';
+import { Card } from '../../components/ui/Card';
+import { theme } from '../../theme/theme';
+import { useTranslation } from '../../i18n/useTranslation';
 import { api } from '../../services/api';
+
+interface MenuItem {
+  key: string;
+  iconName: keyof typeof Ionicons.glyphMap;
+  titleKey: string;
+  subtitleKey: string;
+  route: string | null;
+}
+
+const MENU_ITEMS: MenuItem[] = [
+  {
+    key: 'punchIn',
+    iconName: 'alarm-outline',
+    titleKey: 'menu.punchIn',
+    subtitleKey: 'menu.punchIn.subtitle',
+    route: 'ZoneManagerPunchIn',
+  },
+  {
+    key: 'zoneCoverage',
+    iconName: 'trending-up-outline',
+    titleKey: 'menu.zoneCoverage',
+    subtitleKey: 'menu.zoneCoverage.subtitle',
+    route: 'ZoneCoverage',
+  },
+  {
+    key: 'liveTracking',
+    iconName: 'map-outline',
+    titleKey: 'menu.liveTracking',
+    subtitleKey: 'menu.liveTracking.subtitle',
+    route: 'ZoneManagerLiveTracking',
+  },
+  {
+    key: 'attendancePanel',
+    iconName: 'people-outline',
+    titleKey: 'menu.attendancePanel',
+    subtitleKey: 'menu.attendancePanel.subtitle',
+    route: 'ZoneManagerAttendance',
+  },
+  {
+    key: 'zoneAlerts',
+    iconName: 'notifications-outline',
+    titleKey: 'menu.zoneAlerts',
+    subtitleKey: 'menu.zoneAlerts.subtitle',
+    route: 'ZoneManagerAlerts',
+  },
+  {
+    key: 'complaints',
+    iconName: 'flag-outline',
+    titleKey: 'menu.complaints',
+    subtitleKey: 'menu.complaints.subtitle',
+    route: null,
+  },
+];
 
 export default function ZoneManagerHomeScreen({ navigation }: any) {
   const { user, logout } = useAuth();
   const { data: punchData, refetch: refetchPunch } = usePunchStatus();
+  const { t } = useTranslation();
 
   const isPunchedIn = !!(punchData && punchData.punched_in);
   const showPunchOut = isPunchedIn && !!(punchData && punchData.manual_punchout_enabled);
 
-  const handlePunchOut = async () => {
+  const handlePunchOut = () => {
     Alert.alert(
-      'Punch Out',
+      t('common.punchOut'),
       'Are you sure you want to punch out of your zone manager shift?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Punch Out',
+          text: t('common.punchOut'),
           onPress: async () => {
             try {
               await api.post('/attendance/punch-out');
               Alert.alert('Success', 'Punched out successfully');
               refetchPunch();
             } catch (err: any) {
-              Alert.alert('Error', err?.message || 'Failed to punch out');
+              Alert.alert(t('common.error'), err?.message || 'Failed to punch out');
             }
           },
         },
@@ -33,227 +93,130 @@ export default function ZoneManagerHomeScreen({ navigation }: any) {
     );
   };
 
-  const handleComingSoon = () => {
-    Alert.alert('Coming Soon', 'This feature is not yet available in Phase 1.');
+  const handleCardPress = (item: MenuItem) => {
+    if (item.route === null) {
+      Alert.alert('Coming Soon', 'This feature is not yet available in Phase 1.');
+      return;
+    }
+    navigation.navigate(item.route);
   };
 
+  const headerActions = [];
+
+  if (showPunchOut) {
+    headerActions.push({
+      icon: 'stop-circle-outline',
+      onPress: handlePunchOut,
+      accessibilityLabel: t('common.punchOut'),
+    });
+  }
+
+  headerActions.push({
+    icon: 'log-out-outline',
+    onPress: logout,
+    accessibilityLabel: t('common.logout'),
+  });
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Zone Manager Panel</Text>
+    <View style={styles.screen}>
+      <Header
+        title={t('zoneManager.title')}
+        rightActions={headerActions}
+      />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Zone Manager name */}
+        <View style={styles.nameContainer}>
           <Text style={styles.nameText}>{user?.name || 'Zone Manager'}</Text>
         </View>
-        <View style={styles.headerActions}>
-          {showPunchOut && (
-            <TouchableOpacity style={styles.punchOutButton} onPress={handlePunchOut}>
-              <Text style={styles.punchOutText}>Punch Out</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+
+        {/* Punch Status Banner */}
+        <StatusBanner
+          status={isPunchedIn ? 'success' : 'warning'}
+          message={isPunchedIn ? t('home.punchedIn') : t('home.notPunchedIn')}
+        />
+
+        {/* 2-column navigation grid */}
+        <View style={styles.gridContainer}>
+          <View style={styles.grid}>
+            {MENU_ITEMS.map((item) => {
+              const isHighlighted = item.key === 'punchIn';
+
+              return (
+                <View key={item.key} style={styles.gridCell}>
+                  <Card
+                    onPress={() => handleCardPress(item)}
+                    highlighted={isHighlighted}
+                    dimmed={false}
+                    style={styles.navCard}
+                  >
+                    <Ionicons name={item.iconName} size={28} color={theme.colors.primary} style={styles.cardIcon} />
+                    <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
+                    <Text style={styles.cardSubtitle}>{t(item.subtitleKey)}</Text>
+                  </Card>
+                </View>
+              );
+            })}
+          </View>
         </View>
-      </View>
-
-      {/* Punch status banner */}
-      <View style={[styles.statusBanner, isPunchedIn ? styles.punchedInBanner : styles.punchedOutBanner]}>
-        <Text style={[styles.statusText, isPunchedIn ? styles.punchedInText : styles.punchedOutText]}>
-          {isPunchedIn ? '● PUNCHED IN – Shift Active' : '● NOT PUNCHED IN'}
-        </Text>
-      </View>
-
-      {/* Dashboard Menu Grid */}
-      <View style={styles.menuContainer}>
-        <Text style={styles.sectionTitle}>Main Menu</Text>
-
-        <View style={styles.grid}>
-          {/* Punch In */}
-          <TouchableOpacity
-            style={[styles.card, styles.highlightCard]}
-            onPress={() => navigation.navigate('ZoneManagerPunchIn')}
-          >
-            <Text style={styles.cardIcon}>⏰</Text>
-            <Text style={styles.cardTitle}>{isPunchedIn ? 'Punch Status' : 'Punch In'}</Text>
-            <Text style={styles.cardSubtitle}>{isPunchedIn ? 'View details' : 'Start your shift'}</Text>
-          </TouchableOpacity>
-
-          {/* Zone Coverage */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('ZoneCoverage')}
-          >
-            <Text style={styles.cardIcon}>📈</Text>
-            <Text style={styles.cardTitle}>Zone Coverage</Text>
-            <Text style={styles.cardSubtitle}>Full zone coverage breakdown</Text>
-          </TouchableOpacity>
-
-          {/* Live Tracking */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('ZoneManagerLiveTracking')}
-          >
-            <Text style={styles.cardIcon}>🗺️</Text>
-            <Text style={styles.cardTitle}>Live Tracking</Text>
-            <Text style={styles.cardSubtitle}>Track all zone vehicles</Text>
-          </TouchableOpacity>
-
-          {/* Attendance */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('ZoneManagerAttendance')}
-          >
-            <Text style={styles.cardIcon}>👥</Text>
-            <Text style={styles.cardTitle}>Attendance Panel</Text>
-            <Text style={styles.cardSubtitle}>Mark drivers & supervisors</Text>
-          </TouchableOpacity>
-
-          {/* Alerts */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('ZoneManagerAlerts')}
-          >
-            <Text style={styles.cardIcon}>bell</Text>
-            <Text style={styles.cardTitle}>Zone Alerts</Text>
-            <Text style={styles.cardSubtitle}>View all zone-level alerts</Text>
-          </TouchableOpacity>
-
-          {/* Complaints */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={handleComingSoon}
-          >
-            <Text style={styles.cardIcon}>🚩</Text>
-            <Text style={styles.cardTitle}>Complaints</Text>
-            <Text style={styles.cardSubtitle}>Coming soon</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+  scrollView: {
+    flex: 1,
+    marginTop: theme.sizes.headerHeight,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  scrollContent: {
+    padding: theme.spacing.base,
+    paddingBottom: theme.spacing.xl,
   },
-  welcomeText: {
-    fontSize: 14,
-    color: '#616161',
+  nameContainer: {
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   nameText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#212121',
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
+    color: theme.colors.textDark,
   },
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFEBEE',
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  logoutText: {
-    color: '#C62828',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  punchOutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFF3E0',
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  punchOutText: {
-    color: '#E65100',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  statusBanner: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  punchedInBanner: {
-    backgroundColor: '#E8F5E9',
-  },
-  punchedOutBanner: {
-    backgroundColor: '#FFF8E1',
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  punchedInText: {
-    color: '#2E7D32',
-  },
-  punchedOutText: {
-    color: '#F57F17',
-  },
-  menuContainer: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 16,
+  gridContainer: {
+    marginTop: theme.spacing.base,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  card: {
+  gridCell: {
     width: '48%',
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    minHeight: 120,
-    justifyContent: 'space-between',
+    marginBottom: theme.spacing.base,
   },
-  highlightCard: {
-    borderColor: '#1565C0',
-    borderWidth: 1,
+  navCard: {
+    minHeight: theme.sizes.cardMinHeight,
   },
   cardIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+    marginBottom: theme.spacing.sm,
+    textAlign: 'center',
   },
   cardTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 4,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.xs,
   },
   cardSubtitle: {
-    fontSize: 11,
-    color: '#757575',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+    lineHeight: theme.typography.caption.lineHeight,
   },
 });

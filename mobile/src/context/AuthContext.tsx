@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { KEYS } from '../services/api';
 import { User } from '../types';
 
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function loadSession() {
       try {
-        const storedUser = await SecureStore.getItemAsync(KEYS.USER_PROFILE);
+        const storedUser = await AsyncStorage.getItem(KEYS.USER_PROFILE);
         if (storedUser) {
           setUser(JSON.parse(storedUser));
         }
@@ -41,16 +41,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (token: string, refresh: string, profile: User) => {
-    await SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, token);
-    await SecureStore.setItemAsync(KEYS.REFRESH_TOKEN, refresh);
-    await SecureStore.setItemAsync(KEYS.USER_PROFILE, JSON.stringify(profile));
+    await AsyncStorage.setItem(KEYS.ACCESS_TOKEN, token);
+    await AsyncStorage.setItem(KEYS.REFRESH_TOKEN, refresh);
+    await AsyncStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(profile));
     setUser(profile);
   };
 
   const logout = async () => {
-    await SecureStore.deleteItemAsync(KEYS.ACCESS_TOKEN);
-    await SecureStore.deleteItemAsync(KEYS.REFRESH_TOKEN);
-    await SecureStore.deleteItemAsync(KEYS.USER_PROFILE);
+    await AsyncStorage.multiRemove([KEYS.ACCESS_TOKEN, KEYS.REFRESH_TOKEN, KEYS.USER_PROFILE]);
     setUser(null);
   };
 

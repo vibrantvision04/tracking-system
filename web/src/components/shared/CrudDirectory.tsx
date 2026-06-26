@@ -81,7 +81,7 @@ export default function CrudDirectory({
   }, [formOpen, onFormOpenChange]);
 
   const entityName = title.replace("Management", "").trim();
-  const defaultFormTitle = isEditing ? `✏️ Edit ${entityName}` : `🏢 Add ${entityName}`;
+  const defaultFormTitle = isEditing ? `Edit ${entityName}` : `Add ${entityName}`;
   const defaultFormDesc = isEditing ? "Modify the fields below. Press Escape to close." : "Enter the details below. Press Escape to close.";
 
   return (

@@ -1,66 +1,147 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, Image, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import { useGPS } from '../../hooks/useGPS';
 import { useCamera } from '../../hooks/useCamera';
 import CameraCapture from '../../components/CameraCapture';
 import { api } from '../../services/api';
 import { usePunchStatus } from '../../hooks/usePunchStatus';
 import { useAuth } from '../../context/AuthContext';
+import { theme } from '../../theme/theme';
+import { useTranslation } from '../../i18n/useTranslation';
+import { Header } from '../../components/ui/Header';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { LanguageToggle } from '../../components/ui/LanguageToggle';
+import { StepIndicator, Step } from '../driver/PunchInScreen';
 
 export default function ZoneManagerPunchInScreen({ navigation }: any) {
   const { user } = useAuth();
   const { getCurrentLocation, loading: loadingGPS } = useGPS();
   const { requestPermission } = useCamera();
   const { refetch: refetchPunch } = usePunchStatus();
+  const { t } = useTranslation();
 
-  // Steps: 'gps', 'camera', 'form', 'success'
-  const [step, setStep] = useState<'gps' | 'camera' | 'form' | 'success'>('gps');
+  const [step, setStep] = useState<Step>('gps');
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [managerName, setManagerName] = useState(user?.name || '');
   const [loading, setLoading] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [gpsVerifying, setGpsVerifying] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
 
-  const startGPSCheck = async (useMock = false) => {
-    if (useMock) {
-      setCoords({ latitude: 26.9124, longitude: 75.7873 });
+  // Auto-navigate home after success
+  useEffect(() => {
+    if (step === 'success') {
+      const timer = setTimeout(() => {
+        navigation.navigate('ZoneManagerHome');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, navigation]);
+
+  const handleGPSVerify = async () => {
+    setGpsError(null);
+    setGpsVerifying(true);
+
+    const currentCoords = await getCurrentLocation();
+
+    if (!currentCoords) {
+      // Zone managers can proceed even with GPS issues, but we log coordinates for auditing
+      setCoords({ latitude: 0, longitude: 0 });
+      setGpsVerifying(false);
       const cameraGranted = await requestPermission();
       if (cameraGranted) {
         setStep('camera');
+      } else {
+        setGpsError(t('punch.gpsPermissionError'));
       }
       return;
     }
 
-    const currentCoords = await getCurrentLocation();
-    if (currentCoords) {
-      setCoords(currentCoords);
-    } else {
-      // Zone managers are allowed to proceed even if GPS fails, but let's default to a mock location for auditing
-      setCoords({ latitude: 26.9124, longitude: 75.7873 });
-    }
+    setCoords(currentCoords);
 
-    const cameraGranted = await requestPermission();
-    if (cameraGranted) {
-      setStep('camera');
-    } else {
-      Alert.alert('Permission Denied', 'Camera access is required to punch in.');
+    try {
+      const res = await api.post('/attendance/verify-gps', {
+        gps_lat: currentCoords.latitude,
+        gps_lng: currentCoords.longitude,
+      }) as any;
+
+      if (res && res.valid) {
+        setGpsVerifying(false);
+        const cameraGranted = await requestPermission();
+        if (cameraGranted) {
+          setStep('camera');
+        } else {
+          setGpsError(t('punch.gpsPermissionError'));
+        }
+      } else if (res && !res.valid) {
+        const wardName = res.ward_name || 'Unknown';
+        setGpsError(t('punch.gpsError').replace('{ward}', wardName));
+        setGpsVerifying(false);
+      }
+    } catch (err: any) {
+      // If endpoint doesn't exist, proceed (backward compat)
+      setGpsVerifying(false);
+      const cameraGranted = await requestPermission();
+      if (cameraGranted) {
+        setStep('camera');
+      } else {
+        setGpsError(t('punch.gpsPermissionError'));
+      }
     }
   };
 
-  const handlePhotoCaptured = (base64: string) => {
+  const handlePhotoCaptured = async (base64: string) => {
+    setShowCamera(false);
     setPhotoBase64(base64);
-    setStep('form');
+    setPhotoError(null);
+    setLoading(true);
+
+    try {
+      const res = await api.post('/attendance/validate-photo', {
+        photo_base64: base64,
+        gps_lat: coords?.latitude || 0,
+        gps_lng: coords?.longitude || 0,
+      }) as any;
+
+      if (res && res.valid) {
+        setStep('confirm');
+      } else {
+        const issues: string[] = res?.issues || [];
+        if (issues.length > 0) {
+          setPhotoError(issues.join('\n'));
+        } else {
+          setPhotoError(t('punch.photoError.generic'));
+        }
+      }
+    } catch (err: any) {
+      setStep('confirm');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
     if (!managerName.trim()) {
-      Alert.alert('Required Field', 'Please enter your name');
+      setSubmissionError(t('login.fieldRequired'));
       return;
     }
 
+    setSubmissionError(null);
     setLoading(true);
+
     try {
       await api.post('/attendance/punch-in', {
-        driver_name: managerName, // Backend expects manager name in driver_name field
+        driver_name: managerName,
         photo_base64: photoBase64,
         gps_lat: coords?.latitude || 0,
         gps_lng: coords?.longitude || 0,
@@ -71,223 +152,293 @@ export default function ZoneManagerPunchInScreen({ navigation }: any) {
       await refetchPunch();
       setStep('success');
     } catch (err: any) {
-      Alert.alert('Error', err?.error || err?.message || 'Failed to submit punch-in');
+      setSubmissionError(t('punch.submissionError'));
     } finally {
       setLoading(false);
     }
   };
 
-  if (step === 'camera') {
+  // When in camera mode, show CameraCapture full screen
+  if (showCamera) {
     return (
       <CameraCapture
         facing="front"
-        title="Capture Selfie for Attendance"
+        title={t('punch.cameraInstruction')}
         onCapture={handlePhotoCaptured}
-        onCancel={() => setStep('gps')}
+        onCancel={() => setShowCamera(false)}
       />
     );
   }
 
+  // Success state
+  if (step === 'success') {
+    return (
+      <View style={styles.screenContainer}>
+        <Header
+          title={t('punch.title')}
+          showBack={false}
+        />
+        <View style={styles.successContainer}>
+          <View style={styles.successCheckmarkCircle}>
+            <Text style={styles.successCheckmark}>✓</Text>
+          </View>
+          <Text style={styles.successTitle}>{t('punch.success')}</Text>
+          <Text style={styles.successSubtitle}>{t('punch.successSubtitle')}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Zone Manager Punch In</Text>
+    <View style={styles.screenContainer}>
+      {/* Fixed 56px header with back navigation */}
+      <Header
+        title={t('punch.title')}
+        showBack={true}
+        onBack={() => navigation.goBack()}
+      />
 
+      {/* Language toggle below header */}
+      <View style={styles.languageToggleRow}>
+        <LanguageToggle compact />
+      </View>
+
+      {/* Step Indicator */}
+      <StepIndicator currentStep={step} t={t} />
+
+      {/* Scrollable content area with base background and 16px padding */}
+      <ScrollView
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentInner}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* GPS Step */}
         {step === 'gps' && (
-          <View style={styles.stepContainer}>
-            <Text style={styles.description}>
-              The app will verify your coordinates for auditing purposes before taking the selfie.
-            </Text>
-
-            {loadingGPS ? (
-              <ActivityIndicator size="large" color="#1565C0" style={{ marginVertical: 20 }} />
+          <View style={styles.stepContent}>
+            {gpsVerifying || loadingGPS ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator
+                  size="large"
+                  color={theme.colors.primary}
+                  style={styles.loadingIndicator}
+                />
+                <Text style={styles.loadingText}>{t('punch.gpsLoading')}</Text>
+              </View>
             ) : (
-              <View style={styles.buttonCol}>
-                <TouchableOpacity style={styles.primaryButton} onPress={() => startGPSCheck(false)}>
-                  <Text style={styles.buttonText}>Verify GPS & Proceed</Text>
-                </TouchableOpacity>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepDescription}>
+                  {t('punch.step.gps')}
+                </Text>
 
-                <TouchableOpacity style={styles.mockButton} onPress={() => startGPSCheck(true)}>
-                  <Text style={styles.mockButtonText}>Mock GPS</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
+                {gpsError && (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{gpsError}</Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
         )}
 
-        {step === 'form' && (
-          <View style={styles.stepContainer}>
-            <Text style={styles.subtitle}>Confirm details & submit</Text>
+        {/* Camera Step */}
+        {step === 'camera' && (
+          <View style={styles.stepContent}>
+            <Text style={styles.stepInstruction}>
+              {t('punch.cameraInstruction')}
+            </Text>
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Manager Name</Text>
-              <TextInput
-                style={styles.input}
+            {loading && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator
+                  size="large"
+                  color={theme.colors.primary}
+                  style={styles.loadingIndicator}
+                />
+                <Text style={styles.loadingText}>{t('common.loading')}</Text>
+              </View>
+            )}
+
+            {photoError && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{photoError}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Confirmation Step */}
+        {step === 'confirm' && (
+          <View style={styles.stepContent}>
+            <View style={styles.formGroup}>
+              <Input
+                label={t('punch.managerName')}
                 value={managerName}
-                onChangeText={setManagerName}
-                placeholder="Enter your name"
+                onChangeText={(text) => {
+                  setManagerName(text);
+                  setSubmissionError(null);
+                }}
+                placeholder={t('punch.managerName.placeholder')}
+                error={submissionError ?? undefined}
               />
             </View>
+          </View>
+        )}
+      </ScrollView>
 
-            <TouchableOpacity
-              style={[styles.primaryButton, loading && styles.disabledButton]}
-              onPress={handleSubmit}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.buttonText}>looks good, Punch In →</Text>
-              )}
-            </TouchableOpacity>
+      {/* Bottom-anchored action area with 16px padding */}
+      <View style={styles.bottomAction}>
+        {step === 'gps' && !gpsVerifying && !loadingGPS && (
+          <Button
+            title={t('punch.step.gps')}
+            onPress={handleGPSVerify}
+            variant="primary"
+          />
+        )}
+
+        {step === 'gps' && gpsError && (
+          <View style={styles.retryButtonContainer}>
+            <Button
+              title={t('common.retry')}
+              onPress={() => {
+                setGpsError(null);
+                handleGPSVerify();
+              }}
+              variant="primary"
+            />
           </View>
         )}
 
-        {step === 'success' && (
-          <View style={styles.stepContainer}>
-            <Text style={styles.successIcon}>🎉</Text>
-            <Text style={styles.successTitle}>Punched In Successfully!</Text>
-            <Text style={styles.successSubtitle}>Your manager shift is now active.</Text>
+        {step === 'camera' && !loading && (
+          <Button
+            title={photoError ? t('punch.retakePhoto') : t('punch.capturePhoto')}
+            onPress={() => setShowCamera(true)}
+            variant="primary"
+          />
+        )}
 
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => navigation.navigate('ZoneManagerHome')}
-            >
-              <Text style={styles.buttonText}>Go to Home</Text>
-            </TouchableOpacity>
-          </View>
+        {step === 'confirm' && (
+          <Button
+            title={t('punch.confirm')}
+            onPress={handleSubmit}
+            variant="primary"
+            loading={loading}
+            disabled={loading}
+          />
         )}
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    padding: 16,
+  screenContainer: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+    paddingTop: theme.sizes.headerHeight,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 24,
-    elevation: 4,
-    shadowColor: '#000000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+  languageToggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: theme.spacing.base,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.xs,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 16,
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentInner: {
+    padding: theme.spacing.base,
+    paddingBottom: theme.spacing.xxl,
+  },
+  stepContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  stepDescription: {
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: theme.typography.body.fontWeight,
+    lineHeight: theme.typography.body.lineHeight,
+    color: theme.colors.textDark,
     textAlign: 'center',
+    marginBottom: theme.spacing.base,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#757575',
-    marginBottom: 20,
-    textAlign: 'center',
+  stepInstruction: {
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
-  },
-  stepContainer: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  description: {
-    fontSize: 15,
-    color: '#616161',
+    lineHeight: theme.typography.body.lineHeight,
+    color: theme.colors.textDark,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: theme.spacing.lg,
   },
-  buttonCol: {
-    width: '100%',
-    gap: 12,
-  },
-  primaryButton: {
-    height: 56,
-    backgroundColor: '#1565C0',
-    borderRadius: 8,
-    width: '100%',
-    justifyContent: 'center',
+  loadingContainer: {
     alignItems: 'center',
+    paddingVertical: theme.spacing.xxl,
   },
-  mockButton: {
-    height: 56,
-    borderColor: '#1565C0',
-    borderWidth: 1.5,
-    borderRadius: 8,
+  loadingIndicator: {
+    marginBottom: theme.spacing.base,
+  },
+  loadingText: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDim,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    backgroundColor: theme.colors.errorLight,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.base,
     width: '100%',
-    justifyContent: 'center',
+    marginTop: theme.spacing.base,
+  },
+  errorText: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.error,
+    textAlign: 'center',
+    lineHeight: theme.typography.body.lineHeight,
+  },
+  formGroup: {
+    width: '100%',
+    marginBottom: theme.spacing.base,
+  },
+  bottomAction: {
+    padding: theme.spacing.base,
+    backgroundColor: theme.colors.background,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  retryButtonContainer: {
+    marginTop: theme.spacing.sm,
+  },
+  successContainer: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  cancelButton: {
-    height: 56,
     justifyContent: 'center',
+    padding: theme.spacing.xxl,
+  },
+  successCheckmarkCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.primary,
     alignItems: 'center',
-    width: '100%',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.xl,
   },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  mockButtonText: {
-    color: '#1565C0',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  cancelButtonText: {
-    color: '#757575',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  inputContainer: {
-    width: '100%',
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 14,
+  successCheckmark: {
+    fontSize: 40,
+    color: theme.colors.surface,
     fontWeight: '600',
-    color: '#212121',
-    marginBottom: 6,
-  },
-  input: {
-    height: 56,
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#212121',
-    backgroundColor: '#fafafa',
-    width: '100%',
-  },
-  disabledButton: {
-    backgroundColor: '#9e9e9e',
-  },
-  successIcon: {
-    fontSize: 60,
-    marginBottom: 16,
   },
   successTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 8,
+    fontSize: theme.typography.heading.fontSize,
+    fontWeight: theme.typography.heading.fontWeight,
+    color: theme.colors.primary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.sm,
   },
   successSubtitle: {
-    fontSize: 14,
-    color: '#616161',
-    marginBottom: 24,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDim,
+    textAlign: 'center',
+    lineHeight: theme.typography.body.lineHeight,
   },
 });

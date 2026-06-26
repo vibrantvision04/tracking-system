@@ -1,43 +1,91 @@
-import React from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../../services/api';
+import React, { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Modal,
+} from 'react-native';
+import { theme } from '../../theme/theme';
+import { Header } from '../../components/ui/Header';
+import { useTranslation } from '../../i18n/useTranslation';
 import { useAlerts } from '../../hooks/useAlerts';
+import { api } from '../../services/api';
+import { Alert as AlertType } from '../../types';
+
+function getSeverityColor(alert: AlertType): string {
+  if (alert.severity === 'major') {
+    return theme.colors.error;
+  }
+  if (alert.type === 'overspeed') {
+    return theme.colors.warning;
+  }
+  return theme.colors.primary;
+}
+
+function getSeverityLabel(alert: AlertType, t: (key: string) => string): string {
+  if (alert.severity === 'major') {
+    return t('alerts.critical');
+  }
+  if (alert.type === 'overspeed') {
+    return t('alerts.warning');
+  }
+  return t('alerts.info');
+}
 
 export default function AlertsScreen({ navigation }: any) {
+  const { t } = useTranslation();
   const { data, isLoading, refetch } = useAlerts();
+  const [selectedAlert, setSelectedAlert] = useState<AlertType | null>(null);
 
   const handleAcknowledge = async (id: string) => {
     try {
       await api.post(`/alerts/acknowledge/${id}`);
-      Alert.alert('Success', 'Alert acknowledged.');
+      setSelectedAlert(null);
       refetch();
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to acknowledge alert.');
+    } catch {
+      // Silently handle - user can retry
     }
   };
 
-  const renderAlertItem = ({ item }: any) => (
-    <View style={[styles.alertCard, item.acknowledged && styles.acknowledgedCard]}>
-      <View style={styles.alertHeader}>
-        <Text style={styles.alertType}>⚠️ {item.type.toUpperCase()}</Text>
-        <Text style={styles.alertTime}>{new Date(item.created_at).toLocaleTimeString()}</Text>
-      </View>
-      <Text style={styles.alertMessage}>{item.message}</Text>
-      
-      {!item.acknowledged && (
-        <TouchableOpacity style={styles.ackButton} onPress={() => handleAcknowledge(item.id)}>
-          <Text style={styles.ackText}>Acknowledge</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+  const renderAlertItem = ({ item }: { item: AlertType }) => {
+    const severityColor = getSeverityColor(item);
+    const severityLabel = getSeverityLabel(item, t);
+
+    return (
+      <Pressable
+        style={[
+          styles.alertCard,
+          { borderLeftColor: severityColor },
+          item.acknowledged && styles.acknowledgedCard,
+        ]}
+        onPress={() => setSelectedAlert(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`${severityLabel}: ${item.message}. ${t('alerts.tapToView')}`}
+      >
+        <View style={styles.alertHeader}>
+          <View style={[styles.severityBadge, { backgroundColor: severityColor }]}>
+            <Text style={styles.severityBadgeText}>{severityLabel}</Text>
+          </View>
+          <Text style={styles.alertTime}>
+            {new Date(item.created_at).toLocaleTimeString()}
+          </Text>
+        </View>
+        <Text style={styles.alertMessage} numberOfLines={2}>
+          {item.message}
+        </Text>
+        <Text style={styles.tapHint}>{t('alerts.tapToView')}</Text>
+      </Pressable>
+    );
+  };
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1565C0" />
-        <Text style={styles.loadingText}>Loading alerts...</Text>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -46,28 +94,103 @@ export default function AlertsScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Major Alerts</Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={() => refetch()}>
-          <Text style={styles.refreshText}>🔄</Text>
-        </TouchableOpacity>
-      </View>
+      <Header
+        title={t('alerts.title')}
+        showBack={true}
+        onBack={() => navigation.goBack()}
+        rightActions={[
+          {
+            icon: 'refresh',
+            onPress: () => refetch(),
+            accessibilityLabel: 'Refresh alerts',
+          },
+        ]}
+      />
 
       <FlatList
         data={activeAlerts}
         keyExtractor={(item) => item.id}
         renderItem={renderAlertItem}
         contentContainerStyle={styles.listContainer}
+        style={styles.list}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>🎉 No active major alerts!</Text>
+            <Text style={styles.emptyText}>{t('alerts.noAlerts')}</Text>
           </View>
         }
       />
+
+      {/* Alert Detail Modal */}
+      <Modal
+        visible={selectedAlert !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedAlert(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {selectedAlert && (
+              <>
+                <Text style={styles.modalTitle}>{t('alerts.details')}</Text>
+
+                <View
+                  style={[
+                    styles.modalSeverityBar,
+                    { backgroundColor: getSeverityColor(selectedAlert) },
+                  ]}
+                />
+
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>{t('alerts.status')}:</Text>
+                  <View
+                    style={[
+                      styles.severityBadge,
+                      { backgroundColor: getSeverityColor(selectedAlert) },
+                    ]}
+                  >
+                    <Text style={styles.severityBadgeText}>
+                      {getSeverityLabel(selectedAlert, t)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>{t('alerts.time')}:</Text>
+                  <Text style={styles.modalValue}>
+                    {new Date(selectedAlert.created_at).toLocaleString()}
+                  </Text>
+                </View>
+
+                <View style={styles.modalMessageContainer}>
+                  <Text style={styles.modalMessage}>{selectedAlert.message}</Text>
+                </View>
+
+                {!selectedAlert.acknowledged && (
+                  <Pressable
+                    style={styles.acknowledgeButton}
+                    onPress={() => handleAcknowledge(selectedAlert.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('alerts.acknowledge')}
+                  >
+                    <Text style={styles.acknowledgeButtonText}>
+                      {t('alerts.acknowledge')}
+                    </Text>
+                  </Pressable>
+                )}
+
+                <Pressable
+                  style={styles.closeButton}
+                  onPress={() => setSelectedAlert(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
+                >
+                  <Text style={styles.closeButtonText}>{t('common.close')}</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -75,104 +198,160 @@ export default function AlertsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
-    marginTop: 12,
-    color: '#616161',
-    fontWeight: 'bold',
+    marginTop: theme.spacing.md,
+    color: theme.colors.textDim,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  backText: {
-    color: '#1565C0',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#212121',
-  },
-  refreshButton: {
-    padding: 8,
-  },
-  refreshText: {
-    fontSize: 18,
+  list: {
+    marginTop: theme.sizes.headerHeight,
   },
   listContainer: {
-    padding: 16,
+    padding: theme.spacing.base,
   },
   alertCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.base,
+    marginBottom: theme.spacing.md,
     borderLeftWidth: 5,
-    borderLeftColor: '#C62828', // red warning border
+    minHeight: 48,
     elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   acknowledgedCard: {
-    borderLeftColor: '#B0BEC5',
     opacity: 0.6,
   },
   alertHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
   },
-  alertType: {
-    fontWeight: 'bold',
-    fontSize: 14,
-    color: '#C62828',
+  severityBadge: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: 4,
+  },
+  severityBadgeText: {
+    color: theme.colors.surface,
+    fontSize: theme.typography.caption.fontSize,
+    fontWeight: '600',
   },
   alertTime: {
-    fontSize: 12,
-    color: '#757575',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
   },
   alertMessage: {
-    fontSize: 14,
-    color: '#212121',
-    lineHeight: 20,
-    marginBottom: 12,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDark,
+    lineHeight: theme.typography.body.lineHeight,
+    marginBottom: theme.spacing.xs,
   },
-  ackButton: {
-    height: 56, // 56dp minimum touch target
-    backgroundColor: '#1565C0',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  ackText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-    fontSize: 15,
+  tapHint: {
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+    fontStyle: 'italic',
   },
   emptyContainer: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: theme.spacing.xxl,
+    padding: theme.spacing.base,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#2E7D32',
-    fontWeight: 'bold',
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDim,
+    textAlign: 'center',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: theme.spacing.base,
+  },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.modal,
+    padding: theme.spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: theme.typography.heading.fontSize,
+    fontWeight: theme.typography.heading.fontWeight,
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.base,
+    textAlign: 'center',
+  },
+  modalSeverityBar: {
+    height: 4,
+    borderRadius: 2,
+    marginBottom: theme.spacing.base,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  modalLabel: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.textDim,
+    fontWeight: '600',
+    marginRight: theme.spacing.sm,
+  },
+  modalValue: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.textDark,
+  },
+  modalMessageContainer: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.base,
+  },
+  modalMessage: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDark,
+    lineHeight: theme.typography.body.lineHeight,
+  },
+  acknowledgeButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.button,
+    height: theme.sizes.buttonHeight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  acknowledgeButtonText: {
+    color: theme.colors.surface,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '700',
+  },
+  closeButton: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.button,
+    height: theme.sizes.touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
   },
 });

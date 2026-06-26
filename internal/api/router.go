@@ -122,6 +122,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/open-depots/dashboard", h.GetOpenDepotDashboard)
 			r.Get("/open-depots/{id}", h.GetOpenDepotByID)
 			r.Get("/open-depots/cleanings", h.GetCleaningSubmissions)
+			r.Get("/open-depot-submissions", h.AdminGetOpenDepotSubmissions)
 
 			// ============== WRITE (admin only) ==============
 			r.Group(func(r chi.Router) {
@@ -265,6 +266,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 				r.Put("/open-depots/{id}", h.UpdateOpenDepot)
 				r.Delete("/open-depots/{id}", h.DeleteOpenDepot)
 				r.Post("/open-depots/cleanings/{id}/review", h.ReviewCleaningSubmission)
+				r.Post("/open-depot-submissions/{id}/review", h.AdminReviewOpenDepotSubmission)
 			})
 
 			// ============== WRITE (authenticated user) ==============

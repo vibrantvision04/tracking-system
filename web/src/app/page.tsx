@@ -15,7 +15,7 @@ import DeviceCard from "@/components/dashboard/DeviceCard";
 import RFIDCoverageCard from "@/components/dashboard/RFIDCoverageCard";
 import DashboardCharts from "@/components/dashboard/DashboardCharts";
 import { CardSkeleton, ChartSkeleton, MapSkeleton } from "@/components/ui/LoadingSkeleton";
-import { Map as MapIcon, Truck, Trash2, X } from 'lucide-react';
+import { Map as MapIcon, Truck, Trash2, X, MapPin, Home } from 'lucide-react';
 import dynamic from "next/dynamic";
 
 const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false, loading: () => <MapSkeleton /> });
@@ -278,7 +278,7 @@ export default function HomePage() {
             <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-200/60 flex items-center justify-center shrink-0">
-                  <span className="text-lg">🗺️</span>
+                  <MapPin size={18} className="text-emerald-600" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-theme-text leading-tight">D2D Zone Coverage</h3>
@@ -347,7 +347,7 @@ export default function HomePage() {
             <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200/60 flex items-center justify-center shrink-0">
-                  <span className="text-lg">🏭</span>
+                  <Home size={18} className="text-emerald-600" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-theme-text leading-tight">Open Depot Live Coverage</h3>
@@ -482,7 +482,7 @@ export default function HomePage() {
             <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-theme-border flex items-center justify-between shrink-0 sticky top-0 bg-theme-card z-10">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-200/60 flex items-center justify-center shrink-0">
-                  <span className="text-lg">🚛</span>
+                  <Truck size={18} className="text-emerald-600" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-theme-text leading-tight">Garbage Collection Tonnage</h3>

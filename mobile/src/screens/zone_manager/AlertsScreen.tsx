@@ -1,42 +1,100 @@
-import React from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, ScrollView, Alert, RefreshControl } from 'react-native';
+import React, { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Modal,
+  RefreshControl,
+} from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { theme } from '../../theme/theme';
+import { Header } from '../../components/ui/Header';
+import { useTranslation } from '../../i18n/useTranslation';
 import { api } from '../../services/api';
+import { Alert as AlertType } from '../../types';
 
-interface AlertItem {
-  id: string;
-  type: 'overspeed' | 'lane_point_missed' | 'vehicle_stopped';
-  message: string;
-  severity: 'minor' | 'major';
-  created_at: string;
-  acknowledged: boolean;
+function getSeverityColor(alert: AlertType): string {
+  if (alert.severity === 'major') {
+    return theme.colors.error;
+  }
+  if (alert.type === 'overspeed') {
+    return theme.colors.warning;
+  }
+  return theme.colors.primary;
+}
+
+function getSeverityLabel(alert: AlertType, t: (key: string) => string): string {
+  if (alert.severity === 'major') {
+    return t('alerts.critical');
+  }
+  if (alert.type === 'overspeed') {
+    return t('alerts.warning');
+  }
+  return t('alerts.info');
 }
 
 export default function ZoneManagerAlertsScreen({ navigation }: any) {
+  const { t } = useTranslation();
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['zoneAlerts'],
     queryFn: async () => {
       const res = await api.get('/alerts/zone');
-      return res as unknown as { alerts: AlertItem[] };
+      return res as unknown as { alerts: AlertType[] };
     },
-    refetchInterval: 30000, // Poll every 30 seconds
+    refetchInterval: 30000,
   });
+
+  const [selectedAlert, setSelectedAlert] = useState<AlertType | null>(null);
 
   const handleAcknowledge = async (id: string) => {
     try {
       await api.post(`/alerts/acknowledge/${id}`);
-      Alert.alert('Success', 'Alert acknowledged successfully');
+      setSelectedAlert(null);
       refetch();
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to acknowledge alert');
+    } catch {
+      // Silently handle - user can retry
     }
+  };
+
+  const renderAlertItem = ({ item }: { item: AlertType }) => {
+    const severityColor = getSeverityColor(item);
+    const severityLabel = getSeverityLabel(item, t);
+
+    return (
+      <Pressable
+        style={[
+          styles.alertCard,
+          { borderLeftColor: severityColor },
+          item.acknowledged && styles.acknowledgedCard,
+        ]}
+        onPress={() => setSelectedAlert(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`${severityLabel}: ${item.message}. ${t('alerts.tapToView')}`}
+      >
+        <View style={styles.alertHeader}>
+          <View style={[styles.severityBadge, { backgroundColor: severityColor }]}>
+            <Text style={styles.severityBadgeText}>{severityLabel}</Text>
+          </View>
+          <Text style={styles.alertTime}>
+            {new Date(item.created_at).toLocaleTimeString()}
+          </Text>
+        </View>
+        <Text style={styles.alertMessage} numberOfLines={2}>
+          {item.message}
+        </Text>
+        <Text style={styles.tapHint}>{t('alerts.tapToView')}</Text>
+      </Pressable>
+    );
   };
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1565C0" />
-        <Text style={styles.loadingText}>Loading zone alerts...</Text>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -45,55 +103,110 @@ export default function ZoneManagerAlertsScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Zone Alerts</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      <Header
+        title={t('alerts.zoneAlerts')}
+        showBack={true}
+        onBack={() => navigation.goBack()}
+        rightActions={[
+          {
+            icon: 'refresh',
+            onPress: () => refetch(),
+            accessibilityLabel: 'Refresh alerts',
+          },
+        ]}
+      />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
+      <FlatList
+        data={alertList}
+        keyExtractor={(item) => item.id}
+        renderItem={renderAlertItem}
+        contentContainerStyle={styles.listContainer}
+        style={styles.list}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={['#1565C0']} />
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            colors={[theme.colors.primary]}
+          />
         }
-      >
-        <Text style={styles.sectionTitle}>Zone Active Alerts ({alertList.length})</Text>
-
-        {alertList.length === 0 ? (
+        ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No active alerts in the zone.</Text>
+            <Text style={styles.emptyText}>{t('alerts.noAlerts')}</Text>
           </View>
-        ) : (
-          alertList.map((alert: any) => (
-            <View key={alert.id} style={styles.alertCard}>
-              <View style={styles.alertHeader}>
-                <Text style={styles.alertType}>
-                  {alert.type === 'overspeed' ? '⚠️ OVERSPEED' :
-                   alert.type === 'vehicle_stopped' ? '🛑 VEHICLE STOPPED' :
-                   '📍 LANE POINT MISSED'}
-                </Text>
-                <Text style={styles.timeText}>
-                  {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
+        }
+      />
 
-              <Text style={styles.alertMessage}>{alert.message}</Text>
+      {/* Alert Detail Modal */}
+      <Modal
+        visible={selectedAlert !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedAlert(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {selectedAlert && (
+              <>
+                <Text style={styles.modalTitle}>{t('alerts.details')}</Text>
 
-              {!alert.acknowledged && (
-                <TouchableOpacity
-                  style={styles.ackButton}
-                  onPress={() => handleAcknowledge(alert.id)}
+                <View
+                  style={[
+                    styles.modalSeverityBar,
+                    { backgroundColor: getSeverityColor(selectedAlert) },
+                  ]}
+                />
+
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>{t('alerts.status')}:</Text>
+                  <View
+                    style={[
+                      styles.severityBadge,
+                      { backgroundColor: getSeverityColor(selectedAlert) },
+                    ]}
+                  >
+                    <Text style={styles.severityBadgeText}>
+                      {getSeverityLabel(selectedAlert, t)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>{t('alerts.time')}:</Text>
+                  <Text style={styles.modalValue}>
+                    {new Date(selectedAlert.created_at).toLocaleString()}
+                  </Text>
+                </View>
+
+                <View style={styles.modalMessageContainer}>
+                  <Text style={styles.modalMessage}>{selectedAlert.message}</Text>
+                </View>
+
+                {!selectedAlert.acknowledged && (
+                  <Pressable
+                    style={styles.acknowledgeButton}
+                    onPress={() => handleAcknowledge(selectedAlert.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('alerts.acknowledge')}
+                  >
+                    <Text style={styles.acknowledgeButtonText}>
+                      {t('alerts.acknowledge')}
+                    </Text>
+                  </Pressable>
+                )}
+
+                <Pressable
+                  style={styles.closeButton}
+                  onPress={() => setSelectedAlert(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
                 >
-                  <Text style={styles.ackText}>Acknowledge ✓</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ))
-        )}
-      </ScrollView>
+                  <Text style={styles.closeButtonText}>{t('common.close')}</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -101,107 +214,160 @@ export default function ZoneManagerAlertsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
-    marginTop: 12,
-    color: '#616161',
-    fontWeight: 'bold',
+    marginTop: theme.spacing.md,
+    color: theme.colors.textDim,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+  list: {
+    marginTop: theme.sizes.headerHeight,
   },
-  backButton: {
-    padding: 8,
-  },
-  backText: {
-    color: '#1565C0',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#212121',
-  },
-  scrollContainer: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#616161',
-    marginBottom: 12,
-  },
-  emptyContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 24,
-    alignItems: 'center',
-    elevation: 1,
-  },
-  emptyText: {
-    color: '#757575',
-    fontSize: 14,
+  listContainer: {
+    padding: theme.spacing.base,
   },
   alertCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.base,
+    marginBottom: theme.spacing.md,
     borderLeftWidth: 5,
-    borderLeftColor: '#C62828', // Red border for alerts
+    minHeight: theme.sizes.touchTarget,
     elevation: 2,
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  acknowledgedCard: {
+    opacity: 0.6,
   },
   alertHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: theme.spacing.sm,
   },
-  alertType: {
-    fontWeight: 'bold',
-    fontSize: 13,
-    color: '#C62828',
-  },
-  timeText: {
-    fontSize: 11,
-    color: '#757575',
-  },
-  alertMessage: {
-    fontSize: 14,
-    color: '#212121',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  ackButton: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  severityBadge: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     borderRadius: 4,
   },
-  ackText: {
-    color: '#2E7D32',
-    fontWeight: 'bold',
-    fontSize: 13,
+  severityBadgeText: {
+    color: theme.colors.surface,
+    fontSize: theme.typography.caption.fontSize,
+    fontWeight: '600',
+  },
+  alertTime: {
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+  },
+  alertMessage: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDark,
+    lineHeight: theme.typography.body.lineHeight,
+    marginBottom: theme.spacing.xs,
+  },
+  tapHint: {
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+    fontStyle: 'italic',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    marginTop: theme.spacing.xxl,
+    padding: theme.spacing.base,
+  },
+  emptyText: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDim,
+    textAlign: 'center',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: theme.spacing.base,
+  },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.modal,
+    padding: theme.spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: theme.typography.heading.fontSize,
+    fontWeight: theme.typography.heading.fontWeight,
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.base,
+    textAlign: 'center',
+  },
+  modalSeverityBar: {
+    height: 4,
+    borderRadius: 2,
+    marginBottom: theme.spacing.base,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  modalLabel: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.textDim,
+    fontWeight: '600',
+    marginRight: theme.spacing.sm,
+  },
+  modalValue: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.textDark,
+  },
+  modalMessageContainer: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.base,
+  },
+  modalMessage: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.textDark,
+    lineHeight: theme.typography.body.lineHeight,
+  },
+  acknowledgeButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.button,
+    height: theme.sizes.buttonHeight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  acknowledgeButtonText: {
+    color: theme.colors.surface,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '700',
+  },
+  closeButton: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.button,
+    height: theme.sizes.touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
   },
 });

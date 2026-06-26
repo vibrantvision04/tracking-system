@@ -460,7 +460,7 @@ export default function DepotMap({
       {isFullscreen && (
         <div className="bg-theme-surface/90 backdrop-blur border-b border-theme-border p-4 z-[1000] flex flex-col md:flex-row items-center justify-between gap-4 shadow-md">
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-theme-text">📍 Open Depot Fullscreen GIS Editor</span>
+            <span className="text-sm font-bold text-theme-text">Open Depot Fullscreen GIS Editor</span>
             <span className="text-xs text-theme-text-dim font-semibold mt-0.5">
               {hasValidCoords
                 ? `Coordinates: ${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`
@@ -531,15 +531,15 @@ export default function DepotMap({
             onClick={dropPinAtCenter}
             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-1.5 transition border border-emerald-500/30 cursor-pointer"
           >
-            📍 Drop Pin at Center
+            Drop Pin at Center
           </button>
           {hasValidCoords ? (
             <div className="bg-theme-surface/90 backdrop-blur border border-theme-border text-theme-text text-[10px] font-bold px-3.5 py-2.5 rounded-xl shadow-md flex items-center">
-              🟢 Drag & Drop pin `🎯` to adjust geofence.
+              Drag & Drop the pin to adjust geofence.
             </div>
           ) : (
             <div className="bg-theme-surface/90 backdrop-blur border border-theme-border text-theme-text text-[10px] font-bold px-3.5 py-2.5 rounded-xl shadow-md flex items-center">
-              ⚪ Click on map or center map and click "Drop Pin at Center".
+              Click on map or center map and click "Drop Pin at Center".
             </div>
           )}
         </div>

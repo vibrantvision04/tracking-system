@@ -337,12 +337,12 @@ export default function EmployeeMonitoringPage() {
       {/* Stats Banner */}
       {hasLoaded && (
         <div className="bg-theme-surface/50 border-b border-theme-border px-6 py-2.5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
-          <StatCard title="Total Employees" value={stats.total} icon={<Users size={20} />} />
-          <StatCard title="Road Sweeping Staff" value={stats.roadSweepingStaff} icon={<User size={20} />} />
-          <StatCard title="Supervisors" value={stats.supervisors} icon={<User size={20} />} />
-          <StatCard title="Zone Managers" value={stats.zoneManagers} icon={<User size={20} />} />
-          <StatCard title="Online" value={stats.online} icon={<Wifi size={20} />} />
-          <StatCard title="Offline" value={stats.offline} icon={<WifiOff size={20} />} />
+          <StatCard title="Total Employees" value={stats.total} icon={<Users size={20} />} color="emerald" />
+          <StatCard title="Road Sweeping Staff" value={stats.roadSweepingStaff} icon={<User size={20} />} color="emerald" />
+          <StatCard title="Supervisors" value={stats.supervisors} icon={<User size={20} />} color="amber" />
+          <StatCard title="Zone Managers" value={stats.zoneManagers} icon={<User size={20} />} color="red" />
+          <StatCard title="Online" value={stats.online} icon={<Wifi size={20} />} color="emerald" />
+          <StatCard title="Offline" value={stats.offline} icon={<WifiOff size={20} />} color="slate" />
         </div>
       )}
 
@@ -353,7 +353,6 @@ export default function EmployeeMonitoringPage() {
           {!hasLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-theme-base">
               <div className="text-center">
-                <div className="text-4xl mb-4">👥</div>
                 <p className="text-sm font-bold text-theme-text-dim uppercase tracking-wider">
                   Click "Load Employees" to start monitoring
                 </p>
@@ -363,7 +362,6 @@ export default function EmployeeMonitoringPage() {
           {hasLoaded && filteredEmployees.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center bg-theme-base/80 backdrop-blur-sm z-10">
               <div className="text-center">
-                <div className="text-4xl mb-4">🔍</div>
                 <p className="text-sm font-bold text-theme-text-dim uppercase tracking-wider">
                   No employees match filters
                 </p>

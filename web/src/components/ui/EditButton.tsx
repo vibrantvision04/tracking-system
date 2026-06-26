@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import { Pencil } from 'lucide-react';
 
 interface EditButtonProps {
   onClick: (e: React.MouseEvent) => void;
@@ -28,7 +29,7 @@ export default function EditButton({
         className={`${baseStyles} bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow shadow-indigo-600/10 ${className}`}
         title={title}
       >
-        ✏️ Edit
+        <Pencil size={12} className="mr-1" /> Edit
       </button>
     );
   }

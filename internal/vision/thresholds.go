@@ -1,0 +1,68 @@
+package vision
+
+var (
+	MinImageWidth       = 200
+	MinImageHeight      = 200
+	MaxImageWidth       = 10000
+	MaxImageHeight      = 10000
+	MaxImageSizeBytes   = 20 * 1024 * 1024
+
+	BlurThreshold       = 100.0
+
+	MinBrightness       = 30.0
+	MaxBrightness       = 230.0
+
+	MinFaceSizeRatio    = 0.05
+
+	FaceCenterMargin    = 0.35
+
+	MaxFaces            = 2
+	MinFaces            = 1
+
+	FaceDetectionScale  = 1.1
+	FaceDetectionShift  = 0.1
+	FaceDetectionMinSize = 100
+)
+
+type Config struct {
+	MinImageWidth       int
+	MinImageHeight      int
+	MaxImageWidth       int
+	MaxImageHeight      int
+	MaxImageSizeBytes   int64
+
+	BlurThreshold       float64
+
+	MinBrightness       float64
+	MaxBrightness       float64
+
+	MinFaceSizeRatio    float64
+	FaceCenterMargin    float64
+
+	MaxFaces            int
+	MinFaces            int
+
+	FaceDetectionScale  float64
+	FaceDetectionShift  float64
+	FaceDetectionMinSize int
+}
+
+func DefaultConfig() Config {
+	return Config{
+		MinImageWidth:       MinImageWidth,
+		MinImageHeight:      MinImageHeight,
+		MaxImageWidth:       MaxImageWidth,
+		MaxImageHeight:      MaxImageHeight,
+		MaxImageSizeBytes:   int64(MaxImageSizeBytes),
+		BlurThreshold:       BlurThreshold,
+		MinBrightness:       MinBrightness,
+		MaxBrightness:       MaxBrightness,
+		MinFaceSizeRatio:    MinFaceSizeRatio,
+		FaceCenterMargin:    FaceCenterMargin,
+		MaxFaces:            MaxFaces,
+		MinFaces:            MinFaces,
+		FaceDetectionScale:  FaceDetectionScale,
+		FaceDetectionShift:  FaceDetectionShift,
+		FaceDetectionMinSize: FaceDetectionMinSize,
+	}
+}

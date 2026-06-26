@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, Image, Alert, ScrollView, FlatList } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGPS } from '../../hooks/useGPS';
 import { useCamera } from '../../hooks/useCamera';
 import CameraCapture from '../../components/CameraCapture';
-import { api, BASE_URL } from '../../services/api';
+import { api, BASE_URL, KEYS } from '../../services/api';
 import axios from 'axios';
 
 interface Employee {
@@ -53,12 +55,17 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
     async function fetchData() {
       setLoadingData(true);
       try {
-        const empRes = await axios.get(`${BASE_URL}/api/employees`);
+        const token = await AsyncStorage.getItem(KEYS.ACCESS_TOKEN);
+        const empRes = await axios.get(`${BASE_URL}/api/employees`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (empRes.data && empRes.data.data) {
           setEmployees(empRes.data.data);
         }
 
-        const vehRes = await axios.get(`${BASE_URL}/api/vehicles`);
+        const vehRes = await axios.get(`${BASE_URL}/api/vehicles`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (vehRes.data && vehRes.data.data) {
           setVehicles(vehRes.data.data);
         }
@@ -118,7 +125,6 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
     setPhotoBase64(base64);
     setLoading(true);
     try {
-      // Validate photo with backend
       const res = await api.post('/attendance/validate-photo', {
         photo_base64: base64,
         gps_lat: coords?.latitude || 0,
@@ -129,7 +135,9 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
         setFaceCount(res.face_count || 1);
         setStep('form');
       } else {
-        Alert.alert('Validation Failed', 'No face detected or photo too blurry. Please try again.');
+        const issues: string[] = res?.issues || [];
+        const msg = issues.length > 0 ? issues.join('\n') : 'Photo validation failed. Please try again.';
+        Alert.alert('Validation Failed', msg);
         setStep('camera');
       }
     } catch (err: any) {
@@ -272,7 +280,10 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
                 </View>
 
                 <TouchableOpacity style={styles.primaryButton} onPress={() => setStep('gps')}>
-                  <Text style={styles.buttonText}>Continue →</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.buttonText}>Continue </Text>
+                    <Ionicons name="arrow-forward-outline" size={18} color="#ffffff" />
+                  </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
@@ -371,7 +382,7 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
 
         {step === 'success' && (
           <View style={styles.stepContainer}>
-            <Text style={styles.successIcon}>🎉</Text>
+            <Ionicons name="checkmark-circle" size={60} color="#059669" style={styles.successIcon} />
             <Text style={styles.successTitle}>Attendance Recorded!</Text>
             <Text style={styles.successSubtitle}>
               Attendance marked successfully by Zone Manager.
@@ -532,8 +543,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#9e9e9e',
   },
   successIcon: {
-    fontSize: 60,
     marginBottom: 16,
+    textAlign: 'center',
   },
   successTitle: {
     fontSize: 20,

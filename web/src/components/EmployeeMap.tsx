@@ -67,37 +67,37 @@ function getMarkerColor(employee: Employee): string {
   
   switch (employee.designation) {
     case "Road Sweeping Staff":
-      return "#3B82F6"; // Blue
+      return "#10B981"; // Emerald/Green
     case "Supervisor":
-      return "#F97316"; // Orange
+      return "#F59E0B"; // Yellow/Amber
     case "Zone Manager":
-      return "#8B5CF6"; // Purple
+      return "#EF4444"; // Red
     default:
-      return "#6B7280";
+      return "#10B981"; // Emerald default
   }
 }
 
-function getMarkerEmoji(employee: Employee): string {
+function getMarkerSVG(employee: Employee): string {
   switch (employee.designation) {
     case "Road Sweeping Staff":
-      return "🧹";
+      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
     case "Supervisor":
-      return "👔";
+      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
     case "Zone Manager":
-      return "👨‍💼";
+      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
     default:
-      return "👤";
+      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
   }
 }
 
 function buildMarkerIcon(employee: Employee, isSelected: boolean): L.DivIcon {
   const color = getMarkerColor(employee);
-  const emoji = getMarkerEmoji(employee);
+  const svg = getMarkerSVG(employee);
   const selectedClass = isSelected ? "selected" : "";
   
   return L.divIcon({
     className: "",
-    html: `<div class="emp-marker ${selectedClass}" style="width:32px;height:32px;background-color:${color};">${emoji}</div>`,
+    html: `<div class="emp-marker ${selectedClass}" style="width:32px;height:32px;background-color:${color};display:flex;align-items:center;justify-content:center;">${svg}</div>`,
     iconSize: [32, 32],
     iconAnchor: [16, 16],
     popupAnchor: [0, -20],
@@ -133,7 +133,7 @@ function buildPopupContent(employee: Employee): string {
 
         <!-- Employee Details */}
         <div>
-          <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;">👤 Employee Information</div>
+          <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;">Employee Information</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;font-size:11px;">
             <span style="color:#64748b;">Designation:</span><span style="font-weight:600;text-align:right;">${employee.designation}</span>
             <span style="color:#64748b;">Mobile:</span><span style="font-weight:600;text-align:right;">${employee.mobile_number}</span>
@@ -144,7 +144,7 @@ function buildPopupContent(employee: Employee): string {
 
         <!-- Assignment Details */}
         <div>
-          <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;">📍 Assignment Information</div>
+          <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;">Assignment Information</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;font-size:11px;">
             <span style="color:#64748b;">Zone:</span><span style="font-weight:600;text-align:right;">${employee.zone}</span>
             <span style="color:#64748b;">Ward:</span><span style="font-weight:600;text-align:right;">${employee.ward}</span>
@@ -156,7 +156,7 @@ function buildPopupContent(employee: Employee): string {
 
         <!-- GPS Details */}
         <div>
-          <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;">🛰️ GPS Information</div>
+          <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;">GPS Information</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;font-size:11px;">
             <span style="color:#64748b;">Latitude:</span><span style="font-weight:600;text-align:right;font-family:monospace;">${employee.latitude.toFixed(5)}</span>
             <span style="color:#64748b;">Longitude:</span><span style="font-weight:600;text-align:right;font-family:monospace;">${employee.longitude.toFixed(5)}</span>
@@ -176,7 +176,10 @@ export default function EmployeeMap({ employees, selectedEmployee, onEmployeeCli
 
   // 1. Init Map
   useEffect(() => {
-    if (!mapContainer.current || mapInstance) return;
+    if (!mapContainer.current) return;
+
+    // Prevent re-initialization if Leaflet already attached to this DOM node
+    if ((mapContainer.current as any)._leaflet_id) return;
 
     const m = L.map(mapContainer.current, {
       zoomControl: false,

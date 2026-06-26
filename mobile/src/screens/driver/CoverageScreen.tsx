@@ -1,9 +1,14 @@
 import React from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
+import { theme } from '../../theme/theme';
+import { Header } from '../../components/ui/Header';
+import { useTranslation } from '../../i18n/useTranslation';
 
 export default function CoverageScreen({ navigation }: any) {
+  const { t } = useTranslation();
+
   const { data: cov, isLoading, refetch } = useQuery({
     queryKey: ['myCoverage'],
     queryFn: async () => {
@@ -15,169 +20,182 @@ export default function CoverageScreen({ navigation }: any) {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1565C0" />
-        <Text style={styles.loadingText}>Loading coverage statistics...</Text>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>{t('common.loading')}</Text>
       </View>
     );
   }
 
   const pct = cov?.coverage_percent || 0;
+  const target = 80; // default coverage target percentage
+  const isAchieved = pct >= target;
+  const ringColor = isAchieved ? theme.colors.success : theme.colors.error;
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Coverage</Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={() => refetch()}>
-          <Text style={styles.refreshText}>🔄</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.screen}>
+      <Header
+        title={t('coverage.title')}
+        showBack={true}
+        onBack={() => navigation.goBack()}
+        rightActions={[
+          {
+            icon: 'refresh',
+            onPress: () => refetch(),
+            accessibilityLabel: t('common.retry'),
+          },
+        ]}
+      />
 
-      <View style={styles.card}>
-        {/* Progress Ring Simulation */}
-        <View style={styles.progressRingOuter}>
-          <View style={styles.progressRingInner}>
-            <Text style={styles.progressPctText}>{pct.toFixed(0)}%</Text>
-            <Text style={styles.progressLabelText}>COMPLETED</Text>
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+        {/* Coverage Progress Ring Card */}
+        <View style={styles.card}>
+          <View style={[styles.progressRingOuter, { borderColor: ringColor }]}>
+            <View style={styles.progressRingInner}>
+              <Text style={[styles.progressPctText, { color: ringColor }]}>
+                {pct.toFixed(0)}%
+              </Text>
+              <Text style={styles.progressLabelText}>{t('coverage.percentage')}</Text>
+            </View>
+          </View>
+
+          {/* Achievement Status Badge */}
+          <View style={[styles.statusBadge, { backgroundColor: isAchieved ? theme.colors.primaryLight : theme.colors.errorLight }]}>
+            <Text style={[styles.statusBadgeText, { color: isAchieved ? theme.colors.success : theme.colors.error }]}>
+              {isAchieved ? t('coverage.achieved') : t('coverage.missed')}
+            </Text>
+          </View>
+
+          <Text style={styles.achievedText}>
+            {t('coverage.target')}: {target}% | {t('coverage.actual')}: {pct.toFixed(0)}%
+          </Text>
+
+          {/* Divider */}
+          <View style={styles.divider} />
+
+          {/* Status Breakdown Row */}
+          <View style={styles.statusRow}>
+            <View style={styles.statusCol}>
+              <Text style={[styles.statusCount, { color: theme.colors.success }]}>
+                {cov?.achieved || 0}
+              </Text>
+              <Text style={styles.statusLabel}>{t('coverage.achieved')}</Text>
+            </View>
+
+            <View style={styles.statusCol}>
+              <Text style={[styles.statusCount, { color: theme.colors.warning }]}>
+                {cov?.pending_approval || 0}
+              </Text>
+              <Text style={styles.statusLabel}>{t('coverage.inProgress')}</Text>
+            </View>
+
+            <View style={styles.statusCol}>
+              <Text style={[styles.statusCount, { color: theme.colors.error }]}>
+                {cov?.missed || 0}
+              </Text>
+              <Text style={styles.statusLabel}>{t('coverage.missed')}</Text>
+            </View>
           </View>
         </View>
 
-        <Text style={styles.achievedText}>
-          Achieved: {cov?.achieved || 0} / Total: {cov?.total_lane_points || 0} Points
-        </Text>
-
-        {/* Breakdowns */}
-        <View style={styles.divider} />
-        
-        <View style={styles.statusRow}>
-          <View style={styles.statusCol}>
-            <Text style={[styles.statusCount, { color: '#2E7D32' }]}>{cov?.achieved || 0}</Text>
-            <Text style={styles.statusLabel}>Done</Text>
-          </View>
-
-          <View style={styles.statusCol}>
-            <Text style={[styles.statusCount, { color: '#F57F17' }]}>{cov?.pending_approval || 0}</Text>
-            <Text style={styles.statusLabel}>Pending</Text>
-          </View>
-
-          <View style={styles.statusCol}>
-            <Text style={[styles.statusCount, { color: '#C62828' }]}>{cov?.missed || 0}</Text>
-            <Text style={styles.statusLabel}>Missed</Text>
-          </View>
+        {/* Shift Information Card */}
+        <View style={styles.shiftCard}>
+          <Text style={styles.shiftTitle}>⏱️ {t('home.punchedIn')}</Text>
+          <Text style={styles.shiftText}>
+            {t('coverage.actual')}: {cov?.achieved || 0} / {cov?.total_lane_points || 0}
+          </Text>
+          <Text style={styles.shiftText}>
+            {cov?.shift_end
+              ? new Date(cov.shift_end).toLocaleTimeString()
+              : '—'}
+          </Text>
         </View>
-      </View>
-
-      {/* Shift Time Info */}
-      <View style={styles.timerCard}>
-        <Text style={styles.timerTitle}>⏱️ Shift Information</Text>
-        <Text style={styles.timerText}>
-          Shift Status: ACTIVE
-        </Text>
-        <Text style={styles.timerText}>
-          Shift ends at: {cov?.shift_end ? new Date(cov.shift_end).toLocaleTimeString() : '14:00 PM'}
-        </Text>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
-    marginTop: 12,
-    color: '#616161',
-    fontWeight: 'bold',
+    marginTop: theme.spacing.md,
+    color: theme.colors.textDim,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: theme.typography.body.fontWeight,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+  scrollContent: {
+    flex: 1,
+    marginTop: theme.sizes.headerHeight,
   },
-  backButton: {
-    padding: 8,
-  },
-  backText: {
-    color: '#1565C0',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#212121',
-  },
-  refreshButton: {
-    padding: 8,
-  },
-  refreshText: {
-    fontSize: 18,
+  scrollContentContainer: {
+    padding: theme.spacing.base,
   },
   card: {
-    backgroundColor: '#ffffff',
-    margin: 16,
-    borderRadius: 8,
-    padding: 24,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.xl,
     alignItems: 'center',
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    elevation: 2,
+    marginBottom: theme.spacing.base,
   },
   progressRingOuter: {
     width: 160,
     height: 160,
     borderRadius: 80,
     borderWidth: 12,
-    borderColor: '#2E7D32', // green completed ring
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: theme.spacing.lg,
   },
   progressRingInner: {
     width: 130,
     height: 130,
     borderRadius: 65,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
   progressPctText: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#212121',
+    fontWeight: '700',
   },
   progressLabelText: {
-    fontSize: 10,
-    color: '#757575',
-    fontWeight: 'bold',
-    marginTop: 4,
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+    fontWeight: '600',
+    marginTop: theme.spacing.xs,
+  },
+  statusBadge: {
+    paddingHorizontal: theme.spacing.base,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.button,
+    marginBottom: theme.spacing.md,
+  },
+  statusBadgeText: {
+    fontSize: theme.typography.secondary.fontSize,
+    fontWeight: '600',
   },
   achievedText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 16,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.base,
   },
   divider: {
     height: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: theme.colors.border,
     width: '100%',
-    marginBottom: 16,
+    marginBottom: theme.spacing.base,
   },
   statusRow: {
     flexDirection: 'row',
@@ -188,31 +206,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusCount: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: theme.typography.heading.fontSize,
+    fontWeight: '700',
   },
   statusLabel: {
-    fontSize: 12,
-    color: '#757575',
-    marginTop: 4,
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+    marginTop: theme.spacing.xs,
   },
-  timerCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-    padding: 16,
+  shiftCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.base,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     elevation: 2,
   },
-  timerTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 8,
+  shiftTitle: {
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.sm,
   },
-  timerText: {
-    fontSize: 13,
-    color: '#616161',
-    marginBottom: 4,
+  shiftText: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.textDim,
+    lineHeight: theme.typography.secondary.lineHeight,
+    marginBottom: theme.spacing.xs,
   },
 });

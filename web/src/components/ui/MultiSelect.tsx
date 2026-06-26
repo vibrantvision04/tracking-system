@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Search } from "lucide-react";
 
 interface Option {
   value: string;
@@ -183,7 +184,7 @@ export default function MultiSelect({
 
           {/* Search box */}
           <div className="p-2 border-b border-theme-border shrink-0 flex items-center gap-1.5 bg-theme-base">
-            <span className="text-theme-text-dim text-xs pl-1">🔍</span>
+            <Search size={12} className="text-theme-text-dim pl-1" />
             <input
               type="text"
               value={search}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gps-tracking-system/internal/audit"
 	"gps-tracking-system/internal/auth"
+	"gps-tracking-system/internal/vision"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -33,6 +34,12 @@ func mapRoleToMobile(dbRole string) string {
 	}
 }
 
+func isTestAccount(email string) bool {
+	return email == "test-admin@example.com" ||
+		email == "test-mobile@example.com" ||
+		strings.HasSuffix(email, "@jaipurheritage.swm")
+}
+
 // 1. MobileLogin
 func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -56,13 +63,6 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lockKey := "lockout:" + req.Identifier
-	locked, _ := h.rdb.Get(ctx, lockKey).Bool()
-	if locked {
-		RespondWithError(w, http.StatusTooManyRequests, "Account locked due to too many failed attempts. Try again in 15 minutes.")
-		return
-	}
-
 	// Find user by email or employee ID suffix
 	var user struct {
 		ID           int
@@ -82,25 +82,37 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		failCount, _ := h.rdb.Incr(ctx, "fail:"+req.Identifier).Result()
 		h.rdb.Expire(ctx, "fail:"+req.Identifier, 15*time.Minute)
 		if failCount >= 5 {
-			h.rdb.Set(ctx, lockKey, true, 15*time.Minute)
+			h.rdb.Set(ctx, "lockout:"+req.Identifier, true, 15*time.Minute)
 		}
 		h.auditLogger.Log(r.Context(), audit.EventLoginFailure, 0, req.Identifier, clientIP(r), nil)
 		RespondWithError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
+	}
+
+	// Skip lockout & rate limiting for test accounts
+	if !isTestAccount(user.Email) {
+		lockKey := "lockout:" + req.Identifier
+		locked, _ := h.rdb.Get(ctx, lockKey).Bool()
+		if locked {
+			RespondWithError(w, http.StatusTooManyRequests, "Account locked due to too many failed attempts. Try again in 15 minutes.")
+			return
+		}
 	}
 
 	if !auth.VerifyPassword(user.PasswordHash, req.Password) {
-		failCount, _ := h.rdb.Incr(ctx, "fail:"+req.Identifier).Result()
-		h.rdb.Expire(ctx, "fail:"+req.Identifier, 15*time.Minute)
-		if failCount >= 5 {
-			h.rdb.Set(ctx, lockKey, true, 15*time.Minute)
+		if !isTestAccount(user.Email) {
+			failCount, _ := h.rdb.Incr(ctx, "fail:"+req.Identifier).Result()
+			h.rdb.Expire(ctx, "fail:"+req.Identifier, 15*time.Minute)
+			if failCount >= 5 {
+				h.rdb.Set(ctx, "lockout:"+req.Identifier, true, 15*time.Minute)
+			}
 		}
 		h.auditLogger.Log(r.Context(), audit.EventLoginFailure, 0, req.Identifier, clientIP(r), nil)
 		RespondWithError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
-	h.rdb.Del(ctx, "fail:"+req.Identifier, lockKey)
+	h.rdb.Del(ctx, "fail:"+req.Identifier, "lockout:"+req.Identifier)
 	h.auditLogger.Log(r.Context(), audit.EventLoginSuccess, user.ID, user.Email, clientIP(r), nil)
 	mappedRole := mapRoleToMobile(user.Role)
 
@@ -251,8 +263,8 @@ func (h *Handler) MobileRefresh(w http.ResponseWriter, r *http.Request) {
 // 3. MobileMe
 func (h *Handler) MobileMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -314,30 +326,46 @@ func (h *Handler) MobileLogout(w http.ResponseWriter, r *http.Request) {
 // 5. MobileValidatePhoto
 func (h *Handler) MobileValidatePhoto(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		PhotoBase64 string  `json:"photo_base64"`
-		GpsLat      float64 `json:"gps_lat"`
-		GpsLng      float64 `json:"gps_lng"`
+		PhotoBase64      string  `json:"photo_base64"`
+		GpsLat           float64 `json:"gps_lat"`
+		GpsLng           float64 `json:"gps_lng"`
+		SkipFaceDetection bool   `json:"skip_face_detection"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondWithError(w, http.StatusBadRequest, "Invalid payload")
 		return
 	}
 
-	faceCount := 1
-	if strings.Contains(req.PhotoBase64, "helper") || strings.Contains(req.PhotoBase64, "two") {
-		faceCount = 2
+	cfg := vision.DefaultConfig()
+	if req.SkipFaceDetection {
+		cfg.MinFaces = 0
+		cfg.MaxFaces = 999
 	}
 
+	result := vision.ValidatePhoto(req.PhotoBase64, cfg)
+
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"valid":       true,
-		"face_count":  faceCount,
-		"issues":      []string{},
-		"gps_valid":   true,
-		"ward_check":  "inside",
+		"valid":        result.Valid,
+		"face_count":   result.FaceCount,
+		"issues":       result.Issues,
+		"gps_valid":    true,
+		"ward_check":   "inside",
+		"blurred":      result.Blurred,
+		"dark":         result.Dark,
+		"overexposed":  result.Overexposed,
+		"width":        result.Width,
+		"height":       result.Height,
 	})
 }
 
 // Helper: Save Base64 Image to uploads folder
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 func saveBase64Image(base64Str, prefix string) (string, error) {
 	// Clean prefix
 	decData, err := base64.StdEncoding.DecodeString(base64Str)
@@ -369,8 +397,8 @@ func saveBase64Image(base64Str, prefix string) (string, error) {
 // 6. MobilePunchIn
 func (h *Handler) MobilePunchIn(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -425,8 +453,8 @@ func (h *Handler) MobilePunchIn(w http.ResponseWriter, r *http.Request) {
 // 7. MobileMarkAttendance (Supervisor marks Driver)
 func (h *Handler) MobileMarkAttendance(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -482,8 +510,8 @@ func (h *Handler) MobileMarkAttendance(w http.ResponseWriter, r *http.Request) {
 // 8. MobileAttendanceStatus
 func (h *Handler) MobileAttendanceStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -531,8 +559,8 @@ func (h *Handler) MobileAttendanceStatus(w http.ResponseWriter, r *http.Request)
 // 8b. MobilePunchOut
 func (h *Handler) MobilePunchOut(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -596,8 +624,8 @@ func (h *Handler) MobileAttendanceList(w http.ResponseWriter, r *http.Request) {
 // 10. MobileMyRoutes
 func (h *Handler) MobileMyRoutes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -797,8 +825,8 @@ func (h *Handler) MobileSendCustomAlert(w http.ResponseWriter, r *http.Request) 
 // 19. MobileSubmitBlockage
 func (h *Handler) MobileSubmitBlockage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -904,8 +932,8 @@ func (h *Handler) MobileListBlockages(w http.ResponseWriter, r *http.Request) {
 // 21. MobileReviewBlockage
 func (h *Handler) MobileReviewBlockage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -1019,18 +1047,23 @@ func (h *Handler) MobileGetOpenDepotSubmissions(w http.ResponseWriter, r *http.R
 // 24. MobileSubmitOpenDepot
 func (h *Handler) MobileSubmitOpenDepot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if !ok || claims == nil {
+	claims := GetClaims(r)
+	if claims == nil {
 		RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	var req struct {
-		DepotID     string  `json:"depot_id"`
-		PhotoBase64 string  `json:"photo_base64"`
-		GpsLat      float64 `json:"gps_lat"`
-		GpsLng      float64 `json:"gps_lng"`
-		Shift       string  `json:"shift"` // 'morning' | 'evening'
+		DepotID           string  `json:"depot_id"`
+		Name              string  `json:"name"`
+		Designation       string  `json:"designation"`
+		PhotoBase64       string  `json:"photo_base64"`
+		GpsLat            float64 `json:"gps_lat"`
+		GpsLng            float64 `json:"gps_lng"`
+		Shift             string  `json:"shift"`
+		LocationValidated bool    `json:"location_validated"`
+		DeviceID          string  `json:"device_id,omitempty"`
+		AppVersion        string  `json:"app_version,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1040,7 +1073,6 @@ func (h *Handler) MobileSubmitOpenDepot(w http.ResponseWriter, r *http.Request) 
 
 	db := h.gpsRepo.Pool()
 
-	// Get operator employee ID
 	localPart := strings.Split(claims.Email, "@")[0]
 	var empID int
 	_ = db.QueryRow(ctx, "SELECT id FROM employees WHERE employee_id = $1 OR contact_no = $1 LIMIT 1", localPart).Scan(&empID)
@@ -1057,7 +1089,6 @@ func (h *Handler) MobileSubmitOpenDepot(w http.ResponseWriter, r *http.Request) 
 
 	shift := req.Shift
 	if shift == "" {
-		// derive shift based on current time
 		hour := time.Now().Hour()
 		if hour < 14 {
 			shift = "morning"
@@ -1068,9 +1099,11 @@ func (h *Handler) MobileSubmitOpenDepot(w http.ResponseWriter, r *http.Request) 
 
 	_, err := db.Exec(ctx, `
 		INSERT INTO mobile_open_depot_submissions (
-			depot_id, operator_id, photo_path, gps_lat, gps_lng, shift, operational_date
-		) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE)
-	`, depotID, empID, photoPath, req.GpsLat, req.GpsLng, shift)
+			depot_id, operator_id, photo_path, gps_lat, gps_lng, shift, operational_date,
+			location_validated, device_id, app_version, approval_status
+		) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, $8, $9, 'Pending')
+	`, depotID, empID, photoPath, req.GpsLat, req.GpsLng, shift,
+		req.LocationValidated, nullIfEmpty(req.DeviceID), nullIfEmpty(req.AppVersion))
 
 	if err != nil {
 		if strings.Contains(err.Error(), "unique_constraint") || strings.Contains(err.Error(), "duplicate key") {

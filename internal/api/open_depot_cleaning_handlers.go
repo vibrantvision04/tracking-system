@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"gps-tracking-system/internal/auth"
 	"gps-tracking-system/internal/repository"
 	"image"
 	"image/jpeg"
@@ -141,8 +140,8 @@ func (h *Handler) CreateCleaningSubmission(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Extract user claims if authenticated via JWT token
-	claims, ok := ctx.Value("user").(*auth.Claims)
-	if ok && claims != nil {
+	claims := GetClaims(r)
+	if claims != nil {
 		if req.UploadedBy == "" {
 			req.UploadedBy = claims.Email
 		}

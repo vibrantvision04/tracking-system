@@ -1,192 +1,280 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Image,
+} from 'react-native';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useTranslation } from '../../i18n/useTranslation';
+import { theme } from '../../theme/theme';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { LanguageToggle } from '../../components/ui/LanguageToggle';
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const { t } = useTranslation();
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearFieldErrors = useCallback(() => {
+    setIdentifierError(null);
+    setPasswordError(null);
+  }, []);
 
   const handleLogin = async () => {
-    if (!identifier.trim()) {
-      setErrorMsg('Please enter your Employee ID or Phone Number');
-      return;
-    }
-    
-    setLoading(true);
+    // Clear previous errors
     setErrorMsg(null);
+    clearFieldErrors();
+
+    // Empty field validation
+    let hasError = false;
+    if (!identifier.trim()) {
+      setIdentifierError(t('login.fieldRequired'));
+      hasError = true;
+    }
+    if (!password) {
+      setPasswordError(t('login.fieldRequired'));
+      hasError = true;
+    }
+    if (hasError) return;
+
+    setLoading(true);
+
+    // Set 30-second timeout
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeoutRef.current = setTimeout(() => resolve('timeout'), 30000);
+    });
+
     try {
-      const res = await api.post('/login', {
+      const loginPromise = api.post('/login', {
         identifier: identifier.trim(),
         password: password,
-      }) as any;
-      
+      });
+
+      const result = await Promise.race([loginPromise, timeoutPromise]);
+
+      // Clear the timeout if the request completed
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      if (result === 'timeout') {
+        setErrorMsg(t('login.errorTimeout'));
+        setLoading(false);
+        return;
+      }
+
+      const res = result as any;
       if (res && res.access_token) {
         await login(res.access_token, res.refresh_token, res.user);
       } else {
-        setErrorMsg('Invalid login response. Please check backend settings.');
+        setErrorMsg(t('login.errorInvalid'));
       }
     } catch (err: any) {
-      setErrorMsg(err?.error || err?.message || 'Login failed. Please check credentials.');
+      // Clear the timeout on error
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      if (err?.message === 'Network Error' || err?.code === 'ERR_NETWORK') {
+        setErrorMsg(t('login.errorNetwork'));
+      } else if (err?.status === 401 || err?.error?.includes?.('invalid') || err?.error?.includes?.('Invalid')) {
+        setErrorMsg(t('login.errorInvalid'));
+      } else {
+        setErrorMsg(t('login.errorInvalid'));
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.card}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoIcon}>🚛</Text>
-          <Text style={styles.logoText}>ISWM Field Ops</Text>
+    <View style={styles.screen}>
+      {/* Fixed 56px header with white bg and bottom border */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft} />
+        <View style={styles.headerRight}>
+          <LanguageToggle compact />
+        </View>
+      </View>
+
+      {/* Scrollable content area with base background and 16px padding */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Branding */}
+        <View style={styles.brandingArea}>
+          <View style={styles.logoBox}>
+            <Image
+              source={require('../../../assets/Jaipur_Municipal_Corporation_Logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.brandTitle}>{t('login.title')}</Text>
+          <Text style={styles.brandSubtitle}>{t('login.subtitle')}</Text>
+          <Text style={styles.brandOrg}>{t('login.org')}</Text>
         </View>
 
-        <Text style={styles.title}>Account Login</Text>
-        <Text style={styles.subtitle}>Enter your Employee ID/Phone and password to continue</Text>
+        {/* Form */}
+        <View style={styles.formArea}>
+          <Input
+            label={t('login.employeeId')}
+            value={identifier}
+            onChangeText={(text) => {
+              setIdentifier(text);
+              setIdentifierError(null);
+              setErrorMsg(null);
+            }}
+            placeholder={t('login.employeeId.placeholder')}
+            error={identifierError ?? undefined}
+            maxLength={20}
+            keyboardType="default"
+          />
 
+          <Input
+            label={t('login.password')}
+            value={password}
+            onChangeText={(text) => {
+              setPassword(text);
+              setPasswordError(null);
+              setErrorMsg(null);
+            }}
+            placeholder={t('login.password.placeholder')}
+            error={passwordError ?? undefined}
+            secureTextEntry={true}
+            maxLength={64}
+          />
+        </View>
+
+        {/* Error Banner */}
         {errorMsg && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         )}
+      </ScrollView>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Employee ID or Phone</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 8769807155"
-            placeholderTextColor="#9e9e9e"
-            value={identifier}
-            onChangeText={(text) => {
-              setIdentifier(text);
-              setErrorMsg(null);
-            }}
-            keyboardType="default"
-            autoCapitalize="none"
-          />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter password"
-            placeholderTextColor="#9e9e9e"
-            secureTextEntry
-            value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              setErrorMsg(null);
-            }}
-          />
-        </View>
-
-        <TouchableOpacity 
-          style={[styles.loginButton, loading && styles.disabledButton]} 
+      {/* Bottom-anchored action area with 16px padding for the primary Sign In button */}
+      <View style={styles.bottomActionArea}>
+        <Button
+          title={t('login.signIn')}
           onPress={handleLogin}
+          variant="primary"
           disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.loginButtonText}>Login</Text>
-          )}
-        </TouchableOpacity>
+          loading={loading}
+        />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    padding: 16,
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 24,
-    elevation: 4,
-    shadowColor: '#000000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  logoContainer: {
+  header: {
+    height: theme.sizes.headerHeight,
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingHorizontal: theme.spacing.base,
   },
-  logoIcon: {
-    fontSize: 50,
+  headerLeft: {
+    width: theme.sizes.touchTarget,
   },
-  logoText: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1565C0',
-    marginTop: 8,
+  headerRight: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 8,
+  scrollView: {
+    flex: 1,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#616161',
-    marginBottom: 20,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: theme.spacing.base,
+    paddingVertical: theme.spacing.base,
+    justifyContent: 'center',
+  },
+  brandingArea: {
+    alignItems: 'center',
+    marginBottom: theme.spacing.xxl,
+  },
+  logoBox: {
+    width: 64,
+    height: 64,
+    borderRadius: theme.borderRadius.button,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  logoImage: {
+    width: 44,
+    height: 44,
+  },
+  brandTitle: {
+    fontSize: theme.typography.heading.fontSize,
+    fontWeight: '900',
+    color: theme.colors.textDark,
+    letterSpacing: -0.5,
+  },
+  brandSubtitle: {
+    fontSize: theme.typography.secondary.fontSize,
+    fontWeight: '600',
+    color: theme.colors.textDim,
+    marginTop: theme.spacing.xs,
+    textAlign: 'center',
+  },
+  brandOrg: {
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+    marginTop: theme.spacing.xs,
+    fontWeight: '500',
+  },
+  formArea: {
+    gap: theme.spacing.base,
+    marginBottom: theme.spacing.base,
   },
   errorBanner: {
-    backgroundColor: '#FFEBEE',
-    borderColor: '#C62828',
+    backgroundColor: theme.colors.errorLight,
     borderWidth: 1,
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: theme.colors.error,
+    borderRadius: theme.borderRadius.card,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.base,
+    marginTop: theme.spacing.base,
   },
   errorText: {
-    color: '#C62828',
-    fontSize: 14,
+    color: theme.colors.error,
+    fontSize: theme.typography.secondary.fontSize,
     fontWeight: '600',
+    textAlign: 'center',
   },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#212121',
-    marginBottom: 6,
-  },
-  input: {
-    height: 56, // 56dp minimum touch target
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#212121',
-    backgroundColor: '#fafafa',
-  },
-  loginButton: {
-    height: 56, // 56dp minimum touch target
-    backgroundColor: '#1565C0',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  disabledButton: {
-    backgroundColor: '#9e9e9e',
-  },
-  loginButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  bottomActionArea: {
+    padding: theme.spacing.base,
+    backgroundColor: theme.colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
   },
 });

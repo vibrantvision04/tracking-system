@@ -1,309 +1,289 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Image, Alert, ScrollView, FlatList } from 'react-native';
-import { useGPS } from '../../hooks/useGPS';
-import { useCamera } from '../../hooks/useCamera';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  StyleSheet, Text, View, TouchableOpacity, ActivityIndicator,
+  Image, Alert, FlatList, TextInput
+} from 'react-native';
+import Constants from 'expo-constants';
 import CameraCapture from '../../components/CameraCapture';
 import { api } from '../../services/api';
 import { getHaversineDistance } from '../../utils/gpsValidator';
 import { OpenDepot } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { theme } from '../../theme/theme';
+import { useTranslation } from '../../i18n/useTranslation';
+import { useGPS } from '../../hooks/useGPS';
 
-interface DepotSubmission {
-  depot_id: number;
-  shift: string;
-  submitted_at: string;
+type Step = 'camera' | 'select_depot' | 'submit' | 'success';
+
+interface DepotOption {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
 }
 
 export default function SubmitPhotoScreen({ navigation }: any) {
-  const { logout, user } = useAuth();
-  const { getCurrentLocation, loading: loadingGPS } = useGPS();
-  const { requestPermission } = useCamera();
+  const { user } = useAuth();
+  const { t } = useTranslation();
+  const { getCurrentLocation } = useGPS();
 
-  // Steps: 'select_depot', 'gps', 'camera', 'confirm', 'success'
-  const [step, setStep] = useState<'select_depot' | 'gps' | 'camera' | 'confirm' | 'success'>('select_depot');
-  const [depots, setDepots] = useState<OpenDepot[]>([]);
-  const [submissions, setSubmissions] = useState<DepotSubmission[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
-
-  // Selection states
-  const [selectedDepot, setSelectedDepot] = useState<OpenDepot | null>(null);
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [step, setStep] = useState<Step>('camera');
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [validationMsg, setValidationMsg] = useState<string | null>(null);
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [depots, setDepots] = useState<DepotOption[]>([]);
+  const [loadingDepots, setLoadingDepots] = useState(false);
 
-  const currentHour = new Date().getHours();
-  const currentShift = currentHour < 14 ? 'morning' : 'evening';
+  const [searchText, setSearchText] = useState('');
+  const [selectedDepot, setSelectedDepot] = useState<DepotOption | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const [locationValidated, setLocationValidated] = useState(false);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [locationWarning, setLocationWarning] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const appVersion = Constants?.manifest?.version || Constants?.expoConfig?.version || '';
+  const deviceId = Constants?.deviceId || Constants?.sessionId || '';
+
+  const loadDepots = useCallback(async () => {
+    setLoadingDepots(true);
+    try {
+      const res = await api.get('/open-depot/depots') as { depots: OpenDepot[] };
+      if (res && res.depots) {
+        setDepots(res.depots.map(d => ({
+          id: d.id,
+          name: d.name,
+          latitude: d.latitude,
+          longitude: d.longitude,
+          radius: d.radius,
+        })));
+      }
+    } catch {
+      Alert.alert(t('common.error'), 'Failed to load depots');
+    } finally {
+      setLoadingDepots(false);
+    }
+  }, [t]);
 
   useEffect(() => {
-    async function loadDepotsAndSubmissions() {
-      setLoadingData(true);
-      try {
-        const depotsRes = await api.get('/open-depot/depots') as { depots: OpenDepot[] };
-        if (depotsRes && depotsRes.depots) {
-          setDepots(depotsRes.depots);
-        }
-
-        const subRes = await api.get('/open-depot/submissions') as DepotSubmission[];
-        if (subRes) {
-          setSubmissions(subRes);
-        }
-      } catch (err) {
-        console.warn('Failed to load depots or submissions:', err);
-      } finally {
-        setLoadingData(false);
-      }
+    if (step === 'select_depot') {
+      loadDepots();
     }
-    loadDepotsAndSubmissions();
-  }, [step]);
-
-  const handleSelectDepot = (depot: OpenDepot) => {
-    // Check if already submitted this shift
-    const alreadySubmitted = submissions.some(
-      s => s.depot_id === depot.id && s.shift.toLowerCase() === currentShift
-    );
-
-    if (alreadySubmitted) {
-      Alert.alert('Already Submitted', `This depot has already been submitted for the ${currentShift} shift.`);
-      return;
-    }
-
-    setSelectedDepot(depot);
-    setValidationMsg(null);
-    setStep('gps');
-  };
-
-  const startGPSCheck = async (useMock = false) => {
-    if (!selectedDepot) return;
-
-    let currentCoords = null;
-    if (useMock) {
-      currentCoords = { latitude: selectedDepot.latitude, longitude: selectedDepot.longitude };
-    } else {
-      currentCoords = await getCurrentLocation();
-    }
-
-    if (!currentCoords) {
-      Alert.alert('GPS Error', 'GPS signal required. Please enable location services and try again.');
-      return;
-    }
-
-    setCoords(currentCoords);
-
-    // Calculate distance to selected depot
-    const distance = getHaversineDistance(
-      { latitude: currentCoords.latitude, longitude: currentCoords.longitude },
-      { latitude: selectedDepot.latitude, longitude: selectedDepot.longitude }
-    );
-
-    const allowedRadius = selectedDepot.radius || 50;
-
-    if (distance <= allowedRadius) {
-      const cameraGranted = await requestPermission();
-      if (cameraGranted) {
-        setStep('camera');
-      } else {
-        Alert.alert('Permission Denied', 'Camera access is required to capture depot photo.');
-      }
-    } else {
-      const msg = `You are not at this depot. Move closer and try again. (Current distance: ${distance.toFixed(1)}m, Allowed radius: ${allowedRadius}m)`;
-      setValidationMsg(msg);
-      Alert.alert('Outside Range', msg);
-    }
-  };
+  }, [step, loadDepots]);
 
   const handlePhotoCaptured = (base64: string) => {
     setPhotoBase64(base64);
-    setStep('confirm');
+    setStep('select_depot');
+  };
+
+  const filteredDepots = depots.filter(d =>
+    d.name.toLowerCase().includes(searchText.toLowerCase())
+  );
+
+  const handleSelectDepot = async (depot: DepotOption) => {
+    setSelectedDepot(depot);
+    setShowDropdown(false);
+    setSearchText(depot.name);
+
+    // Get GPS location for validation
+    let currentCoords = await getCurrentLocation();
+    if (!currentCoords) {
+      currentCoords = { latitude: 0, longitude: 0 };
+    }
+    setCoords(currentCoords);
+
+    const dist = getHaversineDistance(
+      { latitude: currentCoords.latitude, longitude: currentCoords.longitude },
+      { latitude: depot.latitude, longitude: depot.longitude }
+    );
+    setDistance(dist);
+
+    const allowedRadius = depot.radius || 50;
+    const inside = dist <= allowedRadius;
+    setLocationValidated(inside);
+
+    if (inside) {
+      setLocationWarning(null);
+    } else {
+      setLocationWarning(
+        `You appear to be outside the selected Open Depot area (${dist.toFixed(0)}m away, allowed ${allowedRadius}m). Please capture the photo from inside the depot if possible.`
+      );
+    }
   };
 
   const handleSubmit = async () => {
-    if (!photoBase64 || !coords || !selectedDepot) return;
-
-    setLoading(true);
+    if (!photoBase64 || !selectedDepot || !coords) return;
+    setSubmitting(true);
     try {
       await api.post('/open-depot', {
         depot_id: selectedDepot.id.toString(),
         photo_base64: photoBase64,
         gps_lat: coords.latitude,
         gps_lng: coords.longitude,
-        shift: currentShift,
+        location_validated: locationValidated,
+        device_id: deviceId,
+        app_version: appVersion,
       });
-
       setStep('success');
     } catch (err: any) {
-      Alert.alert('Submission Failed', err?.error || err?.message || 'Failed to submit open depot cleaning photo');
+      Alert.alert(
+        t('common.error'),
+        err?.error || err?.message || 'Failed to submit. Please try again.'
+      );
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
+  };
+
+  const handleRetake = () => {
+    setPhotoBase64(null);
+    setSelectedDepot(null);
+    setCoords(null);
+    setLocationValidated(false);
+    setDistance(null);
+    setLocationWarning(null);
+    setSearchText('');
+    setStep('camera');
   };
 
   if (step === 'camera') {
     return (
       <CameraCapture
         facing="back"
-        title={`Depot Photo: ${selectedDepot?.name}`}
+        title="Open Depot Photo"
         onCapture={handlePhotoCaptured}
-        onCancel={() => setStep('gps')}
+        onCancel={() => navigation?.goBack()}
       />
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Open Depot Operator</Text>
-          <Text style={styles.nameText}>{user?.name || 'Operator'}</Text>
-        </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Open Depot Worker</Text>
+        <Text style={styles.headerSubtitle}>{user?.name || ''}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {step === 'select_depot' && (
-          <View style={styles.stepContainer}>
-            <Text style={styles.sectionTitle}>Select Assigned Depot</Text>
-            <Text style={styles.description}>
-              Tap on an available depot to start your verification submission.
-            </Text>
+      <View style={styles.content}>
+        {step === 'select_depot' && photoBase64 && (
+          <>
+            <Image
+              source={{ uri: `data:image/jpeg;base64,${photoBase64}` }}
+              style={styles.previewThumb}
+            />
 
-            {loadingData ? (
-              <ActivityIndicator size="large" color="#1565C0" style={{ marginVertical: 20 }} />
-            ) : depots.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No depots assigned to you.</Text>
-              </View>
-            ) : (
-              depots.map((depot) => {
-                const isDone = submissions.some(
-                  s => s.depot_id === depot.id && s.shift.toLowerCase() === currentShift
-                );
-                return (
-                  <TouchableOpacity
-                    key={depot.id}
-                    style={[styles.depotCard, isDone && styles.disabledCard]}
-                    onPress={() => handleSelectDepot(depot)}
-                    disabled={isDone}
-                  >
-                    <View style={styles.depotInfo}>
-                      <Text style={styles.depotName}>{depot.name}</Text>
-                      <Text style={styles.depotSub}>
-                        Radius: {depot.radius || 50}m | Shift: {currentShift.toUpperCase()}
-                      </Text>
-                    </View>
-                    {isDone ? (
-                      <View style={styles.statusBadgeDone}>
-                        <Text style={styles.statusBadgeText}>✓ Cleaned</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.arrowIcon}>→</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
-        )}
+            <Text style={styles.stepTitle}>Select Open Depot</Text>
 
-        {step === 'gps' && (
-          <View style={styles.stepContainer}>
-            <View style={styles.selectedDepotHeader}>
-              <Text style={styles.selectedDepotTitle}>{selectedDepot?.name}</Text>
-              <Text style={styles.selectedDepotSub}>Shift: {currentShift.toUpperCase()}</Text>
-            </View>
-
-            <Text style={styles.description}>
-              Verify your GPS location to ensure you are within {selectedDepot?.radius || 50}m of the depot boundary.
-            </Text>
-
-            {validationMsg && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{validationMsg}</Text>
-              </View>
-            )}
-
-            {loadingGPS ? (
-              <ActivityIndicator size="large" color="#1565C0" style={{ marginVertical: 20 }} />
-            ) : (
-              <View style={styles.buttonCol}>
-                <TouchableOpacity style={styles.primaryButton} onPress={() => startGPSCheck(false)}>
-                  <Text style={styles.buttonText}>Verify GPS Location</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.mockButton} onPress={() => startGPSCheck(true)}>
-                  <Text style={styles.mockButtonText}>Mock GPS (At Depot)</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.cancelButton} onPress={() => setStep('select_depot')}>
-                  <Text style={styles.cancelButtonText}>Back to List</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-
-        {step === 'confirm' && (
-          <View style={styles.stepContainer}>
-            <View style={styles.selectedDepotHeader}>
-              <Text style={styles.selectedDepotTitle}>{selectedDepot?.name}</Text>
-              <Text style={styles.selectedDepotSub}>Shift: {currentShift.toUpperCase()}</Text>
-            </View>
-
-            <Text style={styles.description}>
-              Verify the depot cleanliness photo before submitting.
-            </Text>
-
-            {photoBase64 && (
-              <Image
-                source={{ uri: `data:image/jpeg;base64,${photoBase64}` }}
-                style={styles.previewImage}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search depot by name..."
+                placeholderTextColor={theme.colors.textDim}
+                value={searchText}
+                onChangeText={(text) => {
+                  setSearchText(text);
+                  setShowDropdown(true);
+                  if (selectedDepot) setSelectedDepot(null);
+                }}
+                onFocus={() => setShowDropdown(true)}
               />
+              {showDropdown && searchText.length > 0 && (
+                <View style={styles.dropdown}>
+                  {loadingDepots ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} style={{ padding: 16 }} />
+                  ) : filteredDepots.length === 0 ? (
+                    <Text style={styles.dropdownEmpty}>No depots found</Text>
+                  ) : (
+                    <FlatList
+                      data={filteredDepots.slice(0, 8)}
+                      keyExtractor={(item) => item.id.toString()}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity
+                          style={styles.dropdownItem}
+                          onPress={() => handleSelectDepot(item)}
+                        >
+                          <Text style={styles.dropdownItemText}>{item.name}</Text>
+                        </TouchableOpacity>
+                      )}
+                      keyboardShouldPersistTaps="handled"
+                    />
+                  )}
+                </View>
+              )}
+            </View>
+
+            {selectedDepot && coords && (
+              <View style={styles.validationSection}>
+                <View style={styles.statusRow}>
+                  <Text style={styles.statusLabel}>Location:</Text>
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: locationValidated ? theme.colors.primaryLight : theme.colors.warningLight }
+                  ]}>
+                    <Text style={[
+                      styles.statusText,
+                      { color: locationValidated ? theme.colors.success : theme.colors.warning }
+                    ]}>
+                      {locationValidated ? 'Location Verified' : 'Outside Open Depot Area'}
+                    </Text>
+                  </View>
+                </View>
+
+                {locationWarning && (
+                  <View style={styles.warningBox}>
+                    <Text style={styles.warningText}>{locationWarning}</Text>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.retakeLink}
+                  onPress={handleRetake}
+                >
+                  <Text style={styles.retakeLinkText}>Retake Photo</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                  onPress={handleSubmit}
+                  disabled={submitting || !selectedDepot}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Submit</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             )}
 
-            <View style={styles.buttonCol}>
+            {!selectedDepot && (
               <TouchableOpacity
-                style={[styles.primaryButton, loading && styles.disabledButton]}
-                onPress={handleSubmit}
-                disabled={loading}
+                style={styles.retakeLink}
+                onPress={handleRetake}
               >
-                {loading ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={styles.buttonText}>Submit Depot Photo →</Text>
-                )}
+                <Text style={styles.retakeLinkText}>Retake Photo</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.mockButton}
-                onPress={() => setStep('camera')}
-                disabled={loading}
-              >
-                <Text style={styles.mockButtonText}>Retake Photo</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+            )}
+          </>
         )}
 
         {step === 'success' && (
-          <View style={styles.stepContainer}>
-            <Text style={styles.successIcon}>🎉</Text>
-            <Text style={styles.successTitle}>Cleaning Photo Submitted!</Text>
+          <View style={styles.successContainer}>
+            <Text style={styles.successIcon}>✓</Text>
+            <Text style={styles.successTitle}>Submission Successful!</Text>
             <Text style={styles.successSubtitle}>
-              Open depot photo submission for {selectedDepot?.name} recorded successfully.
+              Your open depot photo has been submitted for review.
             </Text>
-
             <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => setStep('select_depot')}
+              style={styles.submitButton}
+              onPress={handleRetake}
             >
-              <Text style={styles.buttonText}>Back to Depot List</Text>
+              <Text style={styles.submitButtonText}>Submit Another</Text>
             </TouchableOpacity>
           </View>
         )}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -311,215 +291,174 @@ export default function SubmitPhotoScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: theme.spacing.base,
+    paddingTop: 56,
+    paddingBottom: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: theme.colors.border,
   },
-  welcomeText: {
-    fontSize: 14,
-    color: '#616161',
-  },
-  nameText: {
+  headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#212121',
+    fontWeight: '600',
+    color: theme.colors.textDark,
   },
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    backgroundColor: '#FFEBEE',
-  },
-  logoutText: {
-    color: '#C62828',
-    fontWeight: 'bold',
+  headerSubtitle: {
     fontSize: 14,
+    color: theme.colors.textDim,
+    marginTop: 2,
   },
-  scrollContainer: {
-    padding: 16,
-  },
-  stepContainer: {
-    width: '100%',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 14,
-    color: '#616161',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  emptyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#757575',
-    fontSize: 14,
-  },
-  depotCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 1.5,
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  disabledCard: {
-    backgroundColor: '#fafafa',
-    opacity: 0.6,
-  },
-  depotInfo: {
+  content: {
     flex: 1,
+    padding: theme.spacing.base,
   },
-  depotName: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#212121',
-  },
-  depotSub: {
-    fontSize: 12,
-    color: '#757575',
-    marginTop: 4,
-  },
-  arrowIcon: {
-    fontSize: 18,
-    color: '#1565C0',
-    fontWeight: 'bold',
-  },
-  statusBadgeDone: {
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusBadgeText: {
-    color: '#2E7D32',
-    fontWeight: 'bold',
-    fontSize: 11,
-  },
-  selectedDepotHeader: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 1,
-  },
-  selectedDepotTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1565C0',
-  },
-  selectedDepotSub: {
-    fontSize: 13,
-    color: '#757575',
-    marginTop: 4,
-  },
-  buttonCol: {
+  previewThumb: {
     width: '100%',
-    gap: 12,
-    marginTop: 16,
-  },
-  primaryButton: {
-    height: 56,
-    backgroundColor: '#1565C0',
-    borderRadius: 8,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mockButton: {
-    height: 56,
-    borderColor: '#1565C0',
-    borderWidth: 1.5,
-    borderRadius: 8,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  cancelButton: {
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  mockButtonText: {
-    color: '#1565C0',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  cancelButtonText: {
-    color: '#757575',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  errorBox: {
-    backgroundColor: '#FFEBEE',
-    padding: 12,
-    borderRadius: 8,
-    width: '100%',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FFCDD2',
-  },
-  errorText: {
-    color: '#C62828',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  previewImage: {
-    width: '100%',
-    height: 240,
-    borderRadius: 8,
-    marginBottom: 16,
+    height: 200,
+    borderRadius: theme.borderRadius.card,
+    marginBottom: theme.spacing.base,
     resizeMode: 'cover',
   },
-  disabledButton: {
-    backgroundColor: '#9e9e9e',
+  stepTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.sm,
+  },
+  searchContainer: {
+    zIndex: 10,
+  },
+  searchInput: {
+    height: theme.sizes.inputHeight,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.input,
+    paddingHorizontal: theme.spacing.base,
+    fontSize: 16,
+    color: theme.colors.textDark,
+    backgroundColor: theme.colors.surface,
+  },
+  dropdown: {
+    position: 'absolute',
+    top: 56,
+    left: 0,
+    right: 0,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.card,
+    maxHeight: 280,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    zIndex: 999,
+  },
+  dropdownEmpty: {
+    padding: 16,
+    color: theme.colors.textDim,
+    textAlign: 'center',
+  },
+  dropdownItem: {
+    paddingHorizontal: theme.spacing.base,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  dropdownItemText: {
+    fontSize: 15,
+    color: theme.colors.textDark,
+  },
+  validationSection: {
+    marginTop: theme.spacing.base,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.sm,
+  },
+  statusLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: theme.colors.textDark,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  warningBox: {
+    backgroundColor: theme.colors.warningLight,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.base,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  warningText: {
+    fontSize: 14,
+    color: '#92400E',
+    lineHeight: 20,
+  },
+  retakeLink: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  retakeLinkText: {
+    fontSize: 15,
+    color: theme.colors.primary,
+    fontWeight: '500',
+  },
+  submitButton: {
+    height: theme.sizes.buttonHeight,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.button,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: theme.spacing.sm,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  successContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl,
   },
   successIcon: {
-    fontSize: 60,
-    marginBottom: 16,
-    textAlign: 'center',
+    fontSize: 64,
+    color: theme.colors.success,
+    marginBottom: theme.spacing.base,
+    fontWeight: 'bold',
   },
   successTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 8,
+    fontWeight: '600',
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.sm,
     textAlign: 'center',
   },
   successSubtitle: {
     fontSize: 14,
-    color: '#616161',
+    color: theme.colors.textDim,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: theme.spacing.xl,
+    lineHeight: 20,
   },
 });

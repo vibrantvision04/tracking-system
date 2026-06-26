@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import * as turf from "@turf/turf";
+import { Route, Undo2, Trash2 } from "lucide-react";
 
 interface Props {
 	routeCoords: { lat: number; lng: number }[];
@@ -481,7 +482,7 @@ export default function RouteBuilderMap({
 					}`}
 					title={isDrawing ? "Click on map to draw. Double-click to stop" : "Start drawing route polyline"}
 				>
-					<span>🛣️</span>
+					<Route size={14} className="text-emerald-600" />
 					<span>{isDrawing ? "Stop Drawing" : "Draw Route"}</span>
 				</button>
 
@@ -510,7 +511,7 @@ export default function RouteBuilderMap({
 						className="p-2 rounded-lg text-theme-text font-medium shadow-lg flex items-center gap-1.5 transition-colors text-xs whitespace-nowrap bg-theme-surface/90 hover:bg-slate-100 border border-theme-border"
 						title="Remove the last placed route point (Undo)"
 					>
-						<span>↩️</span>
+						<Undo2 size={14} />
 						<span>Undo Point</span>
 					</button>
 				)}
@@ -539,7 +540,7 @@ export default function RouteBuilderMap({
 							}`}
 							title="Delete all coordinate points and reset the entire route"
 						>
-							<span>🧹</span>
+							<Trash2 size={14} />
 							<span>{showConfirmClear ? "Confirm Clear?" : "Clear Route"}</span>
 						</button>
 

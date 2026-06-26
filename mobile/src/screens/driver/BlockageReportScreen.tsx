@@ -68,9 +68,29 @@ export default function BlockageReportScreen({ route, navigation }: any) {
     }
   };
 
-  const handlePhotoCaptured = (base64: string) => {
+  const handlePhotoCaptured = async (base64: string) => {
     setPhotoBase64(base64);
-    setStep('confirm');
+    setLoading(true);
+    try {
+      const res = await api.post('/attendance/validate-photo', {
+        photo_base64: base64,
+        gps_lat: coords?.latitude || 0,
+        gps_lng: coords?.longitude || 0,
+        skip_face_detection: true,
+      }) as any;
+
+      if (res && res.valid) {
+        setStep('confirm');
+      } else {
+        const issues: string[] = res?.issues || [];
+        const msg = issues.length > 0 ? issues.join('\n') : 'Photo validation failed. Please try again.';
+        Alert.alert('Validation Failed', msg);
+      }
+    } catch (err: any) {
+      setStep('confirm');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async () => {

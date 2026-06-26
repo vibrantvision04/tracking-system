@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { Search } from 'lucide-react';
 
 interface Option {
   value: string;
@@ -97,7 +98,7 @@ export default function SearchableSelect({
           }}
         >
           <div className="p-2 border-b border-slate-200 shrink-0 flex items-center gap-1.5 bg-slate-50">
-            <span className="text-slate-400 text-xs pl-1">🔍</span>
+            <Search size={12} className="text-slate-400 pl-1" />
             <input
               type="text"
               value={search}

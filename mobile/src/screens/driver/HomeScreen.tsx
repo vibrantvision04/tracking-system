@@ -1,223 +1,244 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { StyleSheet, Text, View, ScrollView, Pressable } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { usePunchStatus } from '../../hooks/usePunchStatus';
-import AlertBanner from '../../components/AlertBanner';
 import { useAlerts } from '../../hooks/useAlerts';
+import { Header } from '../../components/ui/Header';
+import { StatusBanner } from '../../components/ui/StatusBanner';
+import { Card } from '../../components/ui/Card';
+import { theme } from '../../theme/theme';
+import { useTranslation } from '../../i18n/useTranslation';
+
+function getGreetingKey(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'home.greeting.morning';
+  if (hour < 17) return 'home.greeting.afternoon';
+  return 'home.greeting.evening';
+}
+
+interface MenuItem {
+  key: string;
+  icon: string;
+  titleKey: string;
+  subtitleKey: string;
+  route: string;
+  alwaysAccessible?: boolean;
+}
+
+const MENU_ITEMS: MenuItem[] = [
+  {
+    key: 'punchIn',
+    icon: '⏰',
+    titleKey: 'menu.punchIn',
+    subtitleKey: 'menu.punchIn.subtitle',
+    route: 'DriverPunchIn',
+    alwaysAccessible: true,
+  },
+  {
+    key: 'alerts',
+    icon: '🔔',
+    titleKey: 'menu.alerts',
+    subtitleKey: 'menu.alerts.subtitle',
+    route: 'DriverAlerts',
+  },
+  {
+    key: 'coverage',
+    icon: '📈',
+    titleKey: 'menu.coverage',
+    subtitleKey: 'menu.coverage.subtitle',
+    route: 'DriverCoverage',
+  },
+  {
+    key: 'routeMap',
+    icon: '🗺️',
+    titleKey: 'menu.routeMap',
+    subtitleKey: 'menu.routeMap.subtitle',
+    route: 'DriverRouteMap',
+  },
+  {
+    key: 'blockage',
+    icon: '🚧',
+    titleKey: 'menu.blockage',
+    subtitleKey: 'menu.blockage.subtitle',
+    route: 'DriverBlockage',
+  },
+  {
+    key: 'liveTracking',
+    icon: '📍',
+    titleKey: 'menu.liveTracking',
+    subtitleKey: 'menu.liveTracking.subtitle',
+    route: 'DriverLiveTracking',
+  },
+  {
+    key: 'attendance',
+    icon: '📋',
+    titleKey: 'menu.attendance',
+    subtitleKey: 'menu.attendance.subtitle',
+    route: 'DriverAttendance',
+  },
+];
 
 export default function DriverHomeScreen({ navigation }: any) {
   const { user, logout } = useAuth();
-  const { data: punchData, isLoading: loadingPunch } = usePunchStatus();
+  const { data: punchData } = usePunchStatus();
   const { data: alertData } = useAlerts();
+  const { t } = useTranslation();
+
+  const [restrictionMessage, setRestrictionMessage] = useState<string | null>(null);
 
   const isPunchedIn = !!(punchData && punchData.punched_in);
-  const activeAlert = alertData?.alerts?.find((a: any) => !a.acknowledged);
 
-  const handleCardPress = (screen: string) => {
-    if (!isPunchedIn) {
-      Alert.alert('Access Locked', 'Punch in first to access this feature.');
-      return;
-    }
-    navigation.navigate(screen);
-  };
+  const unacknowledgedAlertCount = useMemo(() => {
+    if (!alertData?.alerts) return 0;
+    return alertData.alerts.filter((a: any) => !a.acknowledged).length;
+  }, [alertData]);
 
-  const handleComingSoon = () => {
-    if (!isPunchedIn) {
-      Alert.alert('Access Locked', 'Punch in first to access this feature.');
-      return;
-    }
-    Alert.alert('Coming Soon', 'This feature is not yet available in Phase 1.');
+  const greetingText = t(getGreetingKey());
+
+  const handleCardPress = (item: MenuItem) => {
+    setRestrictionMessage(null);
+    navigation.navigate(item.route);
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Hello,</Text>
-          <Text style={styles.nameText}>{user?.name || 'Driver'}</Text>
-        </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.screen}>
+      {/* Header with greeting and logout */}
+      <Header
+        title={`${greetingText}, ${user?.name || 'Driver'}`}
+        rightActions={[
+          {
+            icon: 'log-out-outline',
+            onPress: logout,
+            accessibilityLabel: t('common.logout'),
+          },
+        ]}
+      />
 
-      {/* Punch status banner */}
-      <View style={[styles.statusBanner, isPunchedIn ? styles.punchedInBanner : styles.punchedOutBanner]}>
-        <Text style={[styles.statusText, isPunchedIn ? styles.punchedInText : styles.punchedOutText]}>
-          {isPunchedIn ? '● PUNCHED IN – Shift Active' : '● NOT PUNCHED IN'}
-        </Text>
-      </View>
-
-      {/* Major alerts banner */}
-      {isPunchedIn && activeAlert && (
-        <AlertBanner 
-          message={activeAlert.message} 
-          onPress={() => navigation.navigate('DriverAlerts')} 
+      {/* Scrollable content below the fixed header */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Punch Status Banner */}
+        <StatusBanner
+          status={isPunchedIn ? 'success' : 'warning'}
+          message={isPunchedIn ? t('home.punchedIn') : t('home.notPunchedIn')}
         />
-      )}
 
-      {/* Dashboard Menu Grid */}
-      <View style={styles.menuContainer}>
-        <Text style={styles.sectionTitle}>Main Menu</Text>
-        
-        <View style={styles.grid}>
-          {/* Punch In - ALWAYS accessible */}
-          <TouchableOpacity 
-            style={[styles.card, styles.punchInCard]} 
-            onPress={() => navigation.navigate('DriverPunchIn')}
-          >
-            <Text style={styles.cardIcon}>⏰</Text>
-            <Text style={styles.cardTitle}>{isPunchedIn ? 'Punch Status' : 'Punch In'}</Text>
-            <Text style={styles.cardSubtitle}>{isPunchedIn ? 'View details' : 'Start your shift'}</Text>
-          </TouchableOpacity>
+        {/* Alert Banner */}
+        {unacknowledgedAlertCount > 0 && (
+          <StatusBanner
+            status="error"
+            message={t('home.alertsBanner').replace('{count}', String(unacknowledgedAlertCount))}
+          />
+        )}
 
-          {/* My Route */}
-          <TouchableOpacity 
-            style={[styles.card, !isPunchedIn && styles.lockedCard]} 
-            onPress={() => handleCardPress('DriverRouteMap')}
-          >
-            <Text style={styles.cardIcon}>🗺️</Text>
-            <Text style={styles.cardTitle}>My Route</Text>
-            <Text style={styles.cardSubtitle}>View path & points</Text>
-          </TouchableOpacity>
+        {/* Restriction message (inline) */}
+        {restrictionMessage && (
+          <View style={styles.restrictionBanner}>
+            <Text style={styles.restrictionText}>{restrictionMessage}</Text>
+          </View>
+        )}
 
-          {/* Coverage */}
-          <TouchableOpacity 
-            style={[styles.card, !isPunchedIn && styles.lockedCard]} 
-            onPress={() => handleCardPress('DriverCoverage')}
-          >
-            <Text style={styles.cardIcon}>📈</Text>
-            <Text style={styles.cardTitle}>Coverage</Text>
-            <Text style={styles.cardSubtitle}>Check completion %</Text>
-          </TouchableOpacity>
+        {/* 2-column navigation grid */}
+        <View style={styles.gridContainer}>
+          <View style={styles.grid}>
+            {MENU_ITEMS.map((item) => {
+              const isDimmed = !item.alwaysAccessible && !isPunchedIn;
+              const isHighlighted = item.key === 'punchIn';
 
-          {/* Alerts */}
-          <TouchableOpacity 
-            style={[styles.card, !isPunchedIn && styles.lockedCard]} 
-            onPress={() => handleCardPress('DriverAlerts')}
-          >
-            <Text style={styles.cardIcon}>🔔</Text>
-            <Text style={styles.cardTitle}>Alerts</Text>
-            <Text style={styles.cardSubtitle}>View speed warnings</Text>
-          </TouchableOpacity>
+              if (isDimmed) {
+                return (
+                  <View key={item.key} style={styles.gridCell}>
+                    <Pressable onPress={() => setRestrictionMessage(t('home.punchInRequired'))}>
+                      <Card
+                        highlighted={isHighlighted}
+                        dimmed={true}
+                        style={styles.navCard}
+                      >
+                        <Text style={styles.cardIcon}>{item.icon}</Text>
+                        <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
+                        <Text style={styles.cardSubtitle}>{t(item.subtitleKey)}</Text>
+                      </Card>
+                    </Pressable>
+                  </View>
+                );
+              }
 
-          {/* Complaints */}
-          <TouchableOpacity 
-            style={[styles.card, !isPunchedIn && styles.lockedCard]} 
-            onPress={handleComingSoon}
-          >
-            <Text style={styles.cardIcon}>🚩</Text>
-            <Text style={styles.cardTitle}>Complaints</Text>
-            <Text style={styles.cardSubtitle}>Coming soon</Text>
-          </TouchableOpacity>
+              return (
+                <View key={item.key} style={styles.gridCell}>
+                  <Card
+                    onPress={() => handleCardPress(item)}
+                    highlighted={isHighlighted}
+                    dimmed={false}
+                    style={styles.navCard}
+                  >
+                    <Text style={styles.cardIcon}>{item.icon}</Text>
+                    <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
+                    <Text style={styles.cardSubtitle}>{t(item.subtitleKey)}</Text>
+                  </Card>
+                </View>
+              );
+            })}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+  scrollView: {
+    flex: 1,
+    marginTop: theme.sizes.headerHeight,
   },
-  welcomeText: {
-    fontSize: 14,
-    color: '#616161',
+  scrollContent: {
+    padding: theme.spacing.base,
+    paddingBottom: theme.spacing.xl,
   },
-  nameText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#212121',
+  restrictionBanner: {
+    backgroundColor: theme.colors.warningLight,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.card,
   },
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    backgroundColor: '#FFEBEE',
+  restrictionText: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.warning,
+    fontWeight: '600',
+    textAlign: 'center',
   },
-  logoutText: {
-    color: '#C62828',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  statusBanner: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  punchedInBanner: {
-    backgroundColor: '#E8F5E9',
-  },
-  punchedOutBanner: {
-    backgroundColor: '#FFF8E1',
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  punchedInText: {
-    color: '#2E7D32',
-  },
-  punchedOutText: {
-    color: '#F57F17',
-  },
-  menuContainer: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 16,
+  gridContainer: {
+    marginTop: theme.spacing.base,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  card: {
+  gridCell: {
     width: '48%',
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    marginBottom: theme.spacing.base,
   },
-  punchInCard: {
-    borderColor: '#1565C0',
-    borderWidth: 1,
-  },
-  lockedCard: {
-    opacity: 0.4,
+  navCard: {
+    minHeight: theme.sizes.cardMinHeight,
   },
   cardIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+    fontSize: 28,
+    marginBottom: theme.spacing.sm,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 4,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
+    color: theme.colors.textDark,
+    marginBottom: theme.spacing.xs,
   },
   cardSubtitle: {
-    fontSize: 12,
-    color: '#757575',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.colors.textDim,
+    lineHeight: theme.typography.caption.lineHeight,
   },
 });

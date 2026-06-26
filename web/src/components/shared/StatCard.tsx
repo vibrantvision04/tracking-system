@@ -5,6 +5,7 @@ interface StatCardProps {
   value: string | number;
   icon?: React.ReactNode;
   description?: string;
+  color?: 'emerald' | 'amber' | 'red' | 'blue' | 'slate' | 'purple';
   trend?: {
     value: string;
     type: 'up' | 'down' | 'neutral';
@@ -17,6 +18,7 @@ export default function StatCard({
   value,
   icon,
   description,
+  color = 'emerald',
   trend,
   className = ""
 }: StatCardProps) {
@@ -32,12 +34,30 @@ export default function StatCard({
     neutral: "•"
   }[trend?.type || 'neutral'];
 
+  const colorStyles = {
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-200/40",
+    amber: "bg-amber-50 text-amber-600 border-amber-200/40",
+    red: "bg-red-50 text-red-600 border-red-200/40",
+    blue: "bg-blue-50 text-blue-600 border-blue-200/40",
+    slate: "bg-slate-100 text-slate-500 border-slate-200/40",
+    purple: "bg-purple-50 text-purple-600 border-purple-200/40",
+  }[color];
+
+  const accentStyles = {
+    emerald: "from-emerald-500 to-emerald-600/30",
+    amber: "from-amber-500 to-amber-600/30",
+    red: "from-red-500 to-red-600/30",
+    blue: "from-blue-500 to-blue-600/30",
+    slate: "from-slate-400 to-slate-500/30",
+    purple: "from-purple-500 to-purple-600/30",
+  }[color];
+
   return (
     <div
       className={`relative overflow-hidden bg-theme-surface border border-theme-border rounded-xl p-5 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-all duration-200 group flex flex-col justify-between min-h-[120px] ${className}`}
     >
       {/* Decorative accent top line */}
-      <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-indigo-500 to-indigo-600/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className={`absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r ${accentStyles} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
       
       <div className="flex items-start justify-between">
         <div className="space-y-1">
@@ -50,7 +70,7 @@ export default function StatCard({
         </div>
         
         {icon && (
-          <div className="p-2 bg-theme-base/60 text-theme-text border border-theme-border/40 rounded-lg group-hover:scale-105 transition-transform duration-200">
+          <div className={`p-2 border rounded-lg group-hover:scale-105 transition-transform duration-200 ${colorStyles}`}>
             {icon}
           </div>
         )}
