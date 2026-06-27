@@ -5,6 +5,7 @@ services:
     build: .
     ports:
       - "0.0.0.0:8080:8080"
+      - "0.0.0.0:5027:5027"
     environment:
       # These override .env values so the container talks to the compose services
       - DB_DSN=postgres://gps:${POSTGRES_PASSWORD:-password}@db:5432/gpsdb
