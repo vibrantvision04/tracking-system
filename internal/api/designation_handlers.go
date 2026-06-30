@@ -19,8 +19,8 @@ type DesignationResponse struct {
 func (h *Handler) GetDesignations(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db := h.gpsRepo.Pool()
-	page, pageSize := parsePagination(r)
-	offset := (page - 1) * pageSize
+
+	isAll := r.URL.Query().Get("all") == "true" || r.URL.Query().Get("page_size") == "-1"
 
 	var total int
 	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM designations`).Scan(&total)
@@ -29,14 +29,28 @@ func (h *Handler) GetDesignations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query(ctx, `
-		SELECT id, name, COALESCE(is_active, true), TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS')
-		FROM designations
-		ORDER BY id ASC
-		LIMIT $1 OFFSET $2
-	`, pageSize, offset)
-	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query designations: " + err.Error()})
+	var rows pgx.Rows
+	var qerr error
+
+	if isAll {
+		rows, qerr = db.Query(ctx, `
+			SELECT id, name, COALESCE(is_active, true), TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS')
+			FROM designations
+			ORDER BY id ASC
+		`)
+	} else {
+		page, pageSize := parsePagination(r)
+		offset := (page - 1) * pageSize
+		rows, qerr = db.Query(ctx, `
+			SELECT id, name, COALESCE(is_active, true), TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS')
+			FROM designations
+			ORDER BY id ASC
+			LIMIT $1 OFFSET $2
+		`, pageSize, offset)
+	}
+
+	if qerr != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query designations: " + qerr.Error()})
 		return
 	}
 	defer rows.Close()
@@ -49,15 +63,27 @@ func (h *Handler) GetDesignations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	totalPages := (total + pageSize - 1) / pageSize
-	sendJSON(w, http.StatusOK, map[string]interface{}{
-		"success":     true,
-		"data":        list,
-		"total":       total,
-		"page":        page,
-		"page_size":   pageSize,
-		"total_pages": totalPages,
-	})
+	if isAll {
+		sendJSON(w, http.StatusOK, map[string]interface{}{
+			"success":     true,
+			"data":        list,
+			"total":       total,
+			"page":        1,
+			"page_size":   total,
+			"total_pages": 1,
+		})
+	} else {
+		page, pageSize := parsePagination(r)
+		totalPages := (total + pageSize - 1) / pageSize
+		sendJSON(w, http.StatusOK, map[string]interface{}{
+			"success":     true,
+			"data":        list,
+			"total":       total,
+			"page":        page,
+			"page_size":   pageSize,
+			"total_pages": totalPages,
+		})
+	}
 }
 
 // CreateDesignation inserts a new designation.

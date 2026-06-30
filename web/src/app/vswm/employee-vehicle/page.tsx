@@ -221,7 +221,7 @@ export default function DriverVehicleAssignmentPage() {
       const [assignData, vehicleData, empData, eddData] = await Promise.all([
         api<any>('/api/employee-vehicle-assignments').then(r => r.data || []).catch(() => []),
         api<any>('/api/vehicles').then(r => r.data || []).catch(() => []),
-        api<any>('/api/employees').then(r => r.data || []).catch(() => []),
+        api<any>('/api/employees?all=true').then(r => r.data || []).catch(() => []),
         api<any>('/api/employee-department-designations').then(r => r.data || []).catch(() => []),
       ]);
 

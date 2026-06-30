@@ -254,7 +254,7 @@ export default function InchargeTransferStationPage() {
 
       // Try fetching employees
       try {
-        const res = await api<{ success: boolean; data: Employee[] }>("/api/employees");
+        const res = await api<{ success: boolean; data: Employee[] }>("/api/employees?all=true");
         employeeData = res.data || [];
       } catch (err) {
         console.warn("Failed to fetch employees:", err);

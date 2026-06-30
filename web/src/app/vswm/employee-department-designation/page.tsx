@@ -104,9 +104,9 @@ export default function EmployeeDepartmentDesignationPage() {
     try {
       const [eddRes, empRes, deptRes, desigRes, regRes] = await Promise.all([
         api<{ data: EmployeeDepartmentDesignation[] }>("/api/employee-department-designations"),
-        api<{ success: boolean; data: Employee[] }>("/api/employees"),
-        api<{ success: boolean; data: Department[] }>("/api/departments"),
-        api<{ success: boolean; data: Designation[] }>("/api/designations"),
+        api<{ success: boolean; data: Employee[] }>("/api/employees?all=true"),
+        api<{ success: boolean; data: Department[] }>("/api/departments?all=true"),
+        api<{ success: boolean; data: Designation[] }>("/api/designations?all=true"),
         api<{ success: boolean; data: Region[] }>("/api/regions")
       ]);
       setMappings(eddRes.data || []);

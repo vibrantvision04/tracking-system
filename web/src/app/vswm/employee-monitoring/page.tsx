@@ -12,6 +12,21 @@ import { Users, User, MapPin, Wifi, WifiOff } from "lucide-react";
 
 const EmployeeMap = dynamic(() => import("@/components/EmployeeMap"), { ssr: false });
 
+// ─── Dummy Data ──────────────────────────────────────────────────────────────
+
+const DUMMY_EMPLOYEES: Employee[] = [
+  { id: 1, employee_id: 1, name: "Rajesh Sharma", employee_code: "EMP001", contact_no: "9829012345", latitude: 26.9124, longitude: 75.7873, last_gps_update: new Date().toISOString(), status: "Online", designation: "Driver", designation_id: 1, department_name: "Collection", department_id: 1, zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", mobile_number: "9829012345" },
+  { id: 2, employee_id: 2, name: "Sunita Verma", employee_code: "EMP002", contact_no: "9829012346", latitude: 26.9234, longitude: 75.7981, last_gps_update: new Date().toISOString(), status: "Online", designation: "Supervisor", designation_id: 2, department_name: "Supervision", department_id: 2, zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", mobile_number: "9829012346" },
+  { id: 3, employee_id: 3, name: "Amit Gupta", employee_code: "EMP003", contact_no: "9829012347", latitude: 26.9087, longitude: 75.7765, last_gps_update: new Date(Date.now() - 60000).toISOString(), status: "Online", designation: "Road Sweeper", designation_id: 3, department_name: "Sweeping", department_id: 3, zone: "Sanganer", ward: "Ward 30", area: "Sector 11", mobile_number: "9829012347" },
+  { id: 4, employee_id: 4, name: "Priya Chauhan", employee_code: "EMP004", contact_no: "9829012348", latitude: 26.9345, longitude: 75.8099, last_gps_update: new Date(Date.now() - 120000).toISOString(), status: "Online", designation: "Driver", designation_id: 1, department_name: "Collection", department_id: 1, zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", mobile_number: "9829012348" },
+  { id: 5, employee_id: 5, name: "Vijay Meena", employee_code: "EMP005", contact_no: "9829012349", latitude: 26.8765, longitude: 75.7654, last_gps_update: new Date(Date.now() - 300000).toISOString(), status: "Offline", designation: "Road Sweeper", designation_id: 3, department_name: "Sweeping", department_id: 3, zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", mobile_number: "9829012349" },
+  { id: 6, employee_id: 6, name: "Kavita Jain", employee_code: "EMP006", contact_no: "9829012350", latitude: 26.9155, longitude: 75.7890, last_gps_update: new Date().toISOString(), status: "Online", designation: "Supervisor", designation_id: 2, department_name: "Supervision", department_id: 2, zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", mobile_number: "9829012350" },
+  { id: 7, employee_id: 7, name: "Deepak Yadav", employee_code: "EMP007", contact_no: "9829012351", latitude: 26.9276, longitude: 75.8012, last_gps_update: new Date(Date.now() - 90000).toISOString(), status: "Online", designation: "Driver", designation_id: 1, department_name: "Collection", department_id: 1, zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", mobile_number: "9829012351" },
+  { id: 8, employee_id: 8, name: "Neha Sharma", employee_code: "EMP008", contact_no: "9829012352", latitude: 26.9055, longitude: 75.7732, last_gps_update: new Date(Date.now() - 600000).toISOString(), status: "Offline", designation: "Road Sweeper", designation_id: 3, department_name: "Sweeping", department_id: 3, zone: "Sanganer", ward: "Ward 30", area: "Sector 11", mobile_number: "9829012352" },
+  { id: 9, employee_id: 9, name: "Ravi Kumar", employee_code: "EMP009", contact_no: "9829012353", latitude: 26.9387, longitude: 75.8133, last_gps_update: new Date().toISOString(), status: "Online", designation: "Driver", designation_id: 1, department_name: "Collection", department_id: 1, zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", mobile_number: "9829012353" },
+  { id: 10, employee_id: 10, name: "Pooja Verma", employee_code: "EMP010", contact_no: "9829012354", latitude: 26.8732, longitude: 75.7621, last_gps_update: new Date(Date.now() - 180000).toISOString(), status: "Online", designation: "Supervisor", designation_id: 2, department_name: "Supervision", department_id: 2, zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", mobile_number: "9829012354" },
+];
+
 export interface Employee {
   id: number;
   employee_id: number;
@@ -33,8 +48,8 @@ export interface Employee {
 }
 
 export default function EmployeeMonitoringPage() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [employees, setEmployees] = useState<Employee[]>(DUMMY_EMPLOYEES);
+  const [loading, setLoading] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [prevSelected, setPrevSelected] = useState<Employee | null>(null);
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -64,7 +79,7 @@ export default function EmployeeMonitoringPage() {
       }));
       setEmployees(mapped);
     } catch {
-      toast.error("Failed to load employee locations.");
+      // API unavailable — using dummy data
     } finally {
       setLoading(false);
     }

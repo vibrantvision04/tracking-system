@@ -34,7 +34,7 @@ export default function SweepingAssignmentsPage() {
 
   useEffect(() => {
     loadAssignments();
-    get<any>("/api/employees").then((r) => setEmployees(r.data || [])).catch(() => {});
+    get<any>("/api/employees?all=true").then((r) => setEmployees(r.data || [])).catch(() => {});
     get<any>("/api/sweeping/routes").then((r) => setRoutes(r.data || [])).catch(() => {});
     get<any>("/api/wards").then((r) => setWards(r?.data || r || [])).catch(() => {});
   }, [loadAssignments]);

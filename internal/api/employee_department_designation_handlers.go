@@ -32,17 +32,17 @@ func (h *Handler) GetEmployeeDepartmentDesignations(w http.ResponseWriter, r *ht
 			edd.employee_id, 
 			CONCAT(e.first_name, ' ', CASE WHEN e.middle_name IS NOT NULL AND e.middle_name <> '' THEN e.middle_name || ' ' ELSE '' END, e.last_name, ' (', e.employee_id, ')') AS employee_name,
 			edd.department_id, 
-			d.name AS department_name, 
+			COALESCE(d.name, '') AS department_name, 
 			edd.designation_id, 
-			des.name AS designation_name, 
+			COALESCE(des.name, '') AS designation_name, 
 			edd.region_id, 
-			reg.region_name, 
+			COALESCE(reg.region_name, '') AS region_name, 
 			edd.created_at
 		FROM employee_department_designations edd
 		JOIN employees e ON edd.employee_id = e.id
-		JOIN departments d ON edd.department_id = d.id
-		JOIN designations des ON edd.designation_id = des.id
-		JOIN regions reg ON edd.region_id = reg.id
+		LEFT JOIN departments d ON edd.department_id = d.id
+		LEFT JOIN designations des ON edd.designation_id = des.id
+		LEFT JOIN regions reg ON edd.region_id = reg.id
 		ORDER BY edd.id DESC
 	`
 	rows, err := db.Query(ctx, query)

@@ -70,7 +70,7 @@ export default function EmployeePage() {
     if (emp) {
       let existingRole = "USER";
       try {
-        const userRes = await api<{ success: boolean; data: { id: number; email: string; role: string }[] }>("/api/users");
+        const userRes = await api<{ success: boolean; data: { id: number; email: string; role: string }[] }>("/api/users?all=true");
         if (userRes.success) {
           const userEmail = `${emp.employee_id}@vswm.com`;
           const match = userRes.data.find(u => u.email.toLowerCase() === userEmail.toLowerCase());

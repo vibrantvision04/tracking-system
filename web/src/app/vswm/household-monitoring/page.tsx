@@ -17,7 +17,18 @@ const HouseholdMap = dynamic(() => import("@/components/HouseholdMap"), {
   ssr: false,
 });
 
-const DEMO_HOUSEHOLDS: Household[] = [];
+const DEMO_HOUSEHOLDS: Household[] = [
+  { id: 1, rfid: "RFID-10001", name: "Rajesh Sharma", mobile: "9829012345", address: "12, Brahampuri, Zorawar Singh Gate", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", latitude: 26.9124, longitude: 75.7873, coverage_type: "Auto", last_coverage_time: "2026-06-10T08:30:00Z", survey_date: "2026-06-01" },
+  { id: 2, rfid: "RFID-10002", name: "Sunita Verma", mobile: "9829012346", address: "92, Ghat Gate Road", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", latitude: 26.9234, longitude: 75.7981, coverage_type: "Auto", last_coverage_time: "2026-06-10T09:15:00Z", survey_date: "2026-06-02" },
+  { id: 3, rfid: "RFID-10003", name: "Amit Gupta", mobile: "9829012347", address: "102, Sector 11 Market", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", latitude: 26.9087, longitude: 75.7765, coverage_type: "Manual", last_coverage_time: "2026-06-09T14:00:00Z", survey_date: "2026-06-03" },
+  { id: 4, rfid: "RFID-10004", name: "Priya Chauhan", mobile: "9829012348", address: "157, Sector 2 Extension", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", latitude: 26.9345, longitude: 75.8099, coverage_type: "Auto", last_coverage_time: "2026-06-10T07:45:00Z", survey_date: "2026-06-04" },
+  { id: 5, rfid: "RFID-10005", name: "Vijay Meena", mobile: "9829012349", address: "248, Sanganer Industrial Area", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", latitude: 26.8765, longitude: 75.7654, coverage_type: "Not Covered", last_coverage_time: null, survey_date: "2026-06-05" },
+  { id: 6, rfid: "RFID-10006", name: "Kavita Jain", mobile: "9829012350", address: "Shop 12, Brahampuri", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", latitude: 26.9155, longitude: 75.7890, coverage_type: "Auto", last_coverage_time: "2026-06-10T10:00:00Z", survey_date: "2026-06-06" },
+  { id: 7, rfid: "RFID-10007", name: "Deepak Yadav", mobile: "9829012351", address: "Showroom 2, Ghat Gate Road", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", latitude: 26.9276, longitude: 75.8012, coverage_type: "Manual", last_coverage_time: "2026-06-09T16:30:00Z", survey_date: "2026-06-07" },
+  { id: 8, rfid: "RFID-10008", name: "Neha Sharma", mobile: "9829012352", address: "101, Sector 11 Market", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", latitude: 26.9055, longitude: 75.7732, coverage_type: "Not Covered", last_coverage_time: null, survey_date: "2026-06-08" },
+  { id: 9, rfid: "RFID-10009", name: "Ravi Kumar", mobile: "9829012353", address: "202, Sector 2 Extension", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", latitude: 26.9387, longitude: 75.8133, coverage_type: "Auto", last_coverage_time: "2026-06-10T11:20:00Z", survey_date: "2026-06-09" },
+  { id: 10, rfid: "RFID-10010", name: "Pooja Verma", mobile: "9829012354", address: "55, Sanganer Industrial Area", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", latitude: 26.8732, longitude: 75.7621, coverage_type: "Manual", last_coverage_time: "2026-06-10T12:00:00Z", survey_date: "2026-06-10" },
+];
 
 const COVERAGE_OPTIONS = [
   { value: "All", label: "All Statuses" },
@@ -95,6 +106,11 @@ export default function HouseholdMonitoringPage() {
     return { total, covered, uncovered, auto, manual, pct };
   }, [filtered]);
 
+  const zoneOptions = useMemo(() => {
+    const zones = Array.from(new Set(DEMO_HOUSEHOLDS.map((h) => h.zone)));
+    return zones.map((z) => ({ value: z, label: z }));
+  }, []);
+
   const wardOptions = useMemo(() => {
     const base = zone
       ? DEMO_HOUSEHOLDS.filter((h) => h.zone === zone).map((h) => h.ward)
@@ -155,7 +171,7 @@ export default function HouseholdMonitoringPage() {
           <SearchableSelect
             value={zone}
             onChange={(v) => { setZone(v); setWard(""); setArea(""); }}
-            options={[{ value: "", label: "All Zones" }]}
+            options={[{ value: "", label: "All Zones" }, ...zoneOptions]}
             placeholder="All Zones"
           />
         </div>
