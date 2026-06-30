@@ -28,15 +28,15 @@ export default function SweepingAssignmentsPage() {
 
   const loadAssignments = useCallback(async () => {
     setLoading(true);
-    try { const res = await get<any>("/api/sweeping/assignments"); setAssignments(res.data || []); }
+    try { const res = await get<any>("/api/sweeping/assignments"); setAssignments(res.data?.data || res.data || []); }
     catch {} finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     loadAssignments();
-    get<any>("/api/employees?all=true").then((r) => setEmployees(r.data || [])).catch(() => {});
-    get<any>("/api/sweeping/routes").then((r) => setRoutes(r.data || [])).catch(() => {});
-    get<any>("/api/wards").then((r) => setWards(r?.data || r || [])).catch(() => {});
+    get<any>("/api/employees?all=true").then((r) => setEmployees(r.data?.data || r.data || [])).catch(() => {});
+    get<any>("/api/sweeping/routes").then((r) => setRoutes(r.data?.data || r.data || [])).catch(() => {});
+    get<any>("/api/wards").then((r) => setWards(r?.data?.data || r?.data || r || [])).catch(() => {});
   }, [loadAssignments]);
 
   const handleSubmit = async () => {

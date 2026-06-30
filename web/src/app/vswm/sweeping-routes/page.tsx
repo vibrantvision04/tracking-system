@@ -96,15 +96,15 @@ export default function SweepingRoutesPage() {
   const loadRoutes = async () => {
     setLoading(true);
     try {
-      const res = await get<{ data: SweepingRoute[] }>("/api/sweeping/routes");
-      setRoutes(res.data || []);
+      const res = await get<any>("/api/sweeping/routes");
+      setRoutes(res.data?.data || res.data || []);
     } catch { toast.error("Failed to load routes"); }
     finally { setLoading(false); }
   };
 
   useEffect(() => {
     loadRoutes();
-    get<any>("/api/wards").then((r) => setWards(r?.data || r || [])).catch(() => {});
+    get<any>("/api/wards").then((r) => setWards(r?.data?.data || r?.data || r || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
