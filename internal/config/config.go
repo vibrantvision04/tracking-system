@@ -46,7 +46,7 @@ func LoadConfig() *Config {
 		httpPort = getEnv("HTTP_PORT", "8080")
 	}
 
-	frontendURL := getEnv("FRONTEND_URL", "http://localhost:3000,http://localhost:5173,http://localhost:8080")
+	frontendURL := getEnv("FRONTEND_URL", "http://localhost:3000,http://localhost:5173,http://localhost:8080,https://tracking-system-rosy.vercel.app")
 
 	return &Config{
 		GPSTCPPort:                   gpsTcpPort,

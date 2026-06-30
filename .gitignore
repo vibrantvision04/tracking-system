@@ -88,3 +88,7 @@ scratch/
 *.csv
 *.kmz
 
+# Large binaries
+*.apk
+nul
+
