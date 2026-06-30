@@ -12,7 +12,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - REDIS_ADDR=redis:6379
       # CORS allow-list: picks up FRONTEND_URL from .env (fallback includes localhost origins for dev)
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000,http://localhost:5173,http://localhost:8080,http://localhost:8081}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000,http://localhost:5173,http://localhost:8080,http://localhost:8081,https://tracking-system-rosy.vercel.app}
     depends_on:
       - redis
       - db
