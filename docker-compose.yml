@@ -7,12 +7,12 @@ services:
       - "0.0.0.0:8080:8080"
       - "5027:5027"
     environment:
-      # These override .env values so the container talks to the compose services
-      - DB_DSN=postgres://gps:${POSTGRES_PASSWORD:-password}@db:5432/gpsdb
+      # Hardcoded for Docker networking — .env values must NOT override these
+      - DB_DSN=postgres://gps:password@db:5432/gpsdb
       - REDIS_URL=redis://redis:6379
       - REDIS_ADDR=redis:6379
-      # CORS allow-list: picks up FRONTEND_URL from .env (fallback includes localhost origins for dev)
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000,http://localhost:5173,http://localhost:8080,http://localhost:8081,https://tracking-system-rosy.vercel.app}
+      # CORS allow-list
+      - FRONTEND_URL=https://tracking-system-rosy.vercel.app,http://localhost:3000,http://localhost:5173,http://localhost:8080
     depends_on:
       - redis
       - db
