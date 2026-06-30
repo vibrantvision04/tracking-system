@@ -34,7 +34,6 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		allowedOriginsMap[o] = true
 	}
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   corsOrigins,
 		AllowOriginFunc:  func(r *http.Request, origin string) bool { return allowedOriginsMap[origin] },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Requested-With"},
