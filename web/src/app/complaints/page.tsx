@@ -76,7 +76,7 @@ export default function ComplaintsPage() {
     setLoading(true);
     try {
       const res = await api<{ success: boolean; data: Complaint[] }>("/api/complaints");
-      setComplaints(res.data || []);
+      setComplaints(Array.isArray(res.data) ? res.data : []);
     } catch {
       toast.error("Failed to load complaints.");
     } finally {

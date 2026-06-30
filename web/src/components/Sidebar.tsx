@@ -232,7 +232,7 @@ const fullNavData: NavItem[] = [
     label: "Master Consolidated Report",
     icon: TrendingUp,
     children: [
-      { label: "Daily Master Consolidated Report", href: "/ultimate-reports/daily" },
+  
       { label: "Master Consolidated Reports", href: "/master-reports", permission: "reports.view" },
     ],
   },

@@ -87,7 +87,7 @@ func (h *Handler) GetEmployeeLocations(w http.ResponseWriter, r *http.Request) {
 		ORDER BY ell.employee_id, ell.captured_at DESC
 	`)
 	if err != nil {
-		RespondWithJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": []interface{}{}})
+		RespondWithJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
 	defer rows.Close()
@@ -140,5 +140,5 @@ func (h *Handler) GetEmployeeLocations(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	RespondWithJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": list})
+	RespondWithJSON(w, http.StatusOK, list)
 }

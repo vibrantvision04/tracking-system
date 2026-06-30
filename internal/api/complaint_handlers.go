@@ -22,7 +22,7 @@ func (h *Handler) ListComplaints(w http.ResponseWriter, r *http.Request) {
 		ORDER BY c.created_at DESC
 	`)
 	if err != nil {
-		RespondWithJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": []interface{}{}})
+		RespondWithJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
 	defer rows.Close()
@@ -67,5 +67,5 @@ func (h *Handler) ListComplaints(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	RespondWithJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": list})
+	RespondWithJSON(w, http.StatusOK, list)
 }
