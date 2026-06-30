@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useStore, ENABLE_FUEL_FEATURES } from "@/lib/store";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   Home,
   Truck,
@@ -13,7 +14,6 @@ import {
   Users,
   Tv,
   BarChart3,
-  TrendingUp,
   CheckCircle2,
   Rewind,
   CalendarCheck,
@@ -22,15 +22,25 @@ import {
   ChevronLeft,
   X,
   AlertCircle,
-  LayoutDashboard
+  LayoutDashboard,
+  TrendingUp
 } from "lucide-react";
 
-const fullNavData = [
+interface NavItem {
+  label: string;
+  icon?: any;
+  href?: string;
+  permission?: string;
+  children?: NavItem[];
+}
+
+const fullNavData: NavItem[] = [
  
 
   {
     label: "Vehicles",
     icon: Truck,
+    permission: "vehicles.view",
     children: [
       { label: "Vehicle List", href: "/vehicles" },
       { label: "Vehicle Type", href: "/vswm/vehicle-type" },
@@ -54,12 +64,14 @@ const fullNavData = [
   {
     label: "GPS Devices",
     icon: Cpu,
+    permission: "devices.view",
     href: "/devices"
 
   },
   {
     label: "Regions & Routes",
     icon: Map,
+    permission: "routes.view",
     children: [
       { label: "Zones & Wards", href: "/zones" },
       { label: "Region Type", href: "/vswm/region-type" },
@@ -110,34 +122,36 @@ const fullNavData = [
     ],
   },
   {
-    label: "HR / Staff",
+    label: "Employee Management",
     icon: Users,
+    permission: "employees.view",
     children: [
-      { label: "Department", href: "/vswm/department" },
-      { label: "Designation", href: "/vswm/designation" },
+      { label: "Employees", href: "/vswm/employee-management/employees" },
+      { label: "Roles & Permissions", href: "/vswm/employee-management/roles" },
+      { label: "Departments", href: "/vswm/employee-management/departments" },
+      { label: "Designations", href: "/vswm/employee-management/designations" },
       {
-        label: "Assignments",
+        label: "Operational Assignments",
         children: [
           { label: "Driver to Vehicle", href: "/vswm/employee-vehicle" },
-          { label: "Employee to Designation & Department", href: "/vswm/employee-department-designation" },
-          { label: "Role To User", href: "/vswm/role-user" },
-          { label: "Department to Designation", href: "/vswm/department-designation" },
-          { label: "Region Type to Designation", href: "/vswm/regiontype-designation" },
         ],
       },
-      {
-        label: "Adhoc",
-        children: [
-          { label: "Temporary Driver", href: "/vswm/temporary-driver" },
-        ],
-      },
+    ],
+  },
+  {
+    label: "Road Sweeping",
+    icon: Map,
+    permission: "sweeping.routes.view",
+    children: [
+      { label: "Sweeping Routes", href: "/vswm/sweeping-routes" },
+      { label: "Route Assignments", href: "/vswm/sweeping-assignments" },
+      { label: "Cleaning Tasks", href: "/vswm/cleaning-tasks" },
     ],
   },
   {
     label: "Attendance",
     icon: CalendarCheck,
     children: [
-      { label: "Employee List", href: "/vswm/employee" },
       { label: "Live Attendance", href: "/vswm/live-attendance" },
       { label: "Driver Attendance", href: "/vswm/driver-attendance" },
       { label: "Supervisor Attendance", href: "/vswm/supervisor-attendance" },
@@ -219,6 +233,7 @@ const fullNavData = [
     icon: TrendingUp,
     children: [
       { label: "Daily Master Consolidated Report", href: "/ultimate-reports/daily" },
+      { label: "Master Consolidated Reports", href: "/master-reports", permission: "reports.view" },
     ],
   },
   {
@@ -245,13 +260,54 @@ const fullNavData = [
 
 const adminOnlySections = new Set(["Users"]);
 
-const roleNavData = (role: string | undefined, items: any[]): any[] => {
+const roleNavData = (role: string | undefined, items: NavItem[]): NavItem[] => {
   const filtered = role === "ADMIN" ? items : items.filter((item) => !adminOnlySections.has(item.label));
   const fuelFiltered = ENABLE_FUEL_FEATURES ? filtered : filterFuelItems(filtered);
   if (!ENABLE_FUEL_FEATURES) {
     return fuelFiltered;
   }
   return filtered;
+};
+
+/**
+ * Filter nav items based on user's permission set.
+ * - Items without a `permission` field are always shown (backwards compatible).
+ * - Super_Admin (wildcard "*") sees everything.
+ * - If permissions haven't loaded yet (empty array + loading), show all items by default.
+ * - If permissions array is empty after loading (user has no RBAC configured), show all items.
+ * - Children with their own `permission` field are filtered recursively, so a
+ *   per-sub-item gate (e.g. `reports.view` on a single child) is honoured even
+ *   when the parent has no permission gate of its own.
+ */
+const filterByPermissions = (
+  items: NavItem[],
+  hasPermission: (perm: string) => boolean,
+  permissionsLoaded: boolean,
+  permissions: string[]
+): NavItem[] => {
+  // If permissions haven't loaded yet, show all items to avoid flash of empty sidebar
+  if (!permissionsLoaded) return items;
+
+  // If no permissions are configured for this user (empty array), show everything.
+  // This ensures users without RBAC setup still see the full menu.
+  if (permissions.length === 0) return items;
+
+  return items
+    .filter((item) => {
+      // Items without a permission field are always visible
+      if (!item.permission) return true;
+      return hasPermission(item.permission);
+    })
+    .map((item) => {
+      // Recursively filter children so per-sub-item permission gates are applied
+      if (item.children && item.children.length > 0) {
+        return {
+          ...item,
+          children: filterByPermissions(item.children, hasPermission, permissionsLoaded, permissions),
+        };
+      }
+      return item;
+    });
 };
 
 const filterFuelItems = (items: any[]): any[] => {
@@ -286,6 +342,7 @@ export default function Sidebar() {
   }, []);
 
   const { user } = useAuth();
+  const { hasPermission, loading: permissionsLoading, permissions } = usePermissions();
   const path = usePathname();
   const sidebarOpen = useStore((state) => state.sidebarOpen);
   const setSidebarOpen = useStore((state) => state.setSidebarOpen);
@@ -294,7 +351,9 @@ export default function Sidebar() {
 
   const sidebarCollapsed = mounted ? storeCollapsed : false;
 
-  const navData = roleNavData(user?.role, fullNavData);
+  // Apply role-based filtering, then permission-based filtering
+  const roleFiltered = roleNavData(user?.role, fullNavData);
+  const navData = filterByPermissions(roleFiltered, hasPermission, !permissionsLoading, permissions);
 
   // State to track active category for flyout
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -452,7 +511,7 @@ export default function Sidebar() {
                 {/* Mobile/Tablet inline sub-menu (accordion) - hidden on desktop where flyout is used */}
                 {hasChildren && isActive && (
                   <div className="lg:hidden mt-0.5 ml-4 pl-3 border-l-2 border-emerald-200/60 space-y-0.5 py-1">
-                    {category.children.map((sub: any) => {
+                    {category.children!.map((sub: any) => {
                       const hasSubChildren = sub.children && sub.children.length > 0;
                       return (
                         <div key={sub.label}>
@@ -582,7 +641,7 @@ export default function Sidebar() {
 
             {/* Content - Grid of Columns */}
             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-              <div className={`grid ${(activeCategory || renderedCategory) === "Reports" ? "grid-cols-3" : "grid-cols-2"} gap-x-6 gap-y-6`}>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-6">
                 {currentCategoryData.children?.map((sub: any) => {
                   const hasSubChildren = sub.children && sub.children.length > 0;
 

@@ -43,11 +43,13 @@ export default function EmployeePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mockFileName, setMockFileName] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [userAccountError, setUserAccountError] = useState("");
 
   const [formData, setFormData] = useState({
     id: null as number | null, first_name: "", middle_name: "", last_name: "", employee_id: "",
     email: "", aadhaar_no: "", contact_no: "", alt_contact_no: "", address: "", other_details: "",
-    document_file_type: "Aadhaar", document_file_path: ""
+    document_file_type: "Aadhaar", document_file_path: "",
+    login_password: "", login_role: "USER"
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,14 +65,24 @@ export default function EmployeePage() {
 
   useEffect(() => { fetchEmployees(); }, []);
 
-  const handleOpenForm = (emp?: Employee) => {
+  const handleOpenForm = async (emp?: Employee) => {
     setFormErrors({});
     if (emp) {
+      let existingRole = "USER";
+      try {
+        const userRes = await api<{ success: boolean; data: { id: number; email: string; role: string }[] }>("/api/users");
+        if (userRes.success) {
+          const userEmail = `${emp.employee_id}@vswm.com`;
+          const match = userRes.data.find(u => u.email.toLowerCase() === userEmail.toLowerCase());
+          if (match) existingRole = match.role;
+        }
+      } catch { /* ignore */ }
       setFormData({
         id: emp.id, first_name: emp.first_name, middle_name: emp.middle_name, last_name: emp.last_name,
         employee_id: emp.employee_id, email: emp.email, aadhaar_no: emp.aadhaar_no, contact_no: emp.contact_no,
         alt_contact_no: emp.alt_contact_no, address: emp.address, other_details: emp.other_details,
-        document_file_type: emp.document_file_type || "Aadhaar", document_file_path: emp.document_file_path
+        document_file_type: emp.document_file_type || "Aadhaar", document_file_path: emp.document_file_path,
+        login_password: "", login_role: existingRole
       });
       setMockFileName(emp.document_file_path ? emp.document_file_path.split("/").pop() || "" : "");
       setIsEditing(true);
@@ -78,7 +90,7 @@ export default function EmployeePage() {
       setFormData({
         id: null, first_name: "", middle_name: "", last_name: "", employee_id: "", email: "",
         aadhaar_no: "", contact_no: "", alt_contact_no: "", address: "", other_details: "",
-        document_file_type: "Aadhaar", document_file_path: ""
+        document_file_type: "Aadhaar", document_file_path: "", login_password: "", login_role: "USER"
       });
       setMockFileName(""); setIsEditing(false);
     }
@@ -103,13 +115,48 @@ export default function EmployeePage() {
     setFormErrors({}); setSubmitting(true);
     try {
       const p = result.data;
-      const payload = { ...p, middle_name: p.middle_name || "", alt_contact_no: p.alt_contact_no || "", other_details: p.other_details || "", document_file_path: p.document_file_path || "uploads/mock_document.pdf" };
+      const payload = { ...p, middle_name: p.middle_name || "", alt_contact_no: p.alt_contact_no || "", other_details: p.other_details || "", document_file_path: p.document_file_path || "" };
       if (isEditing && formData.id) {
         const res = await put<{ success: boolean }>(`/api/employees/${formData.id}`, payload);
-        if (res.success) { toast.success("Employee updated successfully!"); fetchEmployees(); handleCloseForm(); } else toast.error("Failed to update");
+        if (res.success) {
+          if (formData.login_password) {
+            // Login email always derived from employee_id, never from personal email field
+            const userEmail = `${formData.employee_id}@vswm.com`;
+            try {
+              await post("/api/users", {
+                email: userEmail.toLowerCase(),
+                password: formData.login_password,
+                role: formData.login_role,
+              });
+              toast.success("Employee updated & user account created!");
+            } catch {
+              toast.warn("Employee updated but user account failed — check RBAC");
+            }
+          } else {
+            toast.success("Employee updated successfully!");
+          }
+          fetchEmployees(); handleCloseForm();
+        } else toast.error("Failed to update");
       } else {
         const res = await post<{ success: boolean }>(`/api/employees`, payload);
-        if (res.success) { toast.success("Employee created successfully!"); fetchEmployees(); handleCloseForm(); } else toast.error("Failed to create");
+        if (res.success) {
+          if (formData.login_password) {
+            const userEmail = `${formData.employee_id}@vswm.com`;
+            try {
+              await post("/api/users", {
+                email: userEmail.toLowerCase(),
+                password: formData.login_password,
+                role: formData.login_role,
+              });
+              toast.success("Employee & user account created!");
+            } catch {
+              toast.warn("Employee created but user account failed — go to RBAC to set up login");
+            }
+          } else {
+            toast.success("Employee created successfully!");
+          }
+          fetchEmployees(); handleCloseForm();
+        } else toast.error("Failed to create");
       }
     } catch { toast.error("An error occurred"); } finally { setSubmitting(false); }
   };
@@ -188,6 +235,21 @@ export default function EmployeePage() {
                     {formErrors.alt_contact_no && <span className="text-[10px] text-rose-500 mt-1 block">{formErrors.alt_contact_no}</span>}
                   </div>
                   <div />
+
+                  <div>
+                    <Input type="password" label="Login Password (leave blank to skip user creation)" placeholder="Min 12 chars" value={formData.login_password} onChange={e => setFormData({ ...formData, login_password: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-2 block">Login Role</label>
+                    <select value={formData.login_role} onChange={e => setFormData({ ...formData, login_role: e.target.value })} className="w-full px-4 py-2.5 bg-theme-surface border border-theme-border rounded-xl text-sm text-theme-text outline-none focus:border-emerald-500 transition">
+                      <option value="USER">USER</option>
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="DRIVER">DRIVER</option>
+                      <option value="SUPERVISOR">SUPERVISOR</option>
+                      <option value="ZONE_MANAGER">ZONE MANAGER</option>
+                      <option value="OPEN_DEPOT">OPEN DEPOT</option>
+                    </select>
+                  </div>
 
                   <div className="md:col-span-2">
                     <label className="text-xs font-semibold text-theme-text-dim uppercase tracking-wider mb-2 block">Address <span className="text-rose-500">*</span></label>

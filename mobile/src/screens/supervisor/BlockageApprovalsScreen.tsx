@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, ScrollView, Image, Alert, RefreshControl, Modal } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api, BASE_URL } from '../../services/api';
+import { theme } from '../../theme/theme';
 import { Blockage } from '../../types';
 
 export default function BlockageApprovalsScreen({ navigation }: any) {
@@ -64,7 +66,7 @@ export default function BlockageApprovalsScreen({ navigation }: any) {
 
         {list.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>✓</Text>
+            <Ionicons name="checkmark-circle-outline" size={48} color={theme.colors.primary} />
             <Text style={styles.emptyText}>All blockage reports reviewed!</Text>
           </View>
         ) : (
@@ -137,14 +139,14 @@ export default function BlockageApprovalsScreen({ navigation }: any) {
                       style={[styles.modalButton, styles.rejectButton]}
                       onPress={() => handleReview('reject')}
                     >
-                      <Text style={styles.modalButtonText}>Reject ✕</Text>
+                      <Text style={styles.modalButtonText}>Reject</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={[styles.modalButton, styles.approveButton]}
                       onPress={() => handleReview('approve')}
                     >
-                      <Text style={styles.modalButtonText}>Approve ✓</Text>
+                      <Text style={styles.modalButtonText}>Approve</Text>
                     </TouchableOpacity>
                   </View>
                 )}

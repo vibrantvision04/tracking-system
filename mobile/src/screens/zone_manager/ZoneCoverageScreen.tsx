@@ -1,42 +1,14 @@
 import React from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../../services/api';
 import { theme } from '../../theme/theme';
 import { Header } from '../../components/ui/Header';
 import { useTranslation } from '../../i18n/useTranslation';
-
-interface WardItem {
-  ward_id: number;
-  ward_name: string;
-  coverage_percent: number;
-}
-
-interface ZoneDetails {
-  id: number;
-  name: string;
-  total_wards: number;
-  total_vehicles: number;
-}
-
-interface ZoneCoverageResponse {
-  zone: ZoneDetails;
-  coverage_percent: number;
-  active_vehicles: number;
-  drivers_present: number;
-  wards: WardItem[];
-}
+import { useZoneCoverage } from '../../hooks/useCoverage';
 
 export default function ZoneCoverageScreen({ navigation }: any) {
   const { t } = useTranslation();
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['zoneCoverage'],
-    queryFn: async () => {
-      const res = await api.get('/coverage/zone');
-      return res as unknown as ZoneCoverageResponse;
-    },
-  });
+  const { data, isLoading, refetch, isRefetching } = useZoneCoverage();
 
   if (isLoading) {
     return (
@@ -47,27 +19,45 @@ export default function ZoneCoverageScreen({ navigation }: any) {
     );
   }
 
-  const zone = data?.zone;
-  const overallPct = data?.coverage_percent || 0;
+  const header = (
+    <Header
+      title={t('menu.zoneCoverage')}
+      showBack={true}
+      onBack={() => navigation.goBack()}
+      rightActions={[
+        {
+          icon: 'refresh',
+          onPress: () => refetch(),
+          accessibilityLabel: t('common.retry'),
+        },
+      ]}
+    />
+  );
+
+  // Empty_State when no coverage records returned for the selected date (Req 5.5)
+  if (!data) {
+    return (
+      <View style={styles.container}>
+        {header}
+        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>{t('coverage.noData')}</Text>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  const zone = data.zone;
+  const overallPct = Math.min(100, Math.max(0, data.coverage_percent));
   const isOverallAchieved = overallPct >= 80;
   const overallColor = isOverallAchieved ? theme.colors.success : theme.colors.error;
   const overallBgColor = isOverallAchieved ? theme.colors.primaryLight : theme.colors.errorLight;
-  const wardList = data?.wards || [];
+  const wardList = data.wards ?? [];
 
   return (
     <View style={styles.container}>
-      <Header
-        title={t('menu.zoneCoverage')}
-        showBack={true}
-        onBack={() => navigation.goBack()}
-        rightActions={[
-          {
-            icon: 'refresh',
-            onPress: () => refetch(),
-            accessibilityLabel: t('common.retry'),
-          },
-        ]}
-      />
+      {header}
 
       <ScrollView
         style={styles.scrollContent}

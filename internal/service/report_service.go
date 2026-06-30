@@ -201,28 +201,6 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 		ward = wardName
 	}
 
-	// Fetch ward polygon GeoJSON for geofencing (resolve via route first, fallback to vehicle's default ward)
-	var wardGeoJSON string
-	_ = s.gRepo.Pool().QueryRow(ctx, `
-		SELECT COALESCE(g.polygon::text, '')
-		FROM vehicles v
-		LEFT JOIN (
-			SELECT route_id
-			FROM vehicle_route_assignments
-			WHERE vehicle_id = $1 AND is_active = true
-			ORDER BY assigned_date DESC LIMIT 1
-		) vra ON true
-		LEFT JOIN LATERAL (SELECT ward_id FROM route_wards rw WHERE route_id = vra.route_id LIMIT 1) rw ON true
-		JOIN regions w ON COALESCE(rw.ward_id, v.ward_id) = w.id
-		JOIN geofences g ON w.geofence_id = g.id
-		WHERE v.id = $1
-	`, vehicleID).Scan(&wardGeoJSON)
-
-	var wardPolygons [][]geofencePoint
-	if wardGeoJSON != "" {
-		wardPolygons = parseGeoJSONPolygons(wardGeoJSON)
-	}
-
 	// Fetch GPS data for the period
 	data, err := s.gRepo.GetByVehicle(ctx, vehicleID, start, end)
 	if err != nil {
@@ -260,7 +238,6 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 			TotalIdleDuration:        "00:00:00",
 			TotalStoppageDuration:    "00:00:00",
 			InParkingDuration:        "24:00:00",
-			ActualIgnitionOnDuration: "00:00:00",
 			TotalIgnitionOnDuration:  "00:00:00",
 			Stoppages:                []repository.Stoppage{},
 		}, nil
@@ -418,7 +395,6 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 	// ─────────────────────────────────────────────────────────────────
 	var totalDistance float64
 	var maxSpeed float64
-	var actualIgnitionSec float64
 	var totalIgnitionSec float64
 	var idleSec float64
 
@@ -439,7 +415,7 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 		}
 	}
 
-	// Actual & Total Ignition ON Durations (within opData shift window)
+	// Total Ignition ON Duration (within opData shift window)
 	for i := 1; i < len(opData); i++ {
 		prev := opData[i-1]
 		curr := opData[i]
@@ -449,10 +425,6 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 			dt := curr.Time.Sub(prev.Time).Seconds()
 			if dt > 0 && dt < 3600 {
 				totalIgnitionSec += dt
-				inWard := len(wardPolygons) > 0 && pointInAnyPolygon(curr.Lat, curr.Lng, wardPolygons)
-				if inWard {
-					actualIgnitionSec += dt
-				}
 			}
 		}
 	}
@@ -519,8 +491,7 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 		TotalStoppageDuration:    formatDuration(int(totalStoppageSec)),
 		StoppagesCount:           len(stoppages),
 		InParkingDuration:        formatDuration(inParkingSec),
-		ActualIgnitionOnDuration: formatDuration(int(actualIgnitionSec)),
-		TotalIgnitionOnDuration:  formatDuration(int(totalIgnitionSec)),
+		TotalIgnitionOnDuration: formatDuration(int(totalIgnitionSec)),
 		MaxSpeed:                 maxSpeed,
 		StartPoint:               startPoint,
 		EndPoint:                 endPoint,

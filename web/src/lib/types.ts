@@ -73,7 +73,6 @@ export interface MovementReport {
   total_stoppage_duration: string;
   in_parking_duration: string;
   total_ignition_on_duration: string;
-  actual_ignition_on_duration: string;
   total_running_duration: string;
   fuel_in_ltr: number;
   fuel_consumption: number;

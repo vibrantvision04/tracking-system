@@ -79,7 +79,11 @@ func DetectFaces(img image.Image, cfg Config) FaceResult {
 		},
 	}
 
-	dets := detector.RunCascade(cParams, 0.0)
+	qThreshold := cfg.FaceQualityThreshold
+	if qThreshold <= 0 {
+		qThreshold = 5.0
+	}
+	dets := detector.RunCascade(cParams, qThreshold)
 	dets = detector.ClusterDetections(dets, 0.2)
 
 	if len(dets) == 0 {
@@ -107,6 +111,13 @@ func DetectFaces(img image.Image, cfg Config) FaceResult {
 		})
 	}
 
+	// De-duplicate overlapping detections. Pigo can emit several boxes for a
+	// single face (slightly different scales/positions) that don't get merged by
+	// clustering, which would otherwise be miscounted as "multiple people". Two
+	// genuinely different people do not overlap, so this is safe for the 2-person
+	// (driver + helper) case.
+	faces = dedupeOverlappingFaces(faces)
+
 	var issues []string
 
 	if len(faces) > cfg.MaxFaces {
@@ -126,27 +137,17 @@ func DetectFaces(img image.Image, cfg Config) FaceResult {
 	}
 
 	for _, face := range faces {
-		offsetX := face.CenterX - 0.5
-		offsetY := face.CenterY - 0.5
-		if offsetX < 0 {
-			offsetX = -offsetX
-		}
-		if offsetY < 0 {
-			offsetY = -offsetY
-		}
-
-		if offsetX > cfg.FaceCenterMargin || offsetY > cfg.FaceCenterMargin {
-			issues = append(issues, "Please keep your face inside the frame.")
-			break
-		}
-
+		// Note: we intentionally do NOT require the face to be near the image
+		// center. The punch-in use case allows up to two people (driver + helper)
+		// who naturally stand side-by-side and off-center. We only reject a face
+		// that is actually cut off by the image edge (not fully visible).
 		faceLeft := float64(face.X) / float64(w)
 		faceRight := float64(face.X+face.Width) / float64(w)
 		faceTop := float64(face.Y) / float64(h)
 		faceBottom := float64(face.Y+face.Height) / float64(h)
 
 		if faceLeft < -0.05 || faceRight > 1.05 || faceTop < -0.05 || faceBottom > 1.05 {
-			issues = append(issues, "Please keep your face inside the frame.")
+			issues = append(issues, "A face is cut off. Please keep all faces fully inside the frame.")
 			break
 		}
 	}
@@ -161,4 +162,68 @@ func DetectFaces(img image.Image, cfg Config) FaceResult {
 
 func IsFaceCountValid(count, min, max int) bool {
 	return count >= min && count <= max
+}
+
+// faceIoU returns the Intersection-over-Union of two face boxes (0..1).
+func faceIoU(a, b FaceBounds) float64 {
+	ax2, ay2 := a.X+a.Width, a.Y+a.Height
+	bx2, by2 := b.X+b.Width, b.Y+b.Height
+
+	interX1 := maxInt(a.X, b.X)
+	interY1 := maxInt(a.Y, b.Y)
+	interX2 := minInt(ax2, bx2)
+	interY2 := minInt(ay2, by2)
+
+	iw := interX2 - interX1
+	ih := interY2 - interY1
+	if iw <= 0 || ih <= 0 {
+		return 0
+	}
+	interArea := float64(iw * ih)
+	areaA := float64(a.Width * a.Height)
+	areaB := float64(b.Width * b.Height)
+	union := areaA + areaB - interArea
+	if union <= 0 {
+		return 0
+	}
+	return interArea / union
+}
+
+// dedupeOverlappingFaces collapses boxes that overlap (IoU > 0.3) into one,
+// keeping the larger box. This prevents a single face from being counted as
+// multiple people while leaving non-overlapping (distinct) people intact.
+func dedupeOverlappingFaces(faces []FaceBounds) []FaceBounds {
+	const overlapThreshold = 0.3
+	var kept []FaceBounds
+	for _, f := range faces {
+		merged := false
+		for i := range kept {
+			if faceIoU(f, kept[i]) > overlapThreshold {
+				// Keep whichever box is larger.
+				if f.Width*f.Height > kept[i].Width*kept[i].Height {
+					kept[i] = f
+				}
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			kept = append(kept, f)
+		}
+	}
+	return kept
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

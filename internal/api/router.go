@@ -51,6 +51,9 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 		r.With(LoginRateLimitMiddleware(h.rdb, 5, 1*time.Minute)).Post("/login", h.Login)
 		r.Post("/refresh", h.RefreshToken)
 
+		// SSE for real-time admin notifications
+		r.Handle("/events/open-depot", SSESubscribe(h.rdb, "open-depot:events"))
+
 		// Protected API Routes (auth required)
 		r.Group(func(r chi.Router) {
 			r.Use(AuthMiddleware(cfg))
@@ -102,6 +105,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/reports/special-operations", h.GetShiftBasedOpsReport)
 			r.Get("/reports/early-departed", h.GetEarlyDepartureReport)
 			r.Get("/reports/vehicle-summary", h.GetVehicleSummaryReport)
+			r.Get("/reports/unauthorized-movement", h.GetUnauthorizedMovementReport)
 			r.Get("/ultimate-reports/daily-excel", h.GetUltimateDailyExcelReport)
 			r.Get("/ultimate-reports/template", h.DownloadUltimateTemplate)
 			r.Get("/ultimate-reports/list", h.GetUltimateReportList)
@@ -115,6 +119,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/routes/{route_id}/regular-vehicle", h.GetRegularVehicleForRoute)
 			r.Get("/route-type-vehicle-types", h.GetRouteTypeVehicleTypes)
 			r.Get("/employee-department-designations", h.GetEmployeeDepartmentDesignations)
+			r.Get("/employee-vehicle-assignments", h.GetEmployeeVehicleAssignments)
 			r.Get("/attendance", h.GetAttendance)
 			r.Get("/reasons", h.GetReasons)
 			r.Get("/open-depots", h.GetOpenDepots)
@@ -123,6 +128,34 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/open-depots/{id}", h.GetOpenDepotByID)
 			r.Get("/open-depots/cleanings", h.GetCleaningSubmissions)
 			r.Get("/open-depot-submissions", h.AdminGetOpenDepotSubmissions)
+			r.Get("/complaints", h.ListComplaints)
+			r.Get("/employee-locations", h.GetEmployeeLocations)
+
+			// ============== Road Sweeping Routes ==============
+			r.Get("/sweeping/routes", h.GetSweepingRoutes)
+			r.Get("/sweeping/assignments", h.GetSweepingAssignments)
+			r.Get("/sweeping/tasks", h.GetCleaningTasks)
+			r.With(h.RequirePermission("sweeping.routes.create")).Post("/sweeping/routes", h.CreateSweepingRoute)
+			r.With(h.RequirePermission("sweeping.routes.edit")).Put("/sweeping/routes/{id}", h.UpdateSweepingRoute)
+			r.With(h.RequirePermission("sweeping.routes.delete")).Delete("/sweeping/routes/{id}", h.DeleteSweepingRoute)
+			r.With(h.RequirePermission("sweeping.assignments.create")).Post("/sweeping/assignments", h.CreateSweepingAssignment)
+			r.With(h.RequirePermission("sweeping.assignments.delete")).Delete("/sweeping/assignments/{id}", h.DeleteSweepingAssignment)
+			r.With(h.RequirePermission("sweeping.tasks.approve")).Put("/sweeping/tasks/{id}/review", h.ReviewCleaningTask)
+
+			// ============== Unified Employee Management ==============
+			r.With(h.RequirePermission("employees.view")).Get("/employee-management/employees", h.GetUnifiedEmployees)
+			r.With(h.RequirePermission("employees.view")).Get("/employee-management/employees/{id}", h.GetUnifiedEmployee)
+			r.With(h.RequirePermission("employees.create")).Post("/employee-management/employees", h.CreateUnifiedEmployee)
+			r.With(h.RequirePermission("employees.edit")).Put("/employee-management/employees/{id}", h.UpdateUnifiedEmployee)
+			r.With(h.RequirePermission("employees.edit")).Put("/employee-management/employees/{id}/status", h.UpdateEmployeeStatus)
+
+			// ============== Master Consolidated Reports ==============
+			r.With(h.RequirePermission("reports.view")).Get("/master-reports/catalog", h.GetCatalog)
+			r.With(h.requireReportPermission("view")).Post("/master-reports/{report_id}/generate", h.GenerateReport)
+			r.With(h.requireReportPermission("view")).With(h.RequirePermission("reports.force_recalculate")).Post("/master-reports/{report_id}/recalculate", h.ForceRecalculate)
+			r.With(h.requireReportPermission("view")).Get("/master-reports/{report_id}/export.xlsx", h.ExportExcel)
+			r.With(h.requireReportPermission("view")).Get("/master-reports/{report_id}/export.pdf", h.ExportPDF)
+			r.With(h.RequirePermission("reports.view")).Get("/master-reports/jobs/{job_id}", h.GetJob)
 
 			// ============== WRITE (admin only) ==============
 			r.Group(func(r chi.Router) {
@@ -249,6 +282,8 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 				r.Delete("/route-type-vehicle-types/{id}", h.DeleteRouteTypeVehicleType)
 				r.Post("/employee-department-designations", h.CreateEmployeeDepartmentDesignation)
 				r.Delete("/employee-department-designations/{id}", h.DeleteEmployeeDepartmentDesignation)
+				r.Post("/employee-vehicle-assignments", h.AssignEmployeeVehicle)
+				r.Delete("/employee-vehicle-assignments/{id}", h.RemoveEmployeeVehicleAssignment)
 
 				// User & Role Management
 				r.Get("/users", h.GetUsers)
@@ -270,8 +305,23 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			})
 
 			// ============== WRITE (authenticated user) ==============
-			r.Post("/open-depots/cleanings/upload", h.UploadCleaningPhoto)
-			r.Post("/open-depots/cleanings", h.CreateCleaningSubmission)
+		r.Post("/open-depots/cleanings/upload", h.UploadCleaningPhoto)
+		r.Post("/open-depots/cleanings", h.CreateCleaningSubmission)
+
+			// ============== RBAC ==============
+			r.Get("/rbac/roles", h.GetRoles)
+			r.Get("/rbac/permissions", h.GetPermissions)
+			r.Get("/rbac/roles/{id}/permissions", h.GetRolePermissions)
+			r.Get("/rbac/roles/{id}/employees", h.GetRoleEmployees)
+			r.Get("/rbac/users", h.GetAllUserRoles)
+			r.Get("/rbac/me/permissions", h.GetMyPermissions)
+			r.With(h.RequirePermission("users.roles")).Post("/rbac/roles", h.CreateRole)
+			r.With(h.RequirePermission("users.roles")).Put("/rbac/roles/{id}", h.UpdateRole)
+			r.With(h.RequirePermission("users.roles")).Delete("/rbac/roles/{id}", h.DeleteRole)
+			r.With(h.RequirePermission("users.roles")).Post("/rbac/roles/{id}/duplicate", h.DuplicateRole)
+			r.With(h.RequirePermission("users.roles")).Put("/rbac/roles/{id}/permissions", h.SetRolePermissions)
+			r.With(h.RequirePermission("users.assign_roles")).Post("/rbac/users/assign-role", h.AssignUserRole)
+			r.With(h.RequirePermission("users.roles")).Post("/rbac/register-permissions", h.RegisterDefaultPermissions)
 		})
 	})
 
@@ -295,6 +345,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/attendance/list", h.MobileAttendanceList)
 
 			r.Get("/routes/my", h.MobileMyRoutes)
+			r.Get("/dashboard", h.MobileDashboard)
 			r.Get("/coverage/my", h.MobileMyCoverage)
 			r.Get("/coverage/wards", h.MobileWardsCoverage)
 			r.Get("/coverage/zone", h.MobileZoneCoverage)
@@ -302,7 +353,11 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/alerts/my", h.MobileMyAlerts)
 			r.Get("/alerts/ward", h.MobileWardAlerts)
 			r.Get("/alerts/zone", h.MobileZoneAlerts)
-			r.Post("/alerts/acknowledge/{id}", h.MobileAcknowledgeAlert)
+			r.Post("/alerts/{id}/read", h.MobileMarkAlertRead)
+			// Deprecated alias kept for older clients; maps to MobileMarkAlertRead.
+			r.Post("/alerts/acknowledge/{id}", h.MobileMarkAlertRead)
+			r.Post("/alerts/manual", h.MobileSendManualAlert)
+			// Deprecated alias kept for older clients; maps to MobileSendManualAlert.
 			r.Post("/alerts/custom", h.MobileSendCustomAlert)
 
 			r.Post("/blockages", h.MobileSubmitBlockage)
@@ -315,6 +370,18 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 
 			r.Get("/tracking/ward", h.MobileLiveTrackingWard)
 			r.Get("/tracking/zone", h.MobileLiveTrackingZone)
+
+			r.Get("/complaints", h.MobileListComplaints)
+			r.Get("/complaints/{id}", h.MobileGetComplaint)
+			r.Post("/location", h.MobileSubmitLocation)
+
+			// ============== Road Sweeping Mobile ==============
+			r.Get("/sweeping/route", h.MobileSweepingRoute)
+			r.Post("/sweeping/before-image", h.MobileSweepingBeforeImage)
+			r.Post("/sweeping/after-image", h.MobileSweepingAfterImage)
+			r.Get("/sweeping/coverage", h.MobileSweepingCoverage)
+			r.Get("/sweeping/tasks", h.MobileSweepingTasks)
+			r.Post("/sweeping/gps", h.MobileSweepingGPSLog)
 		})
 	})
 

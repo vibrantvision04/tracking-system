@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { usePunchStatus } from '../../hooks/usePunchStatus';
 import { useAlerts } from '../../hooks/useAlerts';
@@ -18,7 +19,7 @@ function getGreetingKey(): string {
 
 interface MenuItem {
   key: string;
-  icon: string;
+  iconName: keyof typeof Ionicons.glyphMap;
   titleKey: string;
   subtitleKey: string;
   route: string;
@@ -28,7 +29,7 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   {
     key: 'punchIn',
-    icon: '⏰',
+    iconName: 'alarm-outline',
     titleKey: 'menu.punchIn',
     subtitleKey: 'menu.punchIn.subtitle',
     route: 'DriverPunchIn',
@@ -36,42 +37,28 @@ const MENU_ITEMS: MenuItem[] = [
   },
   {
     key: 'alerts',
-    icon: '🔔',
+    iconName: 'notifications-outline',
     titleKey: 'menu.alerts',
     subtitleKey: 'menu.alerts.subtitle',
     route: 'DriverAlerts',
   },
   {
     key: 'coverage',
-    icon: '📈',
+    iconName: 'trending-up-outline',
     titleKey: 'menu.coverage',
     subtitleKey: 'menu.coverage.subtitle',
     route: 'DriverCoverage',
   },
   {
     key: 'routeMap',
-    icon: '🗺️',
+    iconName: 'map-outline',
     titleKey: 'menu.routeMap',
     subtitleKey: 'menu.routeMap.subtitle',
     route: 'DriverRouteMap',
   },
   {
-    key: 'blockage',
-    icon: '🚧',
-    titleKey: 'menu.blockage',
-    subtitleKey: 'menu.blockage.subtitle',
-    route: 'DriverBlockage',
-  },
-  {
-    key: 'liveTracking',
-    icon: '📍',
-    titleKey: 'menu.liveTracking',
-    subtitleKey: 'menu.liveTracking.subtitle',
-    route: 'DriverLiveTracking',
-  },
-  {
     key: 'attendance',
-    icon: '📋',
+    iconName: 'clipboard-outline',
     titleKey: 'menu.attendance',
     subtitleKey: 'menu.attendance.subtitle',
     route: 'DriverAttendance',
@@ -156,7 +143,7 @@ export default function DriverHomeScreen({ navigation }: any) {
                         dimmed={true}
                         style={styles.navCard}
                       >
-                        <Text style={styles.cardIcon}>{item.icon}</Text>
+                        <Ionicons name={item.iconName} size={28} color={theme.colors.primary} style={styles.cardIcon} />
                         <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
                         <Text style={styles.cardSubtitle}>{t(item.subtitleKey)}</Text>
                       </Card>
@@ -173,7 +160,7 @@ export default function DriverHomeScreen({ navigation }: any) {
                     dimmed={false}
                     style={styles.navCard}
                   >
-                    <Text style={styles.cardIcon}>{item.icon}</Text>
+                    <Ionicons name={item.iconName} size={28} color={theme.colors.primary} style={styles.cardIcon} />
                     <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
                     <Text style={styles.cardSubtitle}>{t(item.subtitleKey)}</Text>
                   </Card>
@@ -227,8 +214,8 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.cardMinHeight,
   },
   cardIcon: {
-    fontSize: 28,
     marginBottom: theme.spacing.sm,
+    textAlign: 'center',
   },
   cardTitle: {
     fontSize: theme.typography.body.fontSize,

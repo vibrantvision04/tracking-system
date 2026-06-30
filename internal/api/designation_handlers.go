@@ -15,16 +15,26 @@ type DesignationResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// GetDesignations returns all active designations from the database.
+// GetDesignations returns a paginated list of designations.
 func (h *Handler) GetDesignations(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db := h.gpsRepo.Pool()
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
+
+	var total int
+	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM designations`).Scan(&total)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to count designations: " + err.Error()})
+		return
+	}
 
 	rows, err := db.Query(ctx, `
 		SELECT id, name, COALESCE(is_active, true), TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS')
 		FROM designations
 		ORDER BY id ASC
-	`)
+		LIMIT $1 OFFSET $2
+	`, pageSize, offset)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query designations: " + err.Error()})
 		return
@@ -39,9 +49,14 @@ func (h *Handler) GetDesignations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	totalPages := (total + pageSize - 1) / pageSize
 	sendJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"data":    list,
+		"success":     true,
+		"data":        list,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
+		"total_pages": totalPages,
 	})
 }
 

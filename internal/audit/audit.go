@@ -20,6 +20,11 @@ const (
 	EventUserUpdate   EventType = "user_update"
 	EventRoleChange   EventType = "role_change"
 	EventTokenRefresh EventType = "token_refresh"
+
+	EventReportGenerate         EventType = "report.generate"
+	EventReportForceRecalculate EventType = "report.force_recalculate"
+	EventReportExportExcel      EventType = "report.export.excel"
+	EventReportExportPDF        EventType = "report.export.pdf"
 )
 
 type Logger struct {

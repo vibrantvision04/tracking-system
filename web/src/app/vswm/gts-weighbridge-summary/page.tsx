@@ -35,71 +35,7 @@ export default function GTSWeighbridgeSummaryReport() {
   const handleLoad = async () => {
     setLoading(true);
     try {
-      // Mock data for demonstration - replace with actual API call
-      const mockData = [
-        {
-          id: 1,
-          zone: "Zone 4 - Adarsh Nagar Zone",
-          ward: "Ward 1",
-          vehicle_rto: "RJ01-AB-1234",
-          transfer_station: "TS-01 Main Depot",
-          dry_weight: 2500,
-          wet_weight: 1500,
-          vehicle_gross_weight: 5000,
-          total_garbage_weight: 4000,
-          trips_count: 5
-        },
-        {
-          id: 2,
-          zone: "Zone 5 - Civil Lines Zone",
-          ward: "Ward 2",
-          vehicle_rto: "RJ01-CD-5678",
-          transfer_station: "TS-02 North Yard",
-          dry_weight: 3000,
-          wet_weight: 2000,
-          vehicle_gross_weight: 6000,
-          total_garbage_weight: 5000,
-          trips_count: 6
-        },
-        {
-          id: 3,
-          zone: "Zone 6 - Industrial Area Zone",
-          ward: "Ward 3",
-          vehicle_rto: "RJ01-EF-9012",
-          transfer_station: "TS-03 Industrial",
-          dry_weight: 2000,
-          wet_weight: 1800,
-          vehicle_gross_weight: 4500,
-          total_garbage_weight: 3800,
-          trips_count: 4
-        },
-        {
-          id: 4,
-          zone: "Zone 7 - Mansarovar Zone",
-          ward: "Ward 4",
-          vehicle_rto: "RJ01-GH-3456",
-          transfer_station: "TS-01 Main Depot",
-          dry_weight: 2800,
-          wet_weight: 1700,
-          vehicle_gross_weight: 5500,
-          total_garbage_weight: 4500,
-          trips_count: 5
-        },
-        {
-          id: 5,
-          zone: "Zone 8 - Sodala Zone",
-          ward: "Ward 5",
-          vehicle_rto: "RJ01-IJ-7890",
-          transfer_station: "TS-04 Sodala",
-          dry_weight: 2200,
-          wet_weight: 1600,
-          vehicle_gross_weight: 4800,
-          total_garbage_weight: 3800,
-          trips_count: 4
-        },
-      ];
-      
-      setData(mockData);
+      setData([]);
     } catch (err) {
       console.error(err);
       setData([]);

@@ -12,7 +12,7 @@ var (
 	MinBrightness       = 30.0
 	MaxBrightness       = 230.0
 
-	MinFaceSizeRatio    = 0.05
+	MinFaceSizeRatio    = 0.02
 
 	FaceCenterMargin    = 0.35
 
@@ -21,7 +21,12 @@ var (
 
 	FaceDetectionScale  = 1.1
 	FaceDetectionShift  = 0.1
-	FaceDetectionMinSize = 100
+	FaceDetectionMinSize = 50
+
+	// Pigo detection quality threshold. Detections below this score are treated as
+	// noise and discarded (reduces false "multiple people"). ~5.0 is the commonly
+	// recommended value; tunable here without code changes.
+	FaceQualityThreshold = 5.0
 )
 
 type Config struct {
@@ -45,6 +50,12 @@ type Config struct {
 	FaceDetectionScale  float64
 	FaceDetectionShift  float64
 	FaceDetectionMinSize int
+	FaceQualityThreshold float64
+
+	// SkipFaceChecks disables the (unreliable pigo) server-side face detection
+	// entirely. Face presence/count is now validated on-device via Google ML Kit,
+	// so the backend only performs image-quality checks (blur/brightness/integrity).
+	SkipFaceChecks bool
 }
 
 func DefaultConfig() Config {
@@ -64,5 +75,6 @@ func DefaultConfig() Config {
 		FaceDetectionScale:  FaceDetectionScale,
 		FaceDetectionShift:  FaceDetectionShift,
 		FaceDetectionMinSize: FaceDetectionMinSize,
+		FaceQualityThreshold: FaceQualityThreshold,
 	}
 }

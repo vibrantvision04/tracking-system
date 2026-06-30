@@ -29,51 +29,7 @@ export default function CollectionPointSummaryReport() {
   const handleLoad = async () => {
     setLoading(true);
     try {
-      // Mock data for demonstration - replace with actual API call
-      const mockData = [
-        {
-          id: 1,
-          region_name: "Zone 4 - Adarsh Nagar Zone",
-          total: 250,
-          collected: 220,
-          partially_collected: 20,
-          not_collected: 10
-        },
-        {
-          id: 2,
-          region_name: "Zone 5 - Civil Lines Zone",
-          total: 300,
-          collected: 275,
-          partially_collected: 15,
-          not_collected: 10
-        },
-        {
-          id: 3,
-          region_name: "Zone 6 - Industrial Area Zone",
-          total: 180,
-          collected: 150,
-          partially_collected: 20,
-          not_collected: 10
-        },
-        {
-          id: 4,
-          region_name: "Zone 7 - Mansarovar Zone",
-          total: 220,
-          collected: 200,
-          partially_collected: 12,
-          not_collected: 8
-        },
-        {
-          id: 5,
-          region_name: "Zone 8 - Sodala Zone",
-          total: 190,
-          collected: 170,
-          partially_collected: 15,
-          not_collected: 5
-        },
-      ];
-      
-      setData(mockData);
+      setData([]);
     } catch (err) {
       console.error(err);
       setData([]);

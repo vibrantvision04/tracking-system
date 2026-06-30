@@ -96,13 +96,12 @@ export default function MultiSelect({
                 className="bg-theme-accent text-white font-bold text-xs px-2 py-0.5 rounded flex items-center gap-1 shrink-0"
               >
                 {lbl}
-                <button
-                  type="button"
+                <span
                   onClick={(e) => handleRemoveValue(e, val)}
-                  className="hover:text-slate-200 font-extrabold focus:outline-none text-[10px]"
+                  className="hover:text-slate-200 font-extrabold cursor-pointer text-[10px]"
                 >
                   ✕
-                </button>
+                </span>
               </span>
             );
           })}
@@ -121,13 +120,12 @@ export default function MultiSelect({
                 className="bg-theme-accent text-white font-bold text-xs px-2 py-0.5 rounded flex items-center gap-1 shrink-0"
               >
                 {lbl}
-                <button
-                  type="button"
+                <span
                   onClick={(e) => handleRemoveValue(e, val)}
-                  className="hover:text-slate-200 font-extrabold focus:outline-none text-[10px]"
+                  className="hover:text-slate-200 font-extrabold cursor-pointer text-[10px]"
                 >
                   ✕
-                </button>
+                </span>
               </span>
             );
           })}
@@ -194,13 +192,12 @@ export default function MultiSelect({
               autoFocus
             />
             {search && (
-              <button
-                type="button"
+              <span
                 onClick={() => setSearch("")}
-                className="text-theme-text-dim hover:text-theme-text text-xs pr-1 focus:outline-none"
+                className="text-theme-text-dim hover:text-theme-text text-xs pr-1 cursor-pointer"
               >
                 ✕
-              </button>
+              </span>
             )}
           </div>
 

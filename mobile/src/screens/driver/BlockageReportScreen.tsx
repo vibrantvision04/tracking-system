@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Image, Alert, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useGPS } from '../../hooks/useGPS';
 import { useCamera } from '../../hooks/useCamera';
 import CameraCapture from '../../components/CameraCapture';
@@ -206,7 +207,7 @@ export default function BlockageReportScreen({ route, navigation }: any) {
 
         {step === 'success' && (
           <View style={styles.stepContainer}>
-            <Text style={styles.successIcon}>⚠️</Text>
+            <Ionicons name="warning-outline" size={60} color="#E65100" />
             <Text style={styles.successTitle}>Blockage Reported!</Text>
             <Text style={styles.successSubtitle}>
               Initial approval granted. You may continue your route.

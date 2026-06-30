@@ -1,19 +1,57 @@
 {
   "expo": {
     "name": "ISWM Field Mobile",
-    "slug": "iswm-mobile",
+    "slug": "swift",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iswm.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera for face recognition and photo capture.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to track field operations.",
+        "NSLocationAlwaysUsageDescription": "This app uses your location to track field operations even in the background."
+      }
     },
     "android": {
-      "package": "com.iswm.mobile"
+      "package": "com.iswm.mobile",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "plugins": [
       "expo-asset",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-dev-client",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "This app uses the camera for face recognition and photo capture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "This app uses your location to track field operations.",
+          "locationAlwaysPermission": "This app uses your location to track field operations even in the background.",
+          "locationWhenInUsePermission": "This app uses your location to track field operations."
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e11e2a83-d765-45b1-9041-f99f7f6ff9ac"
+      }
+    },
+    "owner": "nishant223s-team"
   }
 }

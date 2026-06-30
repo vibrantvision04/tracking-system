@@ -33,61 +33,7 @@ export default function WeighbridgeDataReport() {
   const handleLoad = async () => {
     setLoading(true);
     try {
-      // Mock data for demonstration - replace with actual API call
-      const mockData = [
-        {
-          id: 1,
-          transfer_station_name: "TS-01 Main Depot",
-          device_id: "WB-001",
-          sequence_no: "SEQ-001",
-          epc_id: "EPC-123456",
-          registration_no: "RJ01-AB-1234",
-          weight: 4500,
-          date_time: "2026-06-24 08:30:15"
-        },
-        {
-          id: 2,
-          transfer_station_name: "TS-02 North Yard",
-          device_id: "WB-002",
-          sequence_no: "SEQ-002",
-          epc_id: "EPC-234567",
-          registration_no: "RJ01-CD-5678",
-          weight: 5200,
-          date_time: "2026-06-24 09:15:30"
-        },
-        {
-          id: 3,
-          transfer_station_name: "TS-03 Industrial",
-          device_id: "WB-003",
-          sequence_no: "SEQ-003",
-          epc_id: "EPC-345678",
-          registration_no: "RJ01-EF-9012",
-          weight: 3800,
-          date_time: "2026-06-24 10:00:45"
-        },
-        {
-          id: 4,
-          transfer_station_name: "TS-01 Main Depot",
-          device_id: "WB-001",
-          sequence_no: "SEQ-004",
-          epc_id: "EPC-456789",
-          registration_no: "RJ01-GH-3456",
-          weight: 4100,
-          date_time: "2026-06-24 11:30:20"
-        },
-        {
-          id: 5,
-          transfer_station_name: "TS-04 Sodala",
-          device_id: "WB-004",
-          sequence_no: "SEQ-005",
-          epc_id: "EPC-567890",
-          registration_no: "RJ01-IJ-7890",
-          weight: 4700,
-          date_time: "2026-06-24 12:45:10"
-        },
-      ];
-      
-      setData(mockData);
+      setData([]);
     } catch (err) {
       console.error(err);
       setData([]);

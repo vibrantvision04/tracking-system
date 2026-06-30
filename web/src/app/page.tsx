@@ -20,11 +20,7 @@ import dynamic from "next/dynamic";
 
 const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false, loading: () => <MapSkeleton /> });
 
-const DEFAULT_CAPACITIES = [
-  { id: 1, totalCapacity: "3.5", wet: "50", dry: "50", active: true },
-  { id: 2, totalCapacity: "1.8", wet: "50", dry: "50", active: true },
-  { id: 3, totalCapacity: "2.2", wet: "50", dry: "50", active: true }
-];
+
 
 export default function HomePage() {
   const vehicles = useStore((state) => state.vehicles);
@@ -74,8 +70,6 @@ export default function HomePage() {
       const cachedCap = localStorage.getItem("vswm:vehicle-capacities");
       if (cachedCap) {
         try { setCapacities(JSON.parse(cachedCap)); } catch (e) {}
-      } else {
-        setCapacities(DEFAULT_CAPACITIES);
       }
     }
   }, []);
@@ -94,24 +88,14 @@ export default function HomePage() {
   const getVehicleCapacity = (vId: number) => {
     const meta = vehiclesMeta[vId] || {};
     const capId = meta.capacityId;
-    const cap = capacities.find(c => c.id === capId) || DEFAULT_CAPACITIES.find(c => c.id === capId) || DEFAULT_CAPACITIES[0];
-    return parseFloat(cap?.totalCapacity || "3.5");
+    const cap = capacities.find(c => c.id === capId);
+    return parseFloat(cap?.totalCapacity || "0");
   };
 
-  const zoneTonnages = zones.map((z: any, index: number) => {
-    // Generate deterministic dummy tons & trips for each zone
-    const trips = ((index * 7 + 3) % 15) + 5; // values between 5 and 19
-    const tons = trips * 1.8;
-    return {
-      name: z.region_name || z.name || `Zone ${z.id}`,
-      tons,
-      trips,
-      rejected: index % 5 === 0 ? 1 : 0
-    };
-  }).sort((a, b) => b.tons - a.tons);
+  const zoneTonnages: any[] = [];
 
-  const totalTonsCollected = zoneTonnages.reduce((acc, z) => acc + z.tons, 0);
-  const totalValidTrips = zoneTonnages.reduce((acc, z) => acc + z.trips, 0);
+  const totalTonsCollected = 0;
+  const totalValidTrips = 0;
 
   const zonesCount = loadingZones && zones.length === 0 ? "..." : zones.length;
   const wardsCount = loadingWards && wards.length === 0 ? "..." : wards.length;
@@ -140,9 +124,6 @@ export default function HomePage() {
         ? Math.round(zoneCoverages.reduce((acc, z) => acc + z.percentage, 0) / zoneCoverages.length)
         : 0);
 
-  // Mocked for now based on user instruction
-  const gvpCount = "24"; 
-  const liftedGvp = 92;
 
   useEffect(() => {
     if (!loaded) {

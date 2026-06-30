@@ -489,6 +489,9 @@ export default function PlaybackPage() {
   const [shiftsList, setShiftsList] = useState<any[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
   const allRoutesLayerRef = useRef<any>(null);
+  // Monotonic token to invalidate stale/in-flight loadRoute calls (e.g., after reset
+  // or fast vehicle switching) so a late-resolving fetch cannot repaint the map.
+  const loadSeqRef = useRef(0);
 
   const resolveRouteAndSyncFilters = useCallback((vehImei: string, shiftName: string) => {
     if (!vehImei || vehicles.length === 0 || routesList.length === 0) return;
@@ -1657,6 +1660,9 @@ export default function PlaybackPage() {
   // Load Route Playback Trace
   const loadRoute = useCallback(async (autoplay = false) => {
     if (!selectedImei || !date) return;
+    // Token for this load; if a newer load starts or a reset happens, this load
+    // becomes stale and must not repaint the map after its awaits resolve.
+    const myLoadSeq = ++loadSeqRef.current;
     const from = `${date}T00:00:00.000Z`;
     const to = `${date}T23:59:59.999Z`;
 
@@ -1664,6 +1670,7 @@ export default function PlaybackPage() {
 
     try {
       const r = await api<{ data: GpsDataPoint[] }>(`/api/gps-data/${selectedImei}?from=${from}&to=${to}`);
+      if (loadSeqRef.current !== myLoadSeq) return; // superseded (reset / new load)
       const data = r.data || [];
       const validPointsRaw = data.filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number' && p.lat !== 0);
 
@@ -2002,6 +2009,10 @@ export default function PlaybackPage() {
       }
 
       setAiConfidence(averageConfidence);
+
+      // Final staleness check before any map drawing. If a reset or a newer load
+      // happened during the awaits above, abort so we don't repaint stale data.
+      if (loadSeqRef.current !== myLoadSeq) return;
 
       if (!loadedViaAI) {
         if (assignedRouteData && (assignedRouteData.geojson || (assignedRouteData.lane_points && assignedRouteData.lane_points.length > 0))) {
@@ -2850,19 +2861,26 @@ export default function PlaybackPage() {
     setDriverDetails(null);
     setTransferStationTrips(0);
     
-    // Reset all visibility toggles — set to false so no leftover layers appear
-    setShowPlannedRoute(false);
-    setShowActualMovement(false);
-    setShowRawPlayback(false);
+    // Restore visibility toggles to their page-load defaults so the map indicator
+    // checkboxes stay selected (matches a fresh page load). No layers reappear
+    // because clearPlaybackLayers() clears all data/layers below; these toggles
+    // only take effect once a vehicle is loaded again.
+    setShowPlannedRoute(true);
+    setShowActualMovement(true);
+    setShowRawPlayback(true);
     setShowRawGpsTrace(false);
     setShowRegionBoundary(true);
-    setShowStartEndPoint(false);
-    setShowStoppages(false);
-    setShowMajorStoppages(false);
-    setShowMiniStoppages(false);
-    setShowCoveredCheckpoints(false);
-    setShowUncoveredCheckpoints(false);
-    
+    setShowStartEndPoint(true);
+    setShowStoppages(true);
+    setShowMajorStoppages(true);
+    setShowMiniStoppages(true);
+    setShowCoveredCheckpoints(true);
+    setShowUncoveredCheckpoints(true);
+
+    // Invalidate any in-flight loadRoute so a late-resolving fetch can't repaint
+    // the map after this reset (the main reason a manual page reload was needed).
+    loadSeqRef.current++;
+
     clearPlaybackLayers();
   };
 

@@ -59,7 +59,7 @@ const MENU_ITEMS: MenuItem[] = [
     iconName: 'flag-outline',
     titleKey: 'menu.complaints',
     subtitleKey: 'menu.complaints.subtitle',
-    route: null,
+    route: 'Complaints',
   },
 ];
 

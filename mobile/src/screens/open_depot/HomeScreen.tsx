@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { Header } from '../../components/ui/Header';
 import { theme } from '../../theme/theme';
@@ -35,7 +36,7 @@ export default function OpenDepotHomeScreen({ navigation }: any) {
           activeOpacity={0.7}
         >
           <View style={styles.cameraIconWrapper}>
-            <Text style={styles.cameraIcon}>📷</Text>
+            <Ionicons name="camera-outline" size={40} color={theme.colors.primary} />
           </View>
           <Text style={styles.tileTitle}>Open Depot</Text>
           <Text style={styles.tileSubtitle}>Tap to capture photo</Text>

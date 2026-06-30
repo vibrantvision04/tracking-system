@@ -70,115 +70,6 @@ export default function SurveyReportPage() {
   // Detail drawer state
   const [viewSupervisor, setViewSupervisor] = useState<Supervisor | null>(null);
 
-  // Generate realistic dummy data
-  const generateDummyData = () => {
-    const dummySupervisors = [
-      { id: 1, name: "Praveen Sharma", employee_id: "EMP001", mobile_number: "9876543210", assigned_zone: "Zone A", assigned_ward: "Ward 12" },
-      { id: 2, name: "Rohit Beniwal", employee_id: "EMP002", mobile_number: "9812345678", assigned_zone: "Zone B", assigned_ward: "Ward 22" },
-      { id: 3, name: "Anil Beniwal", employee_id: "EMP003", mobile_number: "9887654321", assigned_zone: "Zone C", assigned_ward: "Ward 34" },
-      { id: 4, name: "Mahesh Kumar", employee_id: "EMP004", mobile_number: "9765432109", assigned_zone: "Zone D", assigned_ward: "Ward 45" },
-      { id: 5, name: "Ravi Sharma", employee_id: "EMP005", mobile_number: "9654321098", assigned_zone: "Zone E", assigned_ward: "Ward 55" },
-    ];
-
-    const dummyZones = [
-      { id: 1, region_name: "Zone A" },
-      { id: 2, region_name: "Zone B" },
-      { id: 3, region_name: "Zone C" },
-      { id: 4, region_name: "Zone D" },
-      { id: 5, region_name: "Zone E" },
-    ];
-
-    const dummyWards = [
-      { id: 1, region_name: "Ward 12", parent_id: 1 },
-      { id: 2, region_name: "Ward 22", parent_id: 2 },
-      { id: 3, region_name: "Ward 34", parent_id: 3 },
-      { id: 4, region_name: "Ward 45", parent_id: 4 },
-      { id: 5, region_name: "Ward 55", parent_id: 5 },
-    ];
-
-    const dummyAreas = ["Transport Nagar", "Jawahar Nagar", "Malviya Nagar", "Jagatpura", "Sanganer", "Agra Road"];
-
-    const surveyStatuses = ["Completed", "Pending", "Rejected", "Approved"] as const;
-    const statusWeights = [0.7, 0.1, 0.05, 0.15]; // 70% completed, 10% pending, 5% rejected, 15% approved
-
-    // Generate supervisors with installation counts
-    const supervisorsData: Supervisor[] = dummySupervisors.map((sup, index) => {
-      const installationCounts = [245, 178, 321, 156, 289];
-      const totalInstalled = installationCounts[index];
-      const todayInstallations = Math.floor(Math.random() * 15) + 5;
-      const monthlyInstallations = Math.floor(Math.random() * 50) + 30;
-      const completionRate = 85 + Math.floor(Math.random() * 14); // 85-99%
-
-      // Generate survey records for this supervisor
-      const surveys: SurveyRecord[] = Array.from({ length: totalInstalled }, (_, i) => {
-        const zone = dummyZones[Math.floor(Math.random() * dummyZones.length)];
-        const ward = dummyWards[Math.floor(Math.random() * dummyWards.length)];
-        const area = dummyAreas[Math.floor(Math.random() * dummyAreas.length)];
-
-        // Determine survey status
-        const random = Math.random();
-        let cumulative = 0;
-        let status: "Completed" | "Pending" | "Rejected" | "Approved" = "Completed";
-        for (let j = 0; j < statusWeights.length; j++) {
-          cumulative += statusWeights[j];
-          if (random <= cumulative) {
-            status = surveyStatuses[j];
-            break;
-          }
-        }
-
-        // Generate random date within last 6 months
-        const fromDate = new Date();
-        fromDate.setMonth(fromDate.getMonth() - 6);
-        const toDate = new Date();
-        const randomDate = new Date(fromDate.getTime() + Math.random() * (toDate.getTime() - fromDate.getTime()));
-
-        return {
-          id: i + 1,
-          rfid_number: `RFID${String(sup.id * 1000 + i).padStart(6, '0')}`,
-          household_name: `Household ${i + 1}`,
-          mobile_number: `98765${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`,
-          address: `${area}, ${ward.region_name}, ${zone.region_name}`,
-          zone: zone.region_name,
-          ward: ward.region_name,
-          area,
-          supervisor_id: sup.id,
-          supervisor_name: sup.name,
-          survey_date: randomDate.toISOString().split("T")[0],
-          status,
-          has_photo: status !== "Pending",
-          has_coordinates: status !== "Pending",
-          rfid_activated: status === "Completed" || status === "Approved",
-        };
-      });
-
-      // Find last installation date
-      const lastInstallation = surveys.length > 0 
-        ? surveys.reduce((latest, s) => new Date(s.survey_date) > new Date(latest.survey_date) ? s : latest).survey_date
-        : null;
-
-      return {
-        ...sup,
-        total_rfid_installed: totalInstalled,
-        today_installations: todayInstallations,
-        monthly_installations: monthlyInstallations,
-        last_installation_date: lastInstallation,
-        survey_completion_rate: completionRate,
-        surveys,
-      };
-    });
-
-    // Flatten all survey records
-    const allSurveyRecords: SurveyRecord[] = supervisorsData.flatMap(sup => sup.surveys);
-
-    setZones(dummyZones);
-    setWards(dummyWards);
-    setAreas(dummyAreas);
-    setSupervisors(supervisorsData);
-    setSurveyRecords(allSurveyRecords);
-    setHasLoaded(true);
-  };
-
   const loadInitialOptions = async () => {
     try {
       const zonesRes = await api<{ data: { id: number; region_name: string }[] }>("/api/zones");
@@ -188,7 +79,6 @@ export default function SurveyReportPage() {
       setWards(wardsRes.data || []);
     } catch (error) {
       console.error("Failed to load initial options:", error);
-      generateDummyData();
     }
   };
 
@@ -199,7 +89,9 @@ export default function SurveyReportPage() {
   const loadReport = () => {
     setLoading(true);
     setTimeout(() => {
-      generateDummyData();
+      setSupervisors([]);
+      setSurveyRecords([]);
+      setHasLoaded(true);
       setLoading(false);
       toast.success("RFID Survey Report loaded successfully");
     }, 500);

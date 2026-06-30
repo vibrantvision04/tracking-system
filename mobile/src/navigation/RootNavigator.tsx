@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
+import { useEmployeeLocationTracking } from '../hooks/useEmployeeLocationTracking';
 
 // Screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -13,6 +14,7 @@ import DriverRouteMap from '../screens/driver/RouteMapScreen';
 import DriverCoverage from '../screens/driver/CoverageScreen';
 import DriverAlerts from '../screens/driver/AlertsScreen';
 import DriverBlockage from '../screens/driver/BlockageReportScreen';
+import DriverAttendanceReport from '../screens/driver/AttendanceScreen';
 
 // Supervisor Screens
 import SupervisorHome from '../screens/supervisor/HomeScreen';
@@ -36,11 +38,26 @@ import ZoneManagerAttendance from '../screens/zone_manager/AttendanceScreen';
 import OpenDepotHome from '../screens/open_depot/HomeScreen';
 import OpenDepotSubmit from '../screens/open_depot/SubmitPhotoScreen';
 
+// Road Sweeper Screens
+import SweeperHome from '../screens/road_sweeper/HomeScreen';
+import SweeperPunchIn from '../screens/road_sweeper/PunchInScreen';
+import SweeperRouteMap from '../screens/road_sweeper/RouteMapScreen';
+import SweeperBeforeImage from '../screens/road_sweeper/BeforeImageScreen';
+import SweeperAfterImage from '../screens/road_sweeper/AfterImageScreen';
+import SweeperCoverage from '../screens/road_sweeper/CoverageScreen';
+import SweeperAttendance from '../screens/road_sweeper/AttendanceScreen';
+import SweeperAlerts from '../screens/road_sweeper/AlertsScreen';
+
+// Shared Screens
+import Complaints from '../screens/shared/ComplaintsScreen';
+
 const Stack = createStackNavigator();
 
 
 export default function RootNavigator() {
   const { user } = useAuth();
+
+  useEmployeeLocationTracking(!!user);
 
   return (
     <NavigationContainer>
@@ -55,6 +72,8 @@ export default function RootNavigator() {
             <Stack.Screen name="DriverCoverage" component={DriverCoverage} />
             <Stack.Screen name="DriverAlerts" component={DriverAlerts} />
             <Stack.Screen name="DriverBlockage" component={DriverBlockage} />
+            <Stack.Screen name="DriverAttendance" component={DriverAttendanceReport} />
+            <Stack.Screen name="Complaints" component={Complaints} />
           </>
         ) : user.role === 'supervisor' ? (
           <>
@@ -66,6 +85,7 @@ export default function RootNavigator() {
             <Stack.Screen name="SupervisorAlerts" component={SupervisorAlerts} />
             <Stack.Screen name="SupervisorLiveTracking" component={SupervisorLiveTracking} />
             <Stack.Screen name="SupervisorOpenDepot" component={SupervisorOpenDepot} />
+            <Stack.Screen name="Complaints" component={Complaints} />
           </>
         ) : user.role === 'zone_manager' ? (
           <>
@@ -75,12 +95,30 @@ export default function RootNavigator() {
             <Stack.Screen name="ZoneManagerAlerts" component={ZoneManagerAlerts} />
             <Stack.Screen name="ZoneManagerLiveTracking" component={ZoneManagerLiveTracking} />
             <Stack.Screen name="ZoneManagerAttendance" component={ZoneManagerAttendance} />
+            <Stack.Screen name="Complaints" component={Complaints} />
           </>
-        ) : (
+        ) : user.role === 'road_sweeper' ? (
+          <>
+            <Stack.Screen name="SweeperHome" component={SweeperHome} />
+            <Stack.Screen name="SweeperPunchIn" component={SweeperPunchIn} />
+            <Stack.Screen name="SweeperRouteMap" component={SweeperRouteMap} />
+            <Stack.Screen name="SweeperBeforeImage" component={SweeperBeforeImage} />
+            <Stack.Screen name="SweeperAfterImage" component={SweeperAfterImage} />
+            <Stack.Screen name="SweeperCoverage" component={SweeperCoverage} />
+            <Stack.Screen name="SweeperAttendance" component={SweeperAttendance} />
+            <Stack.Screen name="SweeperAlerts" component={SweeperAlerts} />
+            <Stack.Screen name="Complaints" component={Complaints} />
+          </>
+        ) : user.role === 'open_depot_operator' ? (
           <>
             <Stack.Screen name="OpenDepotHome" component={OpenDepotHome} />
             <Stack.Screen name="OpenDepotSubmit" component={OpenDepotSubmit} />
           </>
+        ) : (
+          // Unknown/unexpected backend role: do NOT leak any role-specific
+          // screens. Fall back to a minimal safe stack (Login only) so no
+          // controls or screens are exposed for roles we don't recognize.
+          <Stack.Screen name="Login" component={LoginScreen} />
         )}
       </Stack.Navigator>
     </NavigationContainer>

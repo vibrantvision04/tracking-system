@@ -1,21 +1,14 @@
 import React from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../../services/api';
 import { theme } from '../../theme/theme';
 import { Header } from '../../components/ui/Header';
 import { useTranslation } from '../../i18n/useTranslation';
+import { useCoverage } from '../../hooks/useCoverage';
 
 export default function CoverageScreen({ navigation }: any) {
   const { t } = useTranslation();
 
-  const { data: cov, isLoading, refetch } = useQuery({
-    queryKey: ['myCoverage'],
-    queryFn: async () => {
-      const res = await api.get('/coverage/my');
-      return res as any;
-    },
-  });
+  const { data: cov, isLoading, refetch } = useCoverage();
 
   if (isLoading) {
     return (
@@ -26,25 +19,43 @@ export default function CoverageScreen({ navigation }: any) {
     );
   }
 
-  const pct = cov?.coverage_percent || 0;
+  const header = (
+    <Header
+      title={t('coverage.title')}
+      showBack={true}
+      onBack={() => navigation.goBack()}
+      rightActions={[
+        {
+          icon: 'refresh',
+          onPress: () => refetch(),
+          accessibilityLabel: t('common.retry'),
+        },
+      ]}
+    />
+  );
+
+  // Empty_State when no coverage record is returned (Req 5.5)
+  if (!cov) {
+    return (
+      <View style={styles.screen}>
+        {header}
+        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>{t('coverage.noData')}</Text>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  const pct = Math.min(100, Math.max(0, cov.coverage_percent));
   const target = 80; // default coverage target percentage
   const isAchieved = pct >= target;
   const ringColor = isAchieved ? theme.colors.success : theme.colors.error;
 
   return (
     <View style={styles.screen}>
-      <Header
-        title={t('coverage.title')}
-        showBack={true}
-        onBack={() => navigation.goBack()}
-        rightActions={[
-          {
-            icon: 'refresh',
-            onPress: () => refetch(),
-            accessibilityLabel: t('common.retry'),
-          },
-        ]}
-      />
+      {header}
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
         {/* Coverage Progress Ring Card */}
@@ -72,41 +83,39 @@ export default function CoverageScreen({ navigation }: any) {
           {/* Divider */}
           <View style={styles.divider} />
 
-          {/* Status Breakdown Row */}
+          {/* Lane-point Breakdown Row */}
           <View style={styles.statusRow}>
             <View style={styles.statusCol}>
               <Text style={[styles.statusCount, { color: theme.colors.success }]}>
-                {cov?.achieved || 0}
+                {cov.completed_lane_points}
               </Text>
-              <Text style={styles.statusLabel}>{t('coverage.achieved')}</Text>
+              <Text style={styles.statusLabel}>{t('coverage.completedLanePoints')}</Text>
             </View>
 
             <View style={styles.statusCol}>
               <Text style={[styles.statusCount, { color: theme.colors.warning }]}>
-                {cov?.pending_approval || 0}
+                {cov.remaining_lane_points}
               </Text>
-              <Text style={styles.statusLabel}>{t('coverage.inProgress')}</Text>
+              <Text style={styles.statusLabel}>{t('coverage.remainingLanePoints')}</Text>
             </View>
 
             <View style={styles.statusCol}>
-              <Text style={[styles.statusCount, { color: theme.colors.error }]}>
-                {cov?.missed || 0}
+              <Text style={[styles.statusCount, { color: theme.colors.textDark }]}>
+                {cov.total_lane_points}
               </Text>
-              <Text style={styles.statusLabel}>{t('coverage.missed')}</Text>
+              <Text style={styles.statusLabel}>{t('coverage.totalLanePoints')}</Text>
             </View>
           </View>
         </View>
 
-        {/* Shift Information Card */}
+        {/* Distance Card */}
         <View style={styles.shiftCard}>
-          <Text style={styles.shiftTitle}>⏱️ {t('home.punchedIn')}</Text>
+          <Text style={styles.shiftTitle}>{t('coverage.distance')}</Text>
           <Text style={styles.shiftText}>
-            {t('coverage.actual')}: {cov?.achieved || 0} / {cov?.total_lane_points || 0}
+            {t('coverage.coveredDistance')}: {cov.covered_distance_km.toFixed(1)}
           </Text>
           <Text style={styles.shiftText}>
-            {cov?.shift_end
-              ? new Date(cov.shift_end).toLocaleTimeString()
-              : '—'}
+            {t('coverage.pendingDistance')}: {cov.pending_distance_km.toFixed(1)}
           </Text>
         </View>
       </ScrollView>
@@ -233,5 +242,20 @@ const styles = StyleSheet.create({
     color: theme.colors.textDim,
     lineHeight: theme.typography.secondary.lineHeight,
     marginBottom: theme.spacing.xs,
+  },
+  emptyCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.card,
+    padding: theme.spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    elevation: 1,
+  },
+  emptyText: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.textDim,
+    textAlign: 'center',
   },
 });

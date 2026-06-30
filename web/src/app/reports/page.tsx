@@ -23,7 +23,6 @@ interface MovementReport {
   total_active_duration: string;
   total_distance: number;
   average_speed: number;
-  actual_ignition_on_duration: string;
   total_ignition_on_duration: string;
   total_stoppage_duration: string;
   total_idle_duration: string;
@@ -450,8 +449,7 @@ export default function ReportsPage() {
                     <div className="text-[10px] text-theme-text-dim mt-0.5 font-mono">Avg: {r.average_speed.toFixed(1)} KM/H</div>
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    <div className="font-bold text-[#06B6D4] font-mono">Act: {formatDuration(r.actual_ignition_on_duration)}</div>
-                    <div className="text-[10px] text-theme-text-dim mt-0.5 font-mono">Tot: {formatDuration(r.total_ignition_on_duration)}</div>
+                    <div className="font-bold text-[#06B6D4] font-mono">{formatDuration(r.total_ignition_on_duration)}</div>
                   </td>
                   <td className="px-4 py-3 text-xs">
                     <div className="font-medium text-theme-text font-mono">Stop: {formatDuration(r.total_stoppage_duration)}</div>

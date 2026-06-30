@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"gps-tracking-system/internal/auth"
 )
 
 type EmployeeResponse struct {
@@ -26,10 +28,19 @@ type EmployeeResponse struct {
 	CreatedAt        string `json:"created_at"`
 }
 
-// GetEmployees returns all active employees from the database.
+// GetEmployees returns a paginated list of employees.
 func (h *Handler) GetEmployees(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db := h.gpsRepo.Pool()
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
+
+	var total int
+	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM employees`).Scan(&total)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to count employees: " + err.Error()})
+		return
+	}
 
 	rows, err := db.Query(ctx, `
 		SELECT 
@@ -40,7 +51,8 @@ func (h *Handler) GetEmployees(w http.ResponseWriter, r *http.Request) {
 			TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS')
 		FROM employees
 		ORDER BY id ASC
-	`)
+		LIMIT $1 OFFSET $2
+	`, pageSize, offset)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to query employees: " + err.Error()})
 		return
@@ -61,13 +73,18 @@ func (h *Handler) GetEmployees(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	totalPages := (total + pageSize - 1) / pageSize
 	sendJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"data":    list,
+		"success":     true,
+		"data":        list,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
+		"total_pages": totalPages,
 	})
 }
 
-// CreateEmployee inserts a new employee.
+// CreateEmployee inserts a new employee and optionally creates a user account.
 func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db := h.gpsRepo.Pool()
@@ -85,6 +102,8 @@ func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 		OtherDetails     string `json:"other_details"`
 		DocumentFileType string `json:"document_file_type"`
 		DocumentFilePath string `json:"document_file_path"`
+		LoginPassword    string `json:"login_password"`
+		LoginRole        string `json:"login_role"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -97,8 +116,15 @@ func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to start transaction"})
+		return
+	}
+	defer tx.Rollback(ctx)
+
 	var empID int
-	err := db.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO employees (
 			first_name, middle_name, last_name, employee_id, email, 
 			aadhaar_no, contact_no, alt_contact_no, address, other_details, 
@@ -112,6 +138,34 @@ func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create employee: " + err.Error()})
+		return
+	}
+
+	if req.LoginPassword != "" {
+		// Always derive login email from employee_id for consistent mobile login lookup
+		userEmail := strings.ToLower(req.EmployeeID) + "@vswm.com"
+		role := req.LoginRole
+		if role == "" {
+			role = "USER"
+		}
+		hashed, err := auth.HashPassword(req.LoginPassword)
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
+			return
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO users (email, role, password_hash)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (email) DO UPDATE SET role = $2, password_hash = $3
+		`, userEmail, role, hashed)
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create user: " + err.Error()})
+			return
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to commit: " + err.Error()})
 		return
 	}
 
@@ -145,6 +199,8 @@ func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
 		OtherDetails     string `json:"other_details"`
 		DocumentFileType string `json:"document_file_type"`
 		DocumentFilePath string `json:"document_file_path"`
+		LoginPassword    string `json:"login_password"`
+		LoginRole        string `json:"login_role"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -157,7 +213,14 @@ func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Exec(ctx, `
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to start transaction"})
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
 		UPDATE employees
 		SET first_name = $1, middle_name = $2, last_name = $3, employee_id = $4, email = $5,
 			aadhaar_no = $6, contact_no = $7, alt_contact_no = $8, address = $9, other_details = $10,
@@ -169,6 +232,33 @@ func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update employee: " + err.Error()})
+		return
+	}
+
+	if req.LoginPassword != "" {
+		userEmail := strings.ToLower(req.EmployeeID) + "@vswm.com"
+		role := req.LoginRole
+		if role == "" {
+			role = "USER"
+		}
+		hashed, err := auth.HashPassword(req.LoginPassword)
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
+			return
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO users (email, role, password_hash)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (email) DO UPDATE SET role = $2, password_hash = $3
+		`, userEmail, role, hashed)
+		if err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create/update user: " + err.Error()})
+			return
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to commit: " + err.Error()})
 		return
 	}
 
@@ -188,9 +278,37 @@ func (h *Handler) DeleteEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Exec(ctx, "DELETE FROM employees WHERE id = $1", id)
+	tx, err := db.Begin(ctx)
 	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to start transaction"})
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	// Delete from tables that FK-reference employees without ON DELETE CASCADE
+	for _, stmt := range []string{
+		"DELETE FROM mobile_attendance WHERE user_id = $1",
+		"DELETE FROM mobile_attendance WHERE marked_by = $1",
+		"DELETE FROM mobile_blockage_reports WHERE driver_id = $1",
+		"DELETE FROM mobile_blockage_reports WHERE reviewed_by = $1",
+		"DELETE FROM mobile_open_depot_submissions WHERE operator_id = $1",
+	} {
+		if _, err := tx.Exec(ctx, stmt, id); err != nil {
+			sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete related records: " + err.Error()})
+			return
+		}
+	}
+
+	// Cascading tables (ON DELETE CASCADE): employee_department_designations,
+	// employee_vehicle_assignments, employee_live_locations handle themselves.
+
+	if _, err := tx.Exec(ctx, "DELETE FROM employees WHERE id = $1", id); err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete employee: " + err.Error()})
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to commit: " + err.Error()})
 		return
 	}
 

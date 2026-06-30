@@ -29,51 +29,7 @@ export default function LitterbinCoverageSummaryReport() {
   const handleLoad = async () => {
     setLoading(true);
     try {
-      // Mock data for demonstration - replace with actual API call
-      const mockData = [
-        {
-          id: 1,
-          region_name: "Zone 4 - Adarsh Nagar Zone",
-          total: 150,
-          collected: 135,
-          partially_collected: 10,
-          not_collected: 5
-        },
-        {
-          id: 2,
-          region_name: "Zone 5 - Civil Lines Zone",
-          total: 200,
-          collected: 180,
-          partially_collected: 15,
-          not_collected: 5
-        },
-        {
-          id: 3,
-          region_name: "Zone 6 - Industrial Area Zone",
-          total: 120,
-          collected: 100,
-          partially_collected: 12,
-          not_collected: 8
-        },
-        {
-          id: 4,
-          region_name: "Zone 7 - Mansarovar Zone",
-          total: 180,
-          collected: 165,
-          partially_collected: 10,
-          not_collected: 5
-        },
-        {
-          id: 5,
-          region_name: "Zone 8 - Sodala Zone",
-          total: 140,
-          collected: 125,
-          partially_collected: 8,
-          not_collected: 7
-        },
-      ];
-      
-      setData(mockData);
+      setData([]);
     } catch (err) {
       console.error(err);
       setData([]);

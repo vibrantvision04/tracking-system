@@ -143,6 +143,13 @@
   "coverage.totalWards": "Total Wards",
   "coverage.vehiclesActive": "Vehicles Active",
   "coverage.noWardsPerformanceData": "No wards performance data available.",
+  "coverage.totalLanePoints": "Total Points",
+  "coverage.completedLanePoints": "Completed",
+  "coverage.remainingLanePoints": "Remaining",
+  "coverage.distance": "Distance",
+  "coverage.coveredDistance": "Covered (km)",
+  "coverage.pendingDistance": "Pending (km)",
+  "coverage.noData": "No coverage data available.",
 
   "offline.banner": "No internet connection. Some features may be limited.",
 
@@ -161,6 +168,14 @@
   "common.no": "No",
   "common.show": "Show",
   "common.hide": "Hide",
+  "common.noData": "No records to display",
+
+  "complaints.assignedVehicle": "Assigned Vehicle",
+  "complaints.assignedDriver": "Assigned Driver",
+  "complaints.location": "Location",
+  "complaints.createdAt": "Created",
+  "complaints.updatedAt": "Updated",
+  "complaints.images": "Images",
 
   "language.persistError": "Language preference could not be saved. It will apply for this session only.",
 

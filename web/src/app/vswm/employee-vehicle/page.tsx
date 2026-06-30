@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
-import { api, post, del, API_URL } from "@/lib/api";
+import { api } from "@/lib/api";
 import { toast } from "react-toastify";
-import { Truck, UserCheck, Users, CalendarRange, X, ChevronDown, User, Landmark, ShieldAlert, Clock } from "lucide-react";
+import { Truck, UserCheck, Users, X, ChevronDown, User } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import {
@@ -47,9 +47,8 @@ interface VehicleAssignment {
   vehicle_plate: string;
   vehicle_type: string;
   shift_name: string;
-  date_from: string;
-  date_to: string | null;
   is_active: boolean;
+  created_at: string;
 }
 
 // ─── Searchable Dropdown Options ──────────────────────────────────────────────
@@ -198,68 +197,7 @@ function SearchableDropdown({
   );
 }
 
-// ─── Dummy Fallback Data ──────────────────────────────────────────────────────
-
-const DUMMY_VEHICLES: VehicleOption[] = [
-  { id: 1, plate_number: "RJ-14-GB-1204", type: "Dumper Placer", shift: "Morning Shift (06:00 AM - 02:00 PM)" },
-  { id: 2, plate_number: "RJ-14-GC-5678", type: "Compactor", shift: "Morning Shift (06:00 AM - 02:00 PM)" },
-  { id: 3, plate_number: "RJ-14-GA-9988", type: "Tractor Trolley", shift: "Evening Shift (02:00 PM - 10:00 PM)" },
-  { id: 4, plate_number: "RJ-14-GD-4422", type: "Hopper", shift: "Night Shift (10:00 PM - 06:00 AM)" },
-  { id: 5, plate_number: "RJ-14-GE-7711", type: "Dumper Placer", shift: "Morning Shift (06:00 AM - 02:00 PM)" },
-  { id: 6, plate_number: "RJ-14-GF-3344", type: "Auto Tipper", shift: "General Shift (09:00 AM - 05:00 PM)" },
-];
-
-const DUMMY_EMPLOYEES: EmployeeOption[] = [
-  { id: 201, first_name: "Ram", last_name: "Karan", designation: "Driver", employee_id: "DRV001" },
-  { id: 202, first_name: "Surendra", last_name: "Kumar", designation: "Driver", employee_id: "DRV002" },
-  { id: 203, first_name: "Hari", last_name: "Mohan", designation: "Driver", employee_id: "DRV003" },
-  { id: 206, first_name: "Mahendra", last_name: "Yadav", designation: "Driver", employee_id: "DRV004" },
-];
-
-const DUMMY_ASSIGNMENTS: VehicleAssignment[] = [
-  {
-    id: 1,
-    employee_id: 201,
-    employee_name: "Ram Karan",
-    employee_code: "DRV001",
-    designation: "Driver",
-    vehicle_id: 1,
-    vehicle_plate: "RJ-14-GB-1204",
-    vehicle_type: "Dumper Placer",
-    shift_name: "Morning Shift (06:00 AM - 02:00 PM)",
-    date_from: "2026-01-01",
-    date_to: null,
-    is_active: true,
-  },
-  {
-    id: 2,
-    employee_id: 202,
-    employee_name: "Surendra Kumar",
-    employee_code: "DRV002",
-    designation: "Driver",
-    vehicle_id: 2,
-    vehicle_plate: "RJ-14-GC-5678",
-    vehicle_type: "Compactor",
-    shift_name: "Morning Shift (06:00 AM - 02:00 PM)",
-    date_from: "2026-02-01",
-    date_to: null,
-    is_active: true,
-  },
-  {
-    id: 4,
-    employee_id: 203,
-    employee_name: "Hari Mohan",
-    employee_code: "DRV003",
-    designation: "Driver",
-    vehicle_id: 3,
-    vehicle_plate: "RJ-14-GA-9988",
-    vehicle_type: "Tractor Trolley",
-    shift_name: "Evening Shift (02:00 PM - 10:00 PM)",
-    date_from: "2026-03-10",
-    date_to: "2026-05-10",
-    is_active: false,
-  },
-];
+// ─── All data comes from the backend API — no dummy fallbacks ─────────────────
 
 export default function DriverVehicleAssignmentPage() {
   const [assignments, setAssignments] = useState<VehicleAssignment[]>([]);
@@ -270,8 +208,6 @@ export default function DriverVehicleAssignmentPage() {
   // Form State
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Filter State
@@ -282,115 +218,36 @@ export default function DriverVehicleAssignmentPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      let assignData: VehicleAssignment[] = [];
-      let vehicleData: VehicleOption[] = [];
-      let employeeData: EmployeeOption[] = [];
-      let routeAssignments: any[] = [];
-
-      // Try fetching vehicle-route assignments to get shifts
-      try {
-        const response = await fetch(`${API_URL}/api/vehicle-route-assignments`);
-        if (response.ok) {
-          const res = await response.json();
-          routeAssignments = res.data || [];
-        }
-      } catch (err) {
-        console.error("Failed to fetch vehicle-route assignments", err);
-      }
-
-      // Try fetching assignments
-      try {
-        const response = await fetch(`${API_URL}/api/employee-vehicle-assignments`);
-        if (response.ok) {
-          const res = await response.json();
-          const rawAssignments = res.data || [];
-          assignData = rawAssignments.map((a: any) => ({
-            id: a.id,
-            employee_id: a.employee_id,
-            employee_name: a.employee_name || [a.employee?.first_name, a.employee?.last_name].filter(Boolean).join(" ") || "Unknown Driver",
-            employee_code: a.employee_code || a.employee?.employee_id || "EMP???",
-            designation: a.designation || a.employee?.designation || "Driver",
-            vehicle_id: a.vehicle_id,
-            vehicle_plate: a.vehicle_plate || a.vehicle?.registration_no || "Unknown Plate",
-            vehicle_type: a.vehicle_type || a.vehicle?.vehicle_type?.name || "Unknown",
-            shift_name: a.shift_name || a.vehicle_route_assignment?.shift?.shift_name || "Morning Shift",
-            date_from: a.date_from,
-            date_to: a.date_to,
-            is_active: a.is_active,
-          }));
-          if (assignData.length === 0) assignData = DUMMY_ASSIGNMENTS;
-        } else {
-          assignData = DUMMY_ASSIGNMENTS;
-        }
-      } catch {
-        assignData = DUMMY_ASSIGNMENTS;
-      }
-
-      // Try fetching vehicles
-      try {
-        const response = await fetch(`${API_URL}/api/vehicles`);
-        if (response.ok) {
-          const res = await response.json();
-          const rawVehicles = res.data || [];
-          vehicleData = rawVehicles.map((v: any) => {
-            const activeAssign = routeAssignments.find(
-              (a: any) => a.vehicle_id === v.id && a.is_active !== false
-            );
-            return {
-              id: v.id,
-              plate_number: v.registration_no || v.plate_number || "Unknown Plate",
-              type: v.vehicle_type?.name || v.type || "Unknown Type",
-              shift: activeAssign?.shift_name || v.shift || "Morning Shift (06:00 AM - 02:00 PM)",
-            };
-          });
-          if (vehicleData.length === 0) vehicleData = DUMMY_VEHICLES;
-        } else {
-          vehicleData = DUMMY_VEHICLES;
-        }
-      } catch {
-        vehicleData = DUMMY_VEHICLES;
-      }
-
-      // Try fetching employees and their designations
-      try {
-        const empResponse = await fetch(`${API_URL}/api/employees`);
-        const eddResponse = await fetch(`${API_URL}/api/employee-department-designations`);
-        if (empResponse.ok && eddResponse.ok) {
-          const empRes = await empResponse.json();
-          const eddRes = await eddResponse.json();
-
-          const rawEmployees = empRes.data || [];
-          const eddMappings = eddRes.data || [];
-
-          employeeData = rawEmployees
-            .map((e: any) => {
-              const mapping = eddMappings.find((m: any) => m.employee_id === e.id);
-              return {
-                id: e.id,
-                first_name: e.first_name,
-                middle_name: e.middle_name,
-                last_name: e.last_name,
-                employee_id: e.employee_id,
-                designation: mapping?.designation_name || "Employee",
-              };
-            })
-            .filter((e: any) => e.designation?.toLowerCase().includes("driver"));
-          if (employeeData.length === 0) employeeData = DUMMY_EMPLOYEES;
-        } else {
-          employeeData = DUMMY_EMPLOYEES;
-        }
-      } catch {
-        employeeData = DUMMY_EMPLOYEES;
-      }
+      const [assignData, vehicleData, empData, eddData] = await Promise.all([
+        api<any>('/api/employee-vehicle-assignments').then(r => r.data || []).catch(() => []),
+        api<any>('/api/vehicles').then(r => r.data || []).catch(() => []),
+        api<any>('/api/employees').then(r => r.data || []).catch(() => []),
+        api<any>('/api/employee-department-designations').then(r => r.data || []).catch(() => []),
+      ]);
 
       setAssignments(assignData);
-      setVehicles(vehicleData);
-      setEmployees(employeeData);
+
+      setVehicles(vehicleData.map((v: any) => ({
+        id: v.id,
+        plate_number: v.registration_no || v.plate_number || "Unknown Plate",
+        type: v.vehicle_type?.name || v.type || "Unknown Type",
+        shift: "",
+      })));
+
+      const mapped = empData.map((e: any) => {
+        const m = eddData.find((x: any) => x.employee_id === e.id);
+        return {
+          id: e.id,
+          first_name: e.first_name,
+          middle_name: e.middle_name,
+          last_name: e.last_name,
+          employee_id: e.employee_id,
+          designation: m?.designation_name || "Employee",
+        };
+      });
+      setEmployees(mapped.filter((e: any) => e.designation?.toLowerCase().includes("driver")));
     } catch (err) {
-      console.error("Failed to load assignments data", err);
-      setAssignments(DUMMY_ASSIGNMENTS);
-      setVehicles(DUMMY_VEHICLES);
-      setEmployees(DUMMY_EMPLOYEES);
+      console.error("Failed to load data", err);
     } finally {
       setLoading(false);
     }
@@ -400,7 +257,7 @@ export default function DriverVehicleAssignmentPage() {
     loadData();
   }, []);
 
-  // ─── Derived State (Auto-fetching shift from vehicle) ─────────────────────
+  // ─── Derived State ────────────────────────────────────────────────────────
 
   const selectedVehicleDetails = useMemo(() => {
     if (!selectedVehicleId) return null;
@@ -418,7 +275,7 @@ export default function DriverVehicleAssignmentPage() {
     return vehicles.map((v) => ({
       id: v.id,
       label: `${v.plate_number} (${v.type})`,
-      sublabel: `Shift: ${v.shift}`,
+      sublabel: `ID: ${v.id}`,
     }));
   }, [vehicles]);
 
@@ -434,57 +291,26 @@ export default function DriverVehicleAssignmentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmployeeId || !selectedVehicleId || !dateFrom) {
-      toast.warning("Please fill all required fields.");
+    if (!selectedEmployeeId || !selectedVehicleId) {
+      toast.warning("Please select both a driver and a vehicle.");
       return;
     }
     setSubmitting(true);
 
-    const vehicle = vehicles.find((v) => v.id === selectedVehicleId);
-    const emp = employees.find((x) => x.id === selectedEmployeeId);
-    const fullName = emp ? `${emp.first_name} ${emp.last_name}` : "Unknown Driver";
-
-    const newAssignment: VehicleAssignment = {
-      id: Date.now(),
-      employee_id: selectedEmployeeId,
-      employee_name: fullName,
-      employee_code: emp ? emp.employee_id : "EMP???",
-      designation: emp ? emp.designation : "Driver",
-      vehicle_id: selectedVehicleId,
-      vehicle_plate: vehicle ? vehicle.plate_number : "Unknown Vehicle",
-      vehicle_type: vehicle ? vehicle.type : "Unknown",
-      shift_name: vehicle ? vehicle.shift : "Morning Shift",
-      date_from: dateFrom,
-      date_to: dateTo || null,
-      is_active: !dateTo || new Date(dateTo) >= new Date(),
-    };
-
     try {
-      const response = await fetch(`${API_URL}/api/employee-vehicle-assignments`, {
+      await api('/api/employee-vehicle-assignments', {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employee_id: selectedEmployeeId,
           vehicle_id: selectedVehicleId,
-          date_from: dateFrom,
-          date_to: dateTo || null,
         }),
       });
-      if (!response.ok) throw new Error("API error");
-      toast.success("Driver assigned successfully.");
+      toast.success("Driver assigned to vehicle successfully.");
       setSelectedEmployeeId(null);
       setSelectedVehicleId(null);
-      setDateFrom("");
-      setDateTo("");
       loadData();
-    } catch {
-      // Local state fallback
-      setAssignments((prev) => [newAssignment, ...prev]);
-      toast.success("Driver assigned successfully (Local Mode).");
-      setSelectedEmployeeId(null);
-      setSelectedVehicleId(null);
-      setDateFrom("");
-      setDateTo("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to assign driver.");
     } finally {
       setSubmitting(false);
     }
@@ -492,15 +318,11 @@ export default function DriverVehicleAssignmentPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      const response = await fetch(`${API_URL}/api/employee-vehicle-assignments/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error("API error");
+      await api(`/api/employee-vehicle-assignments/${id}`, { method: "DELETE" });
       toast.success("Assignment removed.");
       loadData();
     } catch {
-      setAssignments((prev) => prev.filter((a) => a.id !== id));
-      toast.success("Assignment removed (Local Mode).");
+      toast.error("Failed to remove assignment.");
     }
   };
 
@@ -520,7 +342,7 @@ export default function DriverVehicleAssignmentPage() {
 
   const activeCount = assignments.filter((a) => a.is_active).length;
 
-  const formatDate = (d: string | null) => {
+  const formatDate = (d: string) => {
     if (!d) return "—";
     try {
       return new Date(d).toLocaleDateString("en-IN", {
@@ -601,52 +423,11 @@ export default function DriverVehicleAssignmentPage() {
                 icon={<Truck size={12} />}
               />
 
-              {/* Dynamically Inherited Shift Display */}
+              {/* Info text */}
               <div className="flex flex-col gap-1 text-left">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-theme-text-dim flex items-center gap-1.5">
-                  <Clock size={12} className="text-amber-500" />
-                  Inherited Shift (From Vehicle)
-                </label>
-                <div className="bg-theme-base/60 border border-theme-border rounded-xl px-3.5 py-2.5 text-xs text-theme-text font-bold flex items-center gap-2 min-h-10">
-                  {selectedVehicleDetails ? (
-                    <span className="text-[#10B981] flex items-center gap-1.5 animate-fade-in">
-                      <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                      {selectedVehicleDetails.shift}
-                    </span>
-                  ) : (
-                    <span className="text-theme-text-dim italic">Select a vehicle to automatically derive its shift.</span>
-                  )}
+                <div className="bg-theme-base/60 border border-theme-border rounded-xl px-3.5 py-2.5 text-xs text-theme-text">
+                  <span className="text-theme-text-dim">Assignment is permanent until changed. Select a driver and a vehicle, then click Assign.</span>
                 </div>
-              </div>
-
-              {/* Date From */}
-              <div className="flex flex-col gap-1 text-left">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-theme-text-dim flex items-center gap-1.5">
-                  <CalendarRange size={12} className="text-[#10B981]" />
-                  Date From
-                  <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  required
-                  className="w-full bg-theme-surface border border-theme-border rounded-xl px-3.5 py-2 text-xs text-theme-text outline-none focus:border-[#10B981] focus:ring-2 focus:ring-[#10B981]/10 transition"
-                />
-              </div>
-
-              {/* Date To */}
-              <div className="flex flex-col gap-1 text-left">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-theme-text-dim flex items-center gap-1.5">
-                  <CalendarRange size={12} className="text-theme-text-dim" />
-                  Date To (Optional)
-                </label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full bg-theme-surface border border-theme-border rounded-xl px-3.5 py-2 text-xs text-theme-text outline-none focus:border-[#10B981] focus:ring-2 focus:ring-[#10B981]/10 transition"
-                />
               </div>
             </CardContent>
 
@@ -657,8 +438,6 @@ export default function DriverVehicleAssignmentPage() {
                 onClick={() => {
                   setSelectedEmployeeId(null);
                   setSelectedVehicleId(null);
-                  setDateFrom("");
-                  setDateTo("");
                 }}
               >
                 Reset
@@ -702,78 +481,74 @@ export default function DriverVehicleAssignmentPage() {
             
             <CardContent className="p-0 flex-1 overflow-hidden">
               <div className="h-full overflow-y-auto custom-scrollbar">
-                <Table
-                  headers={[
-                    <div key="s" className="text-center w-12">S. No.</div>,
-                    "DRIVER",
-                    "VEHICLE INFO",
-                    "AUTO INHERITED SHIFT",
-                    "DATE FROM",
-                    "DATE TO",
-                    "STATUS",
-                    <div key="a" className="text-right pr-6 w-20">ACTION</div>,
-                  ]}
-                  isLoading={loading}
-                  emptyState="No vehicle assignments found. Use the panel on the left to map drivers."
-                >
-                  {filteredAssignments.map((a, idx) => (
-                    <tr
-                      key={a.id}
-                      className="hover:bg-theme-base/30 transition-colors"
-                    >
-                      <td className="py-3 px-4 text-center text-theme-text-dim font-mono text-[10px]">
-                        {idx + 1}
-                      </td>
-                      <td className="py-3 px-4 text-left">
-                        <div className="font-bold text-theme-text text-xs">
-                          {a.employee_name}
-                        </div>
-                        <div className="text-[9px] text-theme-text-dim font-mono">
-                          {a.employee_code}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-left">
-                        <div className="font-bold text-[#10B981] text-xs font-mono">
-                          {a.vehicle_plate}
-                        </div>
-                        <div className="text-[9px] text-theme-text-dim">
-                          {a.vehicle_type}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-left">
-                        <div className="font-medium text-theme-text text-xs flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {a.shift_name}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-theme-text-dim">
-                        {formatDate(a.date_from)}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-theme-text-dim">
-                        {formatDate(a.date_to)}
-                      </td>
-                      <td className="py-3 px-4">
-                        {a.is_active ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right pr-6">
-                        <DeleteButton
-                          onDelete={() => handleDelete(a.id)}
-                          confirmMessage={`Remove mapping for ${a.employee_name} on vehicle ${a.vehicle_plate}?`}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </Table>
+                  <Table
+                    headers={[
+                      <div key="s" className="text-center w-12">S. No.</div>,
+                      "DRIVER",
+                      "VEHICLE INFO",
+                      "SHIFT",
+                      "ASSIGNED SINCE",
+                      "STATUS",
+                      <div key="a" className="text-right pr-6 w-20">ACTION</div>,
+                    ]}
+                    isLoading={loading}
+                    emptyState="No vehicle assignments found. Use the panel on the left to map drivers."
+                  >
+                    {filteredAssignments.map((a, idx) => (
+                      <tr
+                        key={a.id}
+                        className="hover:bg-theme-base/30 transition-colors"
+                      >
+                        <td className="py-3 px-4 text-center text-theme-text-dim font-mono text-[10px]">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3 px-4 text-left">
+                          <div className="font-bold text-theme-text text-xs">
+                            {a.employee_name}
+                          </div>
+                          <div className="text-[9px] text-theme-text-dim font-mono">
+                            {a.employee_code}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-left">
+                          <div className="font-bold text-[#10B981] text-xs font-mono">
+                            {a.vehicle_plate}
+                          </div>
+                          <div className="text-[9px] text-theme-text-dim">
+                            {a.vehicle_type}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-left">
+                          <div className="font-medium text-theme-text text-xs flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            {a.shift_name || "—"}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-theme-text-dim">
+                          {formatDate(a.created_at)}
+                        </td>
+                        <td className="py-3 px-4">
+                          {a.is_active ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right pr-6">
+                          <DeleteButton
+                            onDelete={() => handleDelete(a.id)}
+                            confirmMessage={`Remove mapping for ${a.employee_name} on vehicle ${a.vehicle_plate}?`}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </Table>
               </div>
             </CardContent>
           </Card>

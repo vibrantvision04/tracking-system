@@ -2,6 +2,8 @@
 .claude
 node_modules
 web/
+mobile/
+swift/
 *.exe
 *.exe~
 tmp_test
@@ -9,4 +11,5 @@ scratch
 backend.log
 server_local.log
 tracker-backend
+.gocache
 

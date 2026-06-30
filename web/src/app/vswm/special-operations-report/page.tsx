@@ -26,6 +26,12 @@ interface SpecialOpsRow {
   engine_hours: string;
   movement_summary: string;
   imei: string;
+  start_time: string;
+  end_time: string;
+  active_hours: string;
+  average_speed: number;
+  max_speed: number;
+  total_ignition: string;
 }
 
 interface Shift {
@@ -120,10 +126,12 @@ export default function SpecialOperationsReportPage() {
       "COVERAGE",
       "DISTANCE (KM)",
       "TRIP COUNT",
+      "START TIME",
+      "END TIME",
+      "ACTIVE HOURS",
+      "AVG SPEED",
       "RUNNING HOURS",
-      "IDLE HOURS",
-      "ENGINE HOURS",
-      "MOVEMENT SUMMARY",
+      "TOTAL IGNITION",
     ];
     const rows = data.map((row, idx) => [
       idx + 1,
@@ -133,10 +141,12 @@ export default function SpecialOperationsReportPage() {
       row.covered_percentage !== null ? `"${row.covered_percentage}%"` : `"N/A"`,
       row.distance_travelled.toFixed(2),
       row.trip_count,
+      `"${row.start_time || ""}"`,
+      `"${row.end_time || ""}"`,
+      `"${row.active_hours || ""}"`,
+      row.average_speed ? row.average_speed.toFixed(2) : "",
       `"${row.running_hours}"`,
-      `"${row.idle_hours}"`,
-      `"${row.engine_hours}"`,
-      `"${row.movement_summary}"`,
+      `"${row.total_ignition}"`,
     ]);
     const csvContent =
       "\uFEFF" + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
@@ -257,10 +267,12 @@ export default function SpecialOperationsReportPage() {
                   <span key="cov" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider text-center block">Coverage</span>,
                   <span key="dist" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Distance</span>,
                   <span key="trips" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider text-center block">Trips</span>,
+                  <span key="start" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Start</span>,
+                  <span key="end" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">End</span>,
+                  <span key="active" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Active Hrs</span>,
+                  <span key="avgspd" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Avg Spd</span>,
                   <span key="run" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Running</span>,
-                  <span key="idle" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Idle</span>,
-                  <span key="eng" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Engine Hours</span>,
-                  <span key="summ" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Summary</span>,
+                  <span key="ign" className="text-theme-text-dim font-extrabold uppercase text-[10px] tracking-wider">Ignition</span>,
                 ]}
                 isLoading={loading}
                 emptyState={
@@ -315,14 +327,23 @@ export default function SpecialOperationsReportPage() {
                     <td className="py-3 px-5 text-center font-bold text-theme-text text-[12px]">
                       {row.trip_count}
                     </td>
+                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text-dim whitespace-nowrap">
+                      {row.start_time || "-"}
+                    </td>
+                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text-dim whitespace-nowrap">
+                      {row.end_time || "-"}
+                    </td>
+                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text-dim whitespace-nowrap">
+                      {row.active_hours || "-"}
+                    </td>
+                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text text-right">
+                      {row.average_speed ? `${row.average_speed.toFixed(2)}` : "-"}
+                    </td>
                     <td className="py-3 px-5 font-mono text-[11px] text-theme-text-dim">
                       {row.running_hours}
                     </td>
-                    <td className="py-3 px-5 font-mono text-[11px] text-theme-text-dim">
-                      {row.idle_hours}
-                    </td>
                     <td className="py-3 px-5 font-mono text-[11px] text-theme-text font-semibold">
-                      {row.engine_hours}
+                      {row.total_ignition}
                     </td>
                     <td className="py-3 px-5 text-[11px] text-theme-text-dim max-w-xs break-words">
                       {row.movement_summary}

@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { useGPS } from '../../hooks/useGPS';
 import { useCamera } from '../../hooks/useCamera';
-import CameraCapture from '../../components/CameraCapture';
+import CameraCapture, { CaptureMeta } from '../../components/CameraCapture';
 import { api } from '../../services/api';
 import { usePunchStatus } from '../../hooks/usePunchStatus';
 import { theme } from '../../theme/theme';
@@ -283,21 +283,32 @@ export default function PunchInScreen({ navigation }: any) {
   };
 
   // Camera photo captured
-  const handlePhotoCaptured = async (base64: string) => {
+  const handlePhotoCaptured = async (base64: string, meta?: CaptureMeta) => {
     setShowCamera(false);
     setPhotoBase64(base64);
     setPhotoError(null);
     setLoading(true);
+
+    const deviceFaceCount = meta?.faceCount;
 
     try {
       const res = await api.post('/attendance/validate-photo', {
         photo_base64: base64,
         gps_lat: coords?.latitude || 0,
         gps_lng: coords?.longitude || 0,
+        // Face presence/count is validated on-device (ML Kit); tell the backend to
+        // skip its own (unreliable) face detection and trust the device count.
+        skip_face_detection: true,
+        ...(typeof deviceFaceCount === 'number' ? { face_count: deviceFaceCount } : {}),
       }) as any;
 
       if (res && res.valid) {
-        setFaceCount(res.face_count || 1);
+        // Prefer the on-device face count for helper detection (2 = driver + helper).
+        if (typeof deviceFaceCount === 'number' && deviceFaceCount > 0) {
+          setFaceCount(deviceFaceCount);
+        } else {
+          setFaceCount(res.face_count || 1);
+        }
         setStep('confirm');
       } else {
         const issues: string[] = res?.issues || [];
@@ -308,7 +319,7 @@ export default function PunchInScreen({ navigation }: any) {
         }
       }
     } catch (err: any) {
-      setFaceCount(1);
+      setFaceCount(typeof deviceFaceCount === 'number' && deviceFaceCount > 0 ? deviceFaceCount : 1);
       setStep('confirm');
     } finally {
       setLoading(false);

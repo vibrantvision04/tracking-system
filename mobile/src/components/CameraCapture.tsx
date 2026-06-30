@@ -1,17 +1,30 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { CameraView } from 'expo-camera';
+import { detectFaceCount } from '../utils/faceDetection';
+
+export interface CaptureMeta {
+  /** Number of faces detected on-device (Google ML Kit). */
+  faceCount: number;
+  /** Whether on-device detection actually ran in this build. */
+  faceDetectionAvailable: boolean;
+}
 
 interface CameraCaptureProps {
   facing?: 'front' | 'back';
-  onCapture: (base64: string) => void;
+  onCapture: (base64: string, meta?: CaptureMeta) => void;
   onCancel?: () => void;
   title?: string;
+  /** Maximum allowed people in frame (default 2: driver + helper). */
+  maxFaces?: number;
 }
 
-export default function CameraCapture({ facing = 'back', onCapture, onCancel, title = 'Capture Photo' }: CameraCaptureProps) {
+export default function CameraCapture({ facing = 'back', onCapture, onCancel, title = 'Capture Photo', maxFaces = 2 }: CameraCaptureProps) {
   const [photo, setPhoto] = useState<string | null>(null);
   const [base64, setBase64] = useState<string | null>(null);
+  const [uri, setUri] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [faceError, setFaceError] = useState<string | null>(null);
   const cameraRef = useRef<any>(null);
 
   const takePicture = async () => {
@@ -23,7 +36,9 @@ export default function CameraCapture({ facing = 'back', onCapture, onCancel, ti
         });
         if (result && result.base64) {
           setPhoto(result.uri);
+          setUri(result.uri);
           setBase64(result.base64);
+          setFaceError(null);
         }
       } catch (err) {
         console.warn('Failed to take picture:', err);
@@ -31,9 +46,27 @@ export default function CameraCapture({ facing = 'back', onCapture, onCancel, ti
     }
   };
 
-  const handleConfirm = () => {
-    if (base64) {
-      onCapture(base64);
+  const handleConfirm = async () => {
+    if (!base64) return;
+    setValidating(true);
+    setFaceError(null);
+    try {
+      const res = await detectFaceCount(uri || '');
+      if (res.available) {
+        if (res.count === 0) {
+          setFaceError('No face detected. Please retake with your face clearly visible.');
+          setValidating(false);
+          return;
+        }
+        if (res.count > maxFaces) {
+          setFaceError(`Multiple people detected (${res.count}). Only up to ${maxFaces} allowed in frame.`);
+          setValidating(false);
+          return;
+        }
+      }
+      onCapture(base64, { faceCount: res.count, faceDetectionAvailable: res.available });
+    } finally {
+      setValidating(false);
     }
   };
 
@@ -42,19 +75,28 @@ export default function CameraCapture({ facing = 'back', onCapture, onCancel, ti
       <View style={styles.container}>
         <Text style={styles.headerText}>Confirm Captured Photo</Text>
         <Image source={{ uri: photo }} style={styles.previewImage} />
-        
+
+        {faceError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{faceError}</Text>
+          </View>
+        )}
+
         <View style={styles.buttonRow}>
           <TouchableOpacity 
             style={[styles.button, styles.retakeButton]} 
             onPress={() => {
               setPhoto(null);
               setBase64(null);
+              setUri(null);
+              setFaceError(null);
             }}
+            disabled={validating}
           >
             <Text style={styles.buttonText}>Retake</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.button, styles.confirmButton]} onPress={handleConfirm}>
-            <Text style={styles.buttonText}>Looks Good →</Text>
+          <TouchableOpacity style={[styles.button, styles.confirmButton, validating && styles.buttonDisabled]} onPress={handleConfirm} disabled={validating}>
+            {validating ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Looks Good →</Text>}
           </TouchableOpacity>
         </View>
       </View>
@@ -166,5 +208,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  errorBanner: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

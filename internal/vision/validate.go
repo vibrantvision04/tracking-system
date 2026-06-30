@@ -65,14 +65,18 @@ func ValidatePhoto(base64Str string, cfg Config) ValidationResult {
 	blur := CheckBlur(integrity.Image, cfg)
 	allIssues = append(allIssues, blur.Issues...)
 
-	face := DetectFaces(integrity.Image, cfg)
-	allIssues = append(allIssues, face.Issues...)
+	faceCount := 0
+	if !cfg.SkipFaceChecks {
+		face := DetectFaces(integrity.Image, cfg)
+		allIssues = append(allIssues, face.Issues...)
+		faceCount = face.Count
+	}
 
 	valid := len(allIssues) == 0
 
 	return ValidationResult{
 		Valid:       valid,
-		FaceCount:   face.Count,
+		FaceCount:   faceCount,
 		Issues:      allIssues,
 		Blurred:     blur.Blurred,
 		Dark:        len(brightness.Issues) > 0 && brightness.Average < cfg.MinBrightness,

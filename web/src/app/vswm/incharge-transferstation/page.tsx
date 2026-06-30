@@ -203,79 +203,7 @@ function FieldLabel({ label, required, icon }: { label: string; required?: boole
   );
 }
 
-// ─── Dummy Fallback Data for Demo Mode ───────────────────────────────────────
 
-const DUMMY_STATIONS: TransferStation[] = [
-  { id: 1, name: "Jaipur Central Transfer Station", address: "Ghat Gate, Jaipur" },
-  { id: 2, name: "Mansarovar Transfer Station", address: "Sector 11, Mansarovar, Jaipur" },
-  { id: 3, name: "Vidhyadhar Nagar Transfer Station", address: "Sector 2, Vidhyadhar Nagar, Jaipur" },
-  { id: 4, name: "Sanganer Transfer Station", address: "Sanganer Industrial Area, Jaipur" },
-  { id: 5, name: "Malviya Nagar Transfer Station", address: "Near Apex Circle, Malviya Nagar, Jaipur" },
-];
-
-const DUMMY_EMPLOYEES: Employee[] = [
-  { id: 101, first_name: "Rajesh", last_name: "Sharma", employee_id: "EMP001" },
-  { id: 102, first_name: "Amit", middle_name: "Kumar", last_name: "Verma", employee_id: "EMP002" },
-  { id: 103, first_name: "Sanjay", last_name: "Gupta", employee_id: "EMP003" },
-  { id: 104, first_name: "Pooja", last_name: "Choudhary", employee_id: "EMP004" },
-  { id: 105, first_name: "Vikram", last_name: "Singh", employee_id: "EMP005" },
-  { id: 106, first_name: "Anil", last_name: "Meena", employee_id: "EMP006" },
-];
-
-const DUMMY_ASSIGNMENTS: InchargeAssignment[] = [
-  {
-    id: 1,
-    transfer_station_id: 1,
-    transfer_station_name: "Jaipur Central Transfer Station",
-    employee_id: 101,
-    employee_name: "Rajesh Sharma",
-    employee_code: "EMP001",
-    date_from: "2026-01-01",
-    date_to: null,
-    notes: "Morning Shift Supervisor",
-    is_active: true,
-    created_at: "2026-01-01T08:00:00Z"
-  },
-  {
-    id: 2,
-    transfer_station_id: 2,
-    transfer_station_name: "Mansarovar Transfer Station",
-    employee_id: 102,
-    employee_name: "Amit Kumar Verma",
-    employee_code: "EMP002",
-    date_from: "2026-02-15",
-    date_to: null,
-    notes: "General shift, handles municipal solid waste sorting",
-    is_active: true,
-    created_at: "2026-02-15T09:30:00Z"
-  },
-  {
-    id: 3,
-    transfer_station_id: 3,
-    transfer_station_name: "Vidhyadhar Nagar Transfer Station",
-    employee_id: 103,
-    employee_name: "Sanjay Gupta",
-    employee_code: "EMP003",
-    date_from: "2026-03-01",
-    date_to: "2026-05-31",
-    notes: "Temporary replacement during construction phase",
-    is_active: false,
-    created_at: "2026-03-01T10:00:00Z"
-  },
-  {
-    id: 4,
-    transfer_station_id: 4,
-    transfer_station_name: "Sanganer Transfer Station",
-    employee_id: 104,
-    employee_name: "Pooja Choudhary",
-    employee_code: "EMP004",
-    date_from: "2026-04-10",
-    date_to: null,
-    notes: "Evening shift operation head",
-    is_active: true,
-    created_at: "2026-04-10T14:00:00Z"
-  }
-];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -311,41 +239,32 @@ export default function InchargeTransferStationPage() {
         if (response.ok) {
           const res = await response.json();
           assignData = res.data || [];
-        } else {
-          console.warn(`API responded with status ${response.status}. Using dummy data for assignments.`);
-          assignData = DUMMY_ASSIGNMENTS;
         }
       } catch (err) {
-        console.warn("Using dummy data for incharge assignments due to error:", err);
-        assignData = DUMMY_ASSIGNMENTS;
+        console.warn("Failed to fetch incharge assignments:", err);
       }
 
       // Try fetching transfer stations
       try {
         const res = await api<{ data: TransferStation[] }>("/api/transfer-stations");
-        stationData = res.data && res.data.length > 0 ? res.data : DUMMY_STATIONS;
+        stationData = res.data || [];
       } catch (err) {
-        console.warn("Using dummy data for transfer stations due to error:", err);
-        stationData = DUMMY_STATIONS;
+        console.warn("Failed to fetch transfer stations:", err);
       }
 
       // Try fetching employees
       try {
         const res = await api<{ success: boolean; data: Employee[] }>("/api/employees");
-        employeeData = res.data && res.data.length > 0 ? res.data : DUMMY_EMPLOYEES;
+        employeeData = res.data || [];
       } catch (err) {
-        console.warn("Using dummy data for employees due to error:", err);
-        employeeData = DUMMY_EMPLOYEES;
+        console.warn("Failed to fetch employees:", err);
       }
 
       setAssignments(assignData);
       setStations(stationData);
       setEmployees(employeeData);
     } catch (err) {
-      console.error("Failed to load page data fully, using dummy fallbacks:", err);
-      setAssignments(DUMMY_ASSIGNMENTS);
-      setStations(DUMMY_STATIONS);
-      setEmployees(DUMMY_EMPLOYEES);
+      console.error("Failed to load page data fully:", err);
     } finally {
       setLoading(false);
     }

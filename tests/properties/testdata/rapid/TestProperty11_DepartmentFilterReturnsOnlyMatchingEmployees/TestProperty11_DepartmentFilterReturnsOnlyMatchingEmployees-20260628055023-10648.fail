@@ -1,0 +1,54 @@
+# 2026/06/28 05:50:23.774075 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw num_departments: 3
+# 2026/06/28 05:50:23.774075 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw iter_suffix: 273803
+# 2026/06/28 05:50:23.778259 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw num_emps_dept_0: 3
+# 2026/06/28 05:50:23.778259 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw emp_suffix_0_0: 100001
+# 2026/06/28 05:50:23.843668 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw emp_suffix_0_1: 100473
+# 2026/06/28 05:50:23.910495 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw emp_suffix_0_2: 100001
+# 2026/06/28 05:50:23.977486 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw num_emps_dept_1: 3
+# 2026/06/28 05:50:23.977486 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw emp_suffix_1_0: 100017
+# 2026/06/28 05:50:24.044616 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw emp_suffix_1_1: 100357
+# 2026/06/28 05:50:24.110882 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw emp_suffix_1_2: 100000
+# 2026/06/28 05:50:24.176284 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw num_emps_dept_2: 1
+# 2026/06/28 05:50:24.176284 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] [rapid] draw emp_suffix_2_0: 100022
+# 2026/06/28 05:50:24.254363 [TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees] completeness violation: employee id=883 is in department 575 but missing from filtered response (response had 2 employees)
+# 
+v0.4.8#9857977439718360182
+0x71c398f2a4e35
+0x7c4ec38cac711
+0x1
+0x16508d6b76e73c
+0x1e45923dd87a1e
+0xe03c6
+0x2a6eb
+0x5fa9caa950991
+0x72e2416003e99
+0x3
+0x3
+0x2
+0x149cffecbf2de3
+0x9503321937ea2
+0x1
+0x12225bd27d06d1
+0x11e62525ab648c
+0x1d9
+0x14dbcfa6e500c4
+0x34dfec0b4e934
+0x1
+0x42d46a7cf5f78
+0xc84082fa9c897
+0x2
+0x401317a516a67
+0xc140884dd98a6
+0x11
+0x1274371b5bf932
+0x126590e65ef00a
+0x165
+0x19b0acc32ef4a6
+0x186b0e68324b8
+0x0
+0x18655126cba988
+0x889d5084827f8
+0x0
+0x638faa6f27807
+0xca1e02da1adf5
+0x16

@@ -107,12 +107,19 @@ export async function api<T = unknown>(path: string, opts?: FetchOpts): Promise<
         headers["Authorization"] = `Bearer ${newToken}`;
         const retryRes = await fetch(`${API}${path}`, { ...fetchOpts, headers });
         if (retryRes.ok) return retryRes.json();
+        if (retryRes.status === 401) {
+          clearTokens();
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+          throw new Error("Session expired");
+        }
+        // Non-401 retry failure: throw the error normally
+        let errorMsg = `API Error: ${retryRes.status} ${retryRes.statusText}`;
+        try { const errBody = await retryRes.json(); errorMsg = errBody.error || errorMsg; } catch {}
+        if (!skipToast) toast.error(errorMsg);
+        throw new Error(errorMsg);
       }
-      clearTokens();
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
-      }
-      throw new Error("Session expired");
     }
 
     if (!res.ok) {

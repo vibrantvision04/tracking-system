@@ -1,0 +1,65 @@
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw n_cols: 2
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw n_rows: 1
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw type_0: 1
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw fill_present_0: false
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw type_1: 1
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw fill_present_1: true
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw fill_r_1: 0
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw fill_g_1: 0
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw fill_b_1: 0
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw n_merges: 0
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw n_totals: 2
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw t_append_0: false
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw t_pos_0: 0
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw t_append_1: false
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw t_pos_1: 0
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw remarks_present: false
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw v_0_col_0: 0
+# 2026/06/29 22:22:15.851576 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] [rapid] draw v_0_col_1: 0
+# 2026/06/29 22:22:15.853098 [TestExcelPDFStructuralFidelity/ExcelTotalsRowPositionsFidelity] totals row label at A2 differs: got="Total_1" want="Total_0" (Position=0, layout=[{Position:0 Label:Total_0 Values:map[] FillHex:} {Position:0 Label:Total_1 Values:map[] FillHex:}])
+# 
+v0.4.8#5213596029354649855
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x1
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

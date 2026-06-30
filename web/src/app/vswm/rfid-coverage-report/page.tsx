@@ -84,133 +84,6 @@ export default function RFIDCoverageReportPage() {
   // Detail drawer state
   const [viewItem, setViewItem] = useState<ReportItem | null>(null);
 
-  // Generate realistic dummy data
-  const generateDummyData = () => {
-    const dummyZones = [
-      { id: 1, region_name: "Zone 1" },
-      { id: 2, region_name: "Zone 2" },
-      { id: 3, region_name: "Zone 3" },
-      { id: 4, region_name: "Zone 4" },
-    ];
-
-    const dummyWards = [
-      { id: 1, region_name: "Ward 1", parent_id: 1 },
-      { id: 2, region_name: "Ward 2", parent_id: 1 },
-      { id: 3, region_name: "Ward 3", parent_id: 2 },
-      { id: 4, region_name: "Ward 4", parent_id: 2 },
-      { id: 5, region_name: "Ward 5", parent_id: 3 },
-      { id: 6, region_name: "Ward 6", parent_id: 3 },
-    ];
-
-    const dummyVehicles = [
-      { id: 1, vehicle_reg_no: "RJ01-AB-1234" },
-      { id: 2, vehicle_reg_no: "RJ01-CD-5678" },
-      { id: 3, vehicle_reg_no: "RJ01-EF-9012" },
-      { id: 4, vehicle_reg_no: "RJ01-GH-3456" },
-      { id: 5, vehicle_reg_no: "RJ01-IJ-7890" },
-    ];
-
-    const dummyAreas = ["Area A", "Area B", "Area C", "Area D", "Area E", "Area F"];
-
-    const coverageTypes = ["AUTOMATIC", "MANUAL", "UNCOVERED"] as const;
-    const coverageWeights = [0.45, 0.45, 0.1]; // 45% auto, 45% manual, 10% uncovered
-
-    const households: ReportItem[] = Array.from({ length: 500 }, (_, i) => {
-      const zone = dummyZones[Math.floor(Math.random() * dummyZones.length)];
-      const zoneWards = dummyWards.filter(w => w.parent_id === zone.id);
-      const ward = zoneWards.length > 0 ? zoneWards[Math.floor(Math.random() * zoneWards.length)] : dummyWards[0];
-      const vehicle = dummyVehicles[Math.floor(Math.random() * dummyVehicles.length)];
-      const area = dummyAreas[Math.floor(Math.random() * dummyAreas.length)];
-
-      // Determine coverage type based on weights
-      const random = Math.random();
-      let cumulative = 0;
-      let coverageType: "AUTOMATIC" | "MANUAL" | "UNCOVERED" = "UNCOVERED";
-      for (let j = 0; j < coverageWeights.length; j++) {
-        cumulative += coverageWeights[j];
-        if (random <= cumulative) {
-          coverageType = coverageTypes[j];
-          break;
-        }
-      }
-
-      const automaticCoverage = coverageType === "AUTOMATIC";
-      const manualCoverage = coverageType === "MANUAL";
-      const finalStatus = automaticCoverage || manualCoverage ? "COVERED" : "UNCOVERED";
-
-      // Generate random timestamp within date range
-      const fromDate = new Date(filters.from_date);
-      const toDate = new Date(filters.to_date);
-      const randomTimestamp = new Date(fromDate.getTime() + Math.random() * (toDate.getTime() - fromDate.getTime()));
-
-      // Generate coverage history
-      const coverageHistory: CoverageHistory[] = [];
-      if (automaticCoverage) {
-        coverageHistory.push({
-          id: i * 2 + 1,
-          coverage_method: "AUTOMATIC",
-          timestamp: randomTimestamp.toISOString(),
-          vehicle_reg: vehicle.vehicle_reg_no,
-          user_name: null,
-          speed: Math.random() * 5, // Speed below 5 km/h
-          distance: Math.random() * 15, // Distance within 15 meters
-        });
-      }
-      if (manualCoverage) {
-        coverageHistory.push({
-          id: i * 2 + 2,
-          coverage_method: "MANUAL",
-          timestamp: randomTimestamp.toISOString(),
-          vehicle_reg: vehicle.vehicle_reg_no,
-          user_name: `Worker ${Math.floor(Math.random() * 20) + 1}`,
-          speed: null,
-          distance: null,
-        });
-      }
-
-      return {
-        id: i + 1,
-        rfid_number: `RFID${String(i + 1).padStart(6, '0')}`,
-        household_name: `Household ${i + 1}`,
-        mobile_number: `98765${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`,
-        address: `${area}, ${ward.region_name}, ${zone.region_name}`,
-        zone_id: zone.id,
-        ward_id: ward.id,
-        area,
-        latitude: 26.9124 + (Math.random() - 0.5) * 0.1,
-        longitude: 75.7873 + (Math.random() - 0.5) * 0.1,
-        survey_date: new Date(2024, 0, 1 + Math.floor(Math.random() * 180)).toISOString().split("T")[0],
-        survey_photo: `/survey-photos/${i + 1}.jpg`,
-        zone_name: zone.region_name,
-        ward_name: ward.region_name,
-        assigned_vehicle_id: vehicle.id,
-        assigned_vehicle_reg: vehicle.vehicle_reg_no,
-        coverage_method: coverageType,
-        automatic_coverage: automaticCoverage,
-        manual_coverage: manualCoverage,
-        finalStatus,
-        coverage_timestamp: finalStatus ? randomTimestamp.toISOString() : null,
-        vehicle_id: vehicle.id,
-        vehicle_reg: vehicle.vehicle_reg_no,
-        speed: automaticCoverage ? Math.random() * 5 : null,
-        distance: automaticCoverage ? Math.random() * 15 : null,
-        user_name: manualCoverage ? `Worker ${Math.floor(Math.random() * 20) + 1}` : null,
-        scan_coordinates: manualCoverage ? {
-          latitude: 26.9124 + (Math.random() - 0.5) * 0.01,
-          longitude: 75.7873 + (Math.random() - 0.5) * 0.01,
-        } : null,
-        coverage_history: coverageHistory,
-      };
-    });
-
-    setZones(dummyZones);
-    setWards(dummyWards);
-    setVehicles(dummyVehicles);
-    setAreas(dummyAreas);
-    setReportData(households);
-    setHasLoaded(true);
-  };
-
   const loadInitialOptions = async () => {
     try {
       const zonesRes = await api<{ data: { id: number; region_name: string }[] }>("/api/zones");
@@ -223,8 +96,6 @@ export default function RFIDCoverageReportPage() {
       setVehicles(vehiclesRes.data || []);
     } catch (error) {
       console.error("Failed to load initial options:", error);
-      // Fall back to dummy data
-      generateDummyData();
     }
   };
 
@@ -234,9 +105,9 @@ export default function RFIDCoverageReportPage() {
 
   const loadReport = () => {
     setLoading(true);
-    // Simulate API call with dummy data
     setTimeout(() => {
-      generateDummyData();
+      setReportData([]);
+      setHasLoaded(true);
       setLoading(false);
       toast.success("RFID Coverage Report loaded successfully");
     }, 500);

@@ -208,12 +208,22 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db := h.gpsRepo.Pool()
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
+
+	var total int
+	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to count users: " + err.Error()})
+		return
+	}
 
 	rows, err := db.Query(ctx, `
 		SELECT id, email, COALESCE(role, ''), created_at
 		FROM users
 		ORDER BY id ASC
-	`)
+		LIMIT $1 OFFSET $2
+	`, pageSize, offset)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch users: " + err.Error()})
 		return
@@ -228,7 +238,15 @@ func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sendJSON(w, http.StatusOK, map[string]interface{}{"success": true, "data": list})
+	totalPages := (total + pageSize - 1) / pageSize
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success":     true,
+		"data":        list,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
+		"total_pages": totalPages,
+	})
 }
 
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {

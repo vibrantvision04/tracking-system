@@ -7,24 +7,7 @@ import {
 } from 'recharts';
 import { ChartSkeleton } from '@/components/ui/LoadingSkeleton';
 
-const weeklyTonnageData = [
-  { day: 'Mon', Tonnage: 12.4, Trips: 14 },
-  { day: 'Tue', Tonnage: 15.8, Trips: 18 },
-  { day: 'Wed', Tonnage: 14.2, Trips: 16 },
-  { day: 'Thu', Tonnage: 18.5, Trips: 21 },
-  { day: 'Fri', Tonnage: 16.9, Trips: 19 },
-  { day: 'Sat', Tonnage: 19.1, Trips: 22 },
-  { day: 'Sun', Tonnage: 8.5, Trips: 10 },
-];
 
-const fleetActivityData = [
-  { time: '06:00', Active: 3, Offline: 4, Idle: 0 },
-  { time: '09:00', Active: 7, Offline: 0, Idle: 0 },
-  { time: '12:00', Active: 6, Offline: 0, Idle: 1 },
-  { time: '15:00', Active: 5, Offline: 1, Idle: 1 },
-  { time: '18:00', Active: 4, Offline: 2, Idle: 1 },
-  { time: '21:00', Active: 2, Offline: 5, Idle: 0 },
-];
 
 export default function DashboardCharts() {
   const [mounted, setMounted] = useState(false);
@@ -52,7 +35,7 @@ export default function DashboardCharts() {
         
         <div className="flex-1 w-full min-h-[200px] text-[10px] font-semibold">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={fleetActivityData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+            <AreaChart data={[]} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
               <defs>
                 <linearGradient id="activeGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10B981" stopOpacity={0.2}/>
@@ -95,7 +78,7 @@ export default function DashboardCharts() {
         
         <div className="flex-1 w-full min-h-[200px] text-[10px] font-semibold">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weeklyTonnageData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+            <BarChart data={[]} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
               <XAxis dataKey="day" stroke="#94A3B8" fontSize={10} tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis stroke="#94A3B8" fontSize={10} tick={{ fontSize: 10 }} />

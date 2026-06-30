@@ -1,0 +1,2 @@
+# EAS Build must regenerate android/ via prebuild for proper native module linking
+/android/

@@ -1,34 +1,14 @@
 import React from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../../services/api';
 import { theme } from '../../theme/theme';
 import { Header } from '../../components/ui/Header';
 import { useTranslation } from '../../i18n/useTranslation';
-
-interface WardCoverageItem {
-  ward_id: number;
-  ward_name: string;
-  coverage_percent: number;
-  vehicles_active: number;
-  drivers_present: number;
-  open_depots_submitted: number;
-}
-
-interface WardCoverageResponse {
-  wards: WardCoverageItem[];
-}
+import { useWardsCoverage } from '../../hooks/useCoverage';
 
 export default function WardCoverageScreen({ navigation }: any) {
   const { t } = useTranslation();
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['wardsCoverage'],
-    queryFn: async () => {
-      const res = await api.get('/coverage/wards');
-      return res as unknown as WardCoverageResponse;
-    },
-  });
+  const { data, isLoading, refetch, isRefetching } = useWardsCoverage();
 
   if (isLoading) {
     return (
@@ -39,22 +19,40 @@ export default function WardCoverageScreen({ navigation }: any) {
     );
   }
 
-  const wardList = data?.wards || [];
+  const wardList = data?.wards ?? [];
+
+  const header = (
+    <Header
+      title={t('menu.wardCoverage')}
+      showBack={true}
+      onBack={() => navigation.goBack()}
+      rightActions={[
+        {
+          icon: 'refresh',
+          onPress: () => refetch(),
+          accessibilityLabel: t('common.retry'),
+        },
+      ]}
+    />
+  );
+
+  // Empty_State when no coverage records returned for the selected date (Req 5.5)
+  if (!data) {
+    return (
+      <View style={styles.container}>
+        {header}
+        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>{t('coverage.noWardsData')}</Text>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Header
-        title={t('menu.wardCoverage')}
-        showBack={true}
-        onBack={() => navigation.goBack()}
-        rightActions={[
-          {
-            icon: 'refresh',
-            onPress: () => refetch(),
-            accessibilityLabel: t('common.retry'),
-          },
-        ]}
-      />
+      {header}
 
       <ScrollView
         style={styles.scrollContent}
@@ -107,11 +105,6 @@ export default function WardCoverageScreen({ navigation }: any) {
                   <View style={styles.metricItem}>
                     <Text style={styles.metricValue}>{ward.drivers_present}</Text>
                     <Text style={styles.metricLabel}>{t('coverage.driversPresent')}</Text>
-                  </View>
-
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricValue}>{ward.open_depots_submitted}</Text>
-                    <Text style={styles.metricLabel}>{t('coverage.depotsCleaned')}</Text>
                   </View>
                 </View>
               </View>

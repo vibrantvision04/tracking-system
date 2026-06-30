@@ -79,7 +79,6 @@ type MovementReport struct {
 	TotalStoppageDuration     string      `json:"total_stoppage_duration"`
 	StoppagesCount            int         `json:"stoppages_count"`
 	InParkingDuration         string      `json:"in_parking_duration"`
-	ActualIgnitionOnDuration  string      `json:"actual_ignition_on_duration"`
 	TotalIgnitionOnDuration   string      `json:"total_ignition_on_duration"`
 	TotalRunningDuration      string      `json:"total_running_duration"`
 	TotalRunningTime          string      `json:"total_running_time"`
@@ -111,12 +110,12 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 	query := `INSERT INTO movement_reports 
 			  (imei, vehicle_id, report_date, average_speed, total_distance, start_point, end_point, 
 			   start_time, end_time, alert, total_active_duration, total_idle_duration, 
-			   total_stoppage_duration, in_parking_duration, actual_ignition_on_duration, 
+			   total_stoppage_duration, in_parking_duration, 
 			   total_ignition_on_duration, total_running_duration, total_running_time, 
 			   day_running_time, night_running_time, fuel_in_ltr, fuel_consumption, 
 			   speed_limit, max_speed, min_speed, overspeed_distance, overspeed_count, overspeed_time,
 			   zone, ward, stoppages_count, minor_stoppages, major_stoppages, stoppages)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
 			  ON CONFLICT (imei, report_date) DO UPDATE SET
 			  average_speed = EXCLUDED.average_speed,
 			  total_distance = EXCLUDED.total_distance,
@@ -129,7 +128,6 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 			  total_idle_duration = EXCLUDED.total_idle_duration,
 			  total_stoppage_duration = EXCLUDED.total_stoppage_duration,
 			  in_parking_duration = EXCLUDED.in_parking_duration,
-			  actual_ignition_on_duration = EXCLUDED.actual_ignition_on_duration,
 			  total_ignition_on_duration = EXCLUDED.total_ignition_on_duration,
 			  total_running_duration = EXCLUDED.total_running_duration,
 			  total_running_time = EXCLUDED.total_running_time,
@@ -154,7 +152,7 @@ func (r *ReportRepository) Upsert(ctx context.Context, rep *MovementReport) erro
 	_, err := r.pool.Exec(ctx, query,
 		rep.IMEI, rep.VehicleID, rep.ReportDate, rep.AverageSpeed, rep.TotalDistance, rep.StartPoint, rep.EndPoint,
 		rep.StartTime, rep.EndTime, rep.Alert, rep.TotalActiveDuration, rep.TotalIdleDuration,
-		rep.TotalStoppageDuration, rep.InParkingDuration, rep.ActualIgnitionOnDuration,
+		rep.TotalStoppageDuration, rep.InParkingDuration,
 		rep.TotalIgnitionOnDuration, rep.TotalRunningDuration, rep.TotalRunningTime,
 		rep.DayRunningTime, rep.NightRunningTime, rep.FuelInLtr, rep.FuelConsumption,
 		rep.SpeedLimit, rep.MaxSpeed, rep.MinSpeed, rep.OverspeedDistance, rep.OverspeedCount, rep.OverspeedTime,
@@ -196,7 +194,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 
 	baseQuery := `SELECT r.id, r.imei, r.vehicle_id, COALESCE(v.registration_no, ''), COALESCE(vt.vehicle_type_name, ''), r.report_date, COALESCE(r.average_speed, 0.0), COALESCE(r.total_distance, 0.0), r.start_point, r.end_point, 
 			  r.start_time, r.end_time, COALESCE(r.alert, 0), COALESCE(r.total_active_duration, ''), COALESCE(r.total_idle_duration, ''), 
-			  COALESCE(r.total_stoppage_duration, ''), COALESCE(r.in_parking_duration, ''), COALESCE(r.actual_ignition_on_duration, ''), 
+			  COALESCE(r.total_stoppage_duration, ''), COALESCE(r.in_parking_duration, ''), 
 			  COALESCE(r.total_ignition_on_duration, ''), COALESCE(r.total_running_duration, ''), COALESCE(r.total_running_time, ''), 
 			  COALESCE(r.day_running_time, ''), COALESCE(r.night_running_time, ''), COALESCE(r.fuel_in_ltr, 0.0), COALESCE(r.fuel_consumption, 0.0), 
 			  COALESCE(r.speed_limit, 0.0), COALESCE(r.max_speed, 0.0), COALESCE(r.min_speed, 0.0), COALESCE(r.overspeed_distance, 0.0), COALESCE(r.overspeed_count, '0'), COALESCE(r.overspeed_time, '0'),
@@ -261,7 +259,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 		err := rows.Scan(
 			&rep.ID, &rep.IMEI, &rep.VehicleID, &rep.RegistrationNo, &rep.VehicleType, &rep.ReportDate, &rep.AverageSpeed, &rep.TotalDistance, &rep.StartPoint, &rep.EndPoint,
 			&rep.StartTime, &rep.EndTime, &rep.Alert, &rep.TotalActiveDuration, &rep.TotalIdleDuration,
-			&rep.TotalStoppageDuration, &rep.InParkingDuration, &rep.ActualIgnitionOnDuration,
+			&rep.TotalStoppageDuration, &rep.InParkingDuration,
 			&rep.TotalIgnitionOnDuration, &rep.TotalRunningDuration, &rep.TotalRunningTime,
 			&rep.DayRunningTime, &rep.NightRunningTime, &rep.FuelInLtr, &rep.FuelConsumption,
 			&rep.SpeedLimit, &rep.MaxSpeed, &rep.MinSpeed, &rep.OverspeedDistance, &rep.OverspeedCount, &rep.OverspeedTime,

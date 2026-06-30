@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, ScrollView, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { usePunchStatus } from '../../hooks/usePunchStatus';
 import { Header } from '../../components/ui/Header';
@@ -11,7 +12,7 @@ import { api } from '../../services/api';
 
 interface MenuItem {
   key: string;
-  icon: string;
+  iconName: keyof typeof Ionicons.glyphMap;
   titleKey: string;
   subtitleKey: string;
   route: string | null;
@@ -20,59 +21,59 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   {
     key: 'punchIn',
-    icon: '⏰',
+    iconName: 'alarm-outline',
     titleKey: 'menu.punchIn',
     subtitleKey: 'menu.punchIn.subtitle',
     route: 'SupervisorPunchIn',
   },
   {
     key: 'markAttendance',
-    icon: '👥',
+    iconName: 'people-outline',
     titleKey: 'menu.markAttendance',
     subtitleKey: 'menu.markAttendance.subtitle',
     route: 'DriverAttendance',
   },
   {
     key: 'wardCoverage',
-    icon: '📈',
+    iconName: 'trending-up-outline',
     titleKey: 'menu.wardCoverage',
     subtitleKey: 'menu.wardCoverage.subtitle',
     route: 'WardCoverage',
   },
   {
     key: 'liveTracking',
-    icon: '🗺️',
+    iconName: 'map-outline',
     titleKey: 'menu.liveTracking',
     subtitleKey: 'menu.liveTracking.subtitle',
     route: 'SupervisorLiveTracking',
   },
   {
     key: 'blockageApprovals',
-    icon: '⚠️',
+    iconName: 'warning-outline',
     titleKey: 'menu.blockageApprovals',
     subtitleKey: 'menu.blockageApprovals.subtitle',
     route: 'BlockageApprovals',
   },
   {
     key: 'openDepot',
-    icon: '🗑️',
+    iconName: 'trash-outline',
     titleKey: 'menu.openDepot',
     subtitleKey: 'menu.openDepot.subtitle',
     route: 'SupervisorOpenDepot',
   },
   {
     key: 'wardAlerts',
-    icon: '🔔',
+    iconName: 'notifications-outline',
     titleKey: 'menu.wardAlerts',
     subtitleKey: 'menu.wardAlerts.subtitle',
     route: 'SupervisorAlerts',
   },
   {
     key: 'complaints',
-    icon: '🚩',
+    iconName: 'flag-outline',
     titleKey: 'menu.complaints',
     subtitleKey: 'menu.complaints.subtitle',
-    route: null,
+    route: 'Complaints',
   },
 ];
 
@@ -166,7 +167,7 @@ export default function SupervisorHomeScreen({ navigation }: any) {
                     dimmed={false}
                     style={styles.navCard}
                   >
-                    <Text style={styles.cardIcon}>{item.icon}</Text>
+                    <Ionicons name={item.iconName} size={28} color={theme.colors.primary} style={styles.cardIcon} />
                     <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
                     <Text style={styles.cardSubtitle}>{t(item.subtitleKey)}</Text>
                   </Card>
@@ -218,8 +219,8 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.cardMinHeight,
   },
   cardIcon: {
-    fontSize: 28,
     marginBottom: theme.spacing.sm,
+    textAlign: 'center',
   },
   cardTitle: {
     fontSize: theme.typography.body.fontSize,

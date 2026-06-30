@@ -183,50 +183,7 @@ function SearchableDropdown({
   );
 }
 
-// ─── Dummy Fallback Data ──────────────────────────────────────────────────────
 
-const DUMMY_SHIFTS: ShiftOption[] = [
-  { id: 1, name: "Morning" },
-  { id: 2, name: "Evening" },
-  { id: 3, name: "Night" },
-  { id: 4, name: "General" },
-];
-
-const DUMMY_ZONES: ZoneOption[] = [
-  { id: 1, name: "Zone 1 - Hawa Mahal-Aamer Zone" },
-  { id: 2, name: "Zone 2 - Civil Lines Zone" },
-  { id: 3, name: "Zone 3 - Mansarovar Zone" },
-  { id: 4, name: "Zone 4 - Adarsh Nagar Zone" },
-  { id: 5, name: "Zone 5 - Sanganer Zone" },
-];
-
-const DUMMY_WARDS: WardOption[] = [
-  { id: 101, name: "Ward 28 - Ward - 28", parent_id: 1 },
-  { id: 102, name: "Ward 12 - Ward - 12", parent_id: 1 },
-  { id: 103, name: "Ward 10 - Ward - 10", parent_id: 1 },
-  { id: 104, name: "Ward 3 - Ward - 3", parent_id: 1 },
-  { id: 105, name: "Ward 13 - Ward - 13", parent_id: 1 },
-  { id: 106, name: "Ward 9 - Ward - 9", parent_id: 1 },
-  { id: 107, name: "Ward 8 - Ward - 8", parent_id: 1 },
-  { id: 108, name: "Ward 7 - Ward - 7", parent_id: 1 },
-  { id: 109, name: "Ward 6 - Ward - 6", parent_id: 1 },
-  { id: 110, name: "Ward 4 - Ward - 4", parent_id: 1 },
-  { id: 111, name: "Ward 2 - Ward - 2", parent_id: 1 },
-];
-
-const DUMMY_DEPLOYMENT: DeploymentRow[] = [
-  { id: 21, vehicle_reg: "RJ14GN8106", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 28 - Ward - 28", shift: "Morning", driver: "Ram Karan" },
-  { id: 22, vehicle_reg: "RJ14GN7685", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 12 - Ward - 12", shift: "Morning", driver: "Surendra Kumar" },
-  { id: 23, vehicle_reg: "RJ14GN7686", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 10 - Ward - 10", shift: "Morning", driver: "Hari Mohan" },
-  { id: 24, vehicle_reg: "RJ14GN4991", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 3 - Ward - 3", shift: "Morning", driver: "Mahendra Yadav" },
-  { id: 25, vehicle_reg: "RJ14GN5032", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 13 - Ward - 13", shift: "Morning", driver: "Rajesh Patidar" },
-  { id: 26, vehicle_reg: "RJ14GN7684", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 9 - Ward - 9", shift: "Morning", driver: "Sohan Lal" },
-  { id: 27, vehicle_reg: "RJ14GN7678", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 8 - Ward - 8", shift: "Morning", driver: "Karan Singh" },
-  { id: 28, vehicle_reg: "RJ14GN7670", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 7 - Ward - 7", shift: "Morning", driver: "Manoj Wadhwani" },
-  { id: 29, vehicle_reg: "RJ14GN7681", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 6 - Ward - 6", shift: "Morning", driver: "Anil Sharma" },
-  { id: 30, vehicle_reg: "RJ14GN7689", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 4 - Ward - 4", shift: "Morning", driver: "Vinod Yadav" },
-  { id: 31, vehicle_reg: "RJ14GN7687", vehicle_type: "Partitioned Tipper", zone: "Zone 1 - Hawa Mahal-Aamer Zone", ward: "Ward 2 - Ward - 2", shift: "Morning", driver: "Suresh Meena" },
-];
 
 export default function VehicleDeploymentReportPage() {
   const [reportData, setReportData] = useState<DeploymentRow[]>([]);
@@ -261,11 +218,9 @@ export default function VehicleDeploymentReportPage() {
             id: s.id,
             name: s.shift_name || s.name,
           }));
-        } else {
-          shiftList = DUMMY_SHIFTS;
         }
       } catch {
-        shiftList = DUMMY_SHIFTS;
+        shiftList = [];
       }
 
       // Fetch Zones
@@ -277,11 +232,9 @@ export default function VehicleDeploymentReportPage() {
             id: z.id,
             name: z.region_name || z.name,
           }));
-        } else {
-          zoneList = DUMMY_ZONES;
         }
       } catch {
-        zoneList = DUMMY_ZONES;
+        zoneList = [];
       }
 
       // Fetch Wards
@@ -294,11 +247,9 @@ export default function VehicleDeploymentReportPage() {
             name: w.region_name || w.name,
             parent_id: w.parent_id,
           }));
-        } else {
-          wardList = DUMMY_WARDS;
         }
       } catch {
-        wardList = DUMMY_WARDS;
+        wardList = [];
       }
 
       setShifts(shiftList);
@@ -306,9 +257,6 @@ export default function VehicleDeploymentReportPage() {
       setWards(wardList);
     } catch (err) {
       console.error("Failed to load filter items", err);
-      setShifts(DUMMY_SHIFTS);
-      setZones(DUMMY_ZONES);
-      setWards(DUMMY_WARDS);
     }
   };
 
@@ -396,18 +344,13 @@ export default function VehicleDeploymentReportPage() {
           }
         }
 
-        setReportData(finalRows.length > 0 ? finalRows : DUMMY_DEPLOYMENT);
-        if (finalRows.length === 0) {
-          toast.info("No matching database logs found. Showing mock dataset.");
-        }
+        setReportData(finalRows);
       } else {
-        setReportData(DUMMY_DEPLOYMENT);
-        toast.info("Endpoint offline. Loaded demonstration logs.");
+        setReportData([]);
       }
     } catch (err) {
       console.error("Failed to load live vehicle deployments", err);
-      setReportData(DUMMY_DEPLOYMENT);
-      toast.info("Using demonstration logs.");
+      setReportData([]);
     } finally {
       setLoading(false);
     }

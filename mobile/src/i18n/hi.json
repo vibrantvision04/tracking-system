@@ -142,6 +142,13 @@
   "coverage.totalWards": "कुल वार्ड",
   "coverage.vehiclesActive": "सक्रिय वाहन",
   "coverage.noWardsPerformanceData": "कोई वार्ड प्रदर्शन डेटा उपलब्ध नहीं।",
+  "coverage.totalLanePoints": "कुल बिंदु",
+  "coverage.completedLanePoints": "पूर्ण",
+  "coverage.remainingLanePoints": "शेष",
+  "coverage.distance": "दूरी",
+  "coverage.coveredDistance": "तय दूरी (किमी)",
+  "coverage.pendingDistance": "शेष दूरी (किमी)",
+  "coverage.noData": "कोई कवरेज डेटा उपलब्ध नहीं।",
 
   "offline.banner": "इंटरनेट कनेक्शन नहीं है। कुछ सुविधाएं सीमित हो सकती हैं।",
 
@@ -158,6 +165,14 @@
   "common.punchOut": "पंच आउट",
   "common.show": "दिखाएं",
   "common.hide": "छिपाएं",
+  "common.noData": "दिखाने के लिए कोई रिकॉर्ड नहीं",
+
+  "complaints.assignedVehicle": "निर्धारित वाहन",
+  "complaints.assignedDriver": "निर्धारित चालक",
+  "complaints.location": "स्थान",
+  "complaints.createdAt": "बनाया गया",
+  "complaints.updatedAt": "अपडेट किया गया",
+  "complaints.images": "तस्वीरें",
 
   "language.persistError": "भाषा प्राथमिकता सहेजी नहीं जा सकी। यह केवल इस सत्र के लिए लागू होगी।",
 

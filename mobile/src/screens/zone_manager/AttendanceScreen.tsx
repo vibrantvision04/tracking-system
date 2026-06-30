@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, Image, Alert, ScrollView, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGPS } from '../../hooks/useGPS';
 import { useCamera } from '../../hooks/useCamera';
 import CameraCapture from '../../components/CameraCapture';
+import AttendanceReportView from '../../components/AttendanceReportView';
 import { api, BASE_URL, KEYS } from '../../services/api';
+import { secureStorage } from '../../services/secureStorage';
 import axios from 'axios';
 
 interface Employee {
@@ -27,6 +28,10 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
 
   // Steps: 'select_driver', 'gps', 'camera', 'form', 'success'
   const [step, setStep] = useState<'select_driver' | 'gps' | 'camera' | 'form' | 'success'>('select_driver');
+
+  // View mode: the existing attendance MARKING flow, or the read-only REPORT
+  // list (Req 6.1-6.7). The marking flow below is left untouched (Req 6.6).
+  const [mode, setMode] = useState<'mark' | 'report'>('mark');
 
   // Lists loaded from backend
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -55,7 +60,7 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
     async function fetchData() {
       setLoadingData(true);
       try {
-        const token = await AsyncStorage.getItem(KEYS.ACCESS_TOKEN);
+        const token = await secureStorage.get(KEYS.ACCESS_TOKEN);
         const empRes = await axios.get(`${BASE_URL}/api/employees`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -185,7 +190,7 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
     v.registration_no.toLowerCase().includes(vehicleSearch.toLowerCase())
   );
 
-  if (step === 'camera') {
+  if (mode === 'mark' && step === 'camera') {
     return (
       <CameraCapture
         facing="front"
@@ -196,8 +201,39 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
     );
   }
 
+  const renderModeToggle = () => (
+    <View style={styles.modeToggle}>
+      <TouchableOpacity
+        style={[styles.modeButton, mode === 'mark' && styles.modeButtonActive]}
+        onPress={() => setMode('mark')}
+      >
+        <Text style={[styles.modeButtonText, mode === 'mark' && styles.modeButtonTextActive]}>
+          Mark Attendance
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.modeButton, mode === 'report' && styles.modeButtonActive]}
+        onPress={() => setMode('report')}
+      >
+        <Text style={[styles.modeButtonText, mode === 'report' && styles.modeButtonTextActive]}>
+          Report
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (mode === 'report') {
+    return (
+      <View style={styles.screen}>
+        {renderModeToggle()}
+        <AttendanceReportView />
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      {renderModeToggle()}
       <View style={styles.card}>
         <Text style={styles.title}>Mark Driver Attendance</Text>
 
@@ -311,9 +347,6 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
                   <Text style={styles.buttonText}>Verify GPS & Take Selfie</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.mockButton} onPress={() => startGPSCheck(true)}>
-                  <Text style={styles.mockButtonText}>Mock GPS</Text>
-                </TouchableOpacity>
 
                 <TouchableOpacity style={styles.cancelButton} onPress={() => setStep('select_driver')}>
                   <Text style={styles.cancelButtonText}>Back</Text>
@@ -407,6 +440,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     padding: 16,
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#e8eaf0',
+    borderRadius: 10,
+    padding: 4,
+    margin: 16,
+    marginBottom: 0,
+  },
+  modeButton: {
+    flex: 1,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  modeButtonActive: {
+    backgroundColor: '#1565C0',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#616161',
+  },
+  modeButtonTextActive: {
+    color: '#ffffff',
   },
   card: {
     backgroundColor: '#FFFFFF',

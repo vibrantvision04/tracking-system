@@ -1,0 +1,13 @@
+# 2026/06/29 21:03:07.048151 [TestConcurrentRecomputeCoalescence] [rapid] draw n: 2
+# 2026/06/29 21:03:07.048151 [TestConcurrentRecomputeCoalescence] [rapid] draw actions: []bool{true, false}
+# 2026/06/29 21:03:07.068599 [TestConcurrentRecomputeCoalescence] caller 0 (SmartLoad.Load) returned payload.GeneratedAt=0001-01-01 00:00:00 +0000 UTC, want 2025-01-01 08:30:00 +0000 UTC (coalescence broken — caller did not receive the shared Compute result; actions=[true false], path="")
+# 
+v0.4.8#6148381045146940927
+0x69d333ded8b18
+0x193922d4db58ec
+0x0
+0x15194479196aa9
+0x1
+0x19ec7185112749
+0x0
+0x122a94f0aff8a4

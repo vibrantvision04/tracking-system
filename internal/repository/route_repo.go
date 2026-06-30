@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -534,6 +535,29 @@ type CheckpointHitLog struct {
 	HitTime       time.Time
 }
 
+// lanePointSequenceMap returns a map from lane_point_id → sequence_number for
+// the given route. This is the authoritative route order used by the in-order
+// coverage logic.
+func (r *RouteRepository) lanePointSequenceMap(ctx context.Context, routeID int) (map[int]int, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, sequence_number FROM route_lane_points
+		WHERE route_id = $1
+	`, routeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	m := make(map[int]int)
+	for rows.Next() {
+		var id, seq int
+		if err := rows.Scan(&id, &seq); err == nil {
+			m[id] = seq
+		}
+	}
+	return m, rows.Err()
+}
+
 // GetLanePointCountsByRoutes returns a map of routeID -> lane point count for the
 // given routes in a single query. Used by the D2D report to avoid an N+1
 // GetCheckpointsByRoute call per (vehicle, route, date) row.
@@ -590,6 +614,9 @@ func (r *RouteRepository) GetCoverageHitLogsForRange(ctx context.Context, fromDa
 		HitTime     *time.Time `json:"hit_time"`
 	}
 
+	// Cache sequence maps per route to avoid repeated queries.
+	seqCache := make(map[int]map[int]int)
+
 	for rows.Next() {
 		var vehicleID, routeID int
 		var date string
@@ -605,16 +632,33 @@ func (r *RouteRepository) GetCoverageHitLogsForRange(ctx context.Context, fromDa
 			}
 		}
 
+		// Get or cache the sequence map for this route.
+		seqMap, cached := seqCache[routeID]
+		if !cached {
+			seqMap, _ = r.lanePointSequenceMap(ctx, routeID)
+			seqCache[routeID] = seqMap // may be nil
+		}
+
 		var logs []CheckpointHitLog
 		for _, d := range details {
 			if d.Status == "achieved" && d.HitTime != nil {
+				seq := d.LanePointID // fallback
+				if seqMap != nil {
+					if s, ok := seqMap[d.LanePointID]; ok {
+						seq = s
+					}
+				}
 				logs = append(logs, CheckpointHitLog{
 					CheckpointID:  d.LanePointID,
-					SequenceOrder: d.LanePointID,
+					SequenceOrder: seq,
 					HitTime:       *d.HitTime,
 				})
 			}
 		}
+		// Sort by hit_time for correct in-order evaluation.
+		sort.Slice(logs, func(i, j int) bool {
+			return logs[i].HitTime.Before(logs[j].HitTime)
+		})
 		result[CoverageRangeKey(vehicleID, routeID, date)] = logs
 	}
 	return result, rows.Err()
@@ -646,22 +690,36 @@ func (r *RouteRepository) GetCoverageHitLogs(ctx context.Context, vehicleID, rou
 		return nil, err
 	}
 
+	// Build a lookup map from lane_point_id → sequence_number so the in-order
+	// logic can use the real route sequence rather than the database row ID.
+	seqMap, err := r.lanePointSequenceMap(ctx, routeID)
+	if err != nil {
+		// Fallback: use lane_point_id as before if we can't get sequence numbers
+		seqMap = nil
+	}
+
 	var logs []CheckpointHitLog
 	for _, d := range details {
 		if d.Status == "achieved" && d.HitTime != nil {
+			seq := d.LanePointID // fallback
+			if seqMap != nil {
+				if s, ok := seqMap[d.LanePointID]; ok {
+					seq = s
+				}
+			}
 			logs = append(logs, CheckpointHitLog{
 				CheckpointID:  d.LanePointID,
-				SequenceOrder: d.LanePointID, // ID represents sequence for in-order logic
+				SequenceOrder: seq,
 				HitTime:       *d.HitTime,
 			})
 		}
 	}
 
-	// The old query ordered by hit_time ASC
-	// We sort the mocked logs similarly
-	// However, sequence order must be monotonically increasing for inOrderHits to work.
-	// We rely on ID roughly correlating with sequence, or the D2D report will just show similar percentages.
-	// Actually, route_lane_points sequence_number is what we want. But the report just counts them. Let's return as is.
+	// Sort by hit_time so in-order logic checks temporal sequence.
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].HitTime.Before(logs[j].HitTime)
+	})
+
 	return logs, nil
 }
 

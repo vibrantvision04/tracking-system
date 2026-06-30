@@ -1167,6 +1167,7 @@ func (h *Handler) GetShiftBasedOpsReport(w http.ResponseWriter, r *http.Request)
 		var maxSpeed float64
 		var totalIgnitionSec float64
 		var idleSec float64
+		var firstGPSTime, lastGPSTime time.Time
 
 		isIgnitionOn := func(p decoder.AVLData) bool {
 			return p.Ignition || p.Speed > 2
@@ -1174,6 +1175,9 @@ func (h *Handler) GetShiftBasedOpsReport(w http.ResponseWriter, r *http.Request)
 
 		if err == nil && len(gpsData) > 0 {
 			gpsData = smoothGpsData(gpsData)
+			firstGPSTime = gpsData[0].Time
+			lastGPSTime = gpsData[len(gpsData)-1].Time
+
 			var lastOp *decoder.AVLData
 			for i := 0; i < len(gpsData); i++ {
 				p := gpsData[i]
@@ -1211,6 +1215,20 @@ func (h *Handler) GetShiftBasedOpsReport(w http.ResponseWriter, r *http.Request)
 			}
 		}
 
+		activeSec := 0.0
+		var activeHoursStr string
+		if !firstGPSTime.IsZero() && !lastGPSTime.IsZero() && lastGPSTime.After(firstGPSTime) {
+			activeSec = lastGPSTime.Sub(firstGPSTime).Seconds()
+			activeHoursStr = formatDuration(int(activeSec))
+		} else {
+			activeHoursStr = "00:00:00"
+		}
+
+		avgSpeed := 0.0
+		if activeSec > 0 {
+			avgSpeed = (totalDistance / activeSec) * 3600
+		}
+
 		// Query trip count
 		var tripCount int
 		_ = h.gpsRepo.Pool().QueryRow(ctx, `
@@ -1240,6 +1258,14 @@ func (h *Handler) GetShiftBasedOpsReport(w http.ResponseWriter, r *http.Request)
 			dispRouteName = "N/A"
 		}
 
+		var startTimeStr, endTimeStr string
+		if !firstGPSTime.IsZero() {
+			startTimeStr = firstGPSTime.Format("15:04:05")
+		}
+		if !lastGPSTime.IsZero() {
+			endTimeStr = lastGPSTime.Format("15:04:05")
+		}
+
 		results = append(results, map[string]interface{}{
 			"vehicle_id":         v.ID,
 			"registration_no":    v.RegistrationNo,
@@ -1254,6 +1280,12 @@ func (h *Handler) GetShiftBasedOpsReport(w http.ResponseWriter, r *http.Request)
 			"engine_hours":       engineHoursStr,
 			"movement_summary":   summary,
 			"imei":               v.GpsDevice.IMEI,
+			"start_time":         startTimeStr,
+			"end_time":           endTimeStr,
+			"active_hours":       activeHoursStr,
+			"average_speed":      math.Round(avgSpeed*100) / 100,
+			"max_speed":          math.Round(maxSpeed*100) / 100,
+			"total_ignition":     engineHoursStr,
 		})
 	}
 

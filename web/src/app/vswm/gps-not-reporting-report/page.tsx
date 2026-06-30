@@ -27,51 +27,7 @@ export default function GPSNotReportingReport() {
   const handleLoad = async () => {
     setLoading(true);
     try {
-      // Mock data for demonstration - replace with actual API call
-      const mockData = [
-        {
-          id: 1,
-          vehicle_reg_no: "RJ01-AB-1234",
-          zone: "Zone 4 - Adarsh Nagar Zone",
-          ward: "Ward 1",
-          last_location: "26.9124, 75.7873",
-          last_updated: "2026-06-24 08:30:15"
-        },
-        {
-          id: 2,
-          vehicle_reg_no: "RJ01-CD-5678",
-          zone: "Zone 5 - Civil Lines Zone",
-          ward: "Ward 2",
-          last_location: "26.9234, 75.7983",
-          last_updated: "2026-06-24 07:45:30"
-        },
-        {
-          id: 3,
-          vehicle_reg_no: "RJ01-EF-9012",
-          zone: "Zone 6 - Industrial Area Zone",
-          ward: "Ward 3",
-          last_location: "26.9344, 75.8093",
-          last_updated: "2026-06-24 06:15:45"
-        },
-        {
-          id: 4,
-          vehicle_reg_no: "RJ01-GH-3456",
-          zone: "Zone 7 - Mansarovar Zone",
-          ward: "Ward 4",
-          last_location: "26.9454, 75.8203",
-          last_updated: "2026-06-24 05:30:20"
-        },
-        {
-          id: 5,
-          vehicle_reg_no: "RJ01-IJ-7890",
-          zone: "Zone 8 - Sodala Zone",
-          ward: "Ward 5",
-          last_location: "26.9564, 75.8313",
-          last_updated: "2026-06-24 04:45:10"
-        },
-      ];
-      
-      setData(mockData);
+      setData([]);
     } catch (err) {
       console.error(err);
       setData([]);

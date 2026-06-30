@@ -42,56 +42,7 @@ export default function D2DZoneWardCoverageReport() {
         ...(allWards && { all_wards: "true" }),
       });
       
-      // Mock data for demonstration - replace with actual API call
-      const mockData = [
-        {
-          id: 1,
-          region: "Zone 4 - Adarsh Nagar Zone",
-          shift: "Morning",
-          no_of_routes: 45,
-          no_of_vehicles: 38,
-          overall_covered: 87.5,
-          inorder_covered: 92.3
-        },
-        {
-          id: 2,
-          region: "Zone 5 - Civil Lines Zone",
-          shift: "Morning",
-          no_of_routes: 52,
-          no_of_vehicles: 48,
-          overall_covered: 91.2,
-          inorder_covered: 88.7
-        },
-        {
-          id: 3,
-          region: "Zone 6 - Industrial Area Zone",
-          shift: "Morning",
-          no_of_routes: 38,
-          no_of_vehicles: 35,
-          overall_covered: 78.9,
-          inorder_covered: 85.4
-        },
-        {
-          id: 4,
-          region: "Zone 4 - Adarsh Nagar Zone",
-          shift: "Evening",
-          no_of_routes: 42,
-          no_of_vehicles: 40,
-          overall_covered: 83.2,
-          inorder_covered: 89.1
-        },
-        {
-          id: 5,
-          region: "Zone 5 - Civil Lines Zone",
-          shift: "Evening",
-          no_of_routes: 48,
-          no_of_vehicles: 45,
-          overall_covered: 89.6,
-          inorder_covered: 91.8
-        },
-      ];
-      
-      setData(mockData);
+      setData([]);
     } catch (err) {
       console.error(err);
       setData([]);

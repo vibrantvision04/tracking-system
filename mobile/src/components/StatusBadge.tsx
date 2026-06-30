@@ -11,13 +11,19 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
       case 'achieved':
       case 'approved':
       case 'done':
-        return { bg: '#2E7D32', text: '#ffffff', label: 'Done' };
+      case 'present':
+        return { bg: '#2E7D32', text: '#ffffff', label: status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() };
       case 'pending':
       case 'pending_approval':
         return { bg: '#F57F17', text: '#ffffff', label: 'Pending' };
+      case 'late':
+        return { bg: '#F57F17', text: '#ffffff', label: 'Late' };
       case 'missed':
       case 'rejected':
-        return { bg: '#C62828', text: '#ffffff', label: 'Missed' };
+      case 'absent':
+        return { bg: '#C62828', text: '#ffffff', label: status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() };
+      case 'leave':
+        return { bg: '#6A1B9A', text: '#ffffff', label: 'Leave' };
       case 'upcoming':
         return { bg: '#e0e0e0', text: '#424242', label: 'Upcoming' };
       default:

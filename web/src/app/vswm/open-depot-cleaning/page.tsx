@@ -59,8 +59,7 @@ export default function OpenDepotCleaningPage() {
   const [rejectRemarks, setRejectRemarks] = useState("");
   const [activeReviewAction, setActiveReviewAction] = useState<"approve" | "reject" | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (showToastOnError = false) => {
     try {
       const depotsRes = await api<{ data: OpenDepot[] }>("/api/open-depots");
       setDepots((depotsRes.data || []).filter(d => d.status === "Active"));
@@ -68,14 +67,21 @@ export default function OpenDepotCleaningPage() {
       const subRes = await api<{ data: CleaningSubmission[] }>("/api/open-depots/cleanings?approval_status=Pending");
       setSubmissions(subRes.data || []);
     } catch (err) {
-      toast.error("Failed to load cleaning verification data.");
-    } finally {
-      setLoading(false);
+      if (showToastOnError) toast.error("Failed to load cleaning verification data.");
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true).finally(() => setLoading(false));
+  }, []);
+
+  // Real-time updates via SSE — refresh when new submission arrives
+  useEffect(() => {
+    const es = new EventSource(`${API_URL}/api/events/open-depot`);
+    es.addEventListener("open-depot:events", () => loadData());
+    es.addEventListener("connected", () => {});
+    es.onerror = () => {};
+    return () => es.close();
   }, []);
 
   const handleAdminReview = async (status: "Approved" | "Rejected", jhalliPattiUsed?: boolean) => {

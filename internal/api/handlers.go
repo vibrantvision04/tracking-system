@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gps-tracking-system/internal/audit"
 	"gps-tracking-system/internal/decoder"
+	"gps-tracking-system/internal/masterreport"
 	"gps-tracking-system/internal/repository"
 	"gps-tracking-system/internal/service"
 	"gps-tracking-system/internal/ultimatereport"
@@ -22,6 +23,22 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
+
+// parsePagination reads page / page_size query params with defaults and a hard cap.
+func parsePagination(r *http.Request) (page, pageSize int) {
+	page = 1
+	pageSize = 20
+	if v, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page"))); err == nil && v > 0 {
+		page = v
+	}
+	if v, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page_size"))); err == nil && v > 0 {
+		pageSize = v
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	return page, pageSize
+}
 
 var dailyReportLocks sync.Map // maps string key ("vehicle-date") to *sync.Mutex
 
@@ -55,13 +72,40 @@ type Handler struct {
 	allowHistoricalRecalculation bool
 	auditLogger *audit.Logger
 
+	// RBAC
+	rbacRepo *repository.RBACRepository
+
+	// rbacCheckOverride, when non-nil, replaces rbacRepo for permission
+	// checks performed by RequirePermission / PermissionMiddleware. This
+	// is a test-only seam — production callers leave it nil and the
+	// real repository is used. See rbac_middleware.go for the rbacChecker
+	// interface this field accepts.
+	rbacCheckOverride rbacChecker
+
+	// Employee-Vehicle assignments
+	empVehicleRepo *repository.EmployeeVehicleRepository
+
 	// Ultimate Reports engine (independent module — does not affect existing Reports)
 	ultimateReportService *ultimatereport.UltimateReportService
 	excelEngine           *ultimatereport.ExcelEngine
 	reportTemplatePath    string
+
+	// Master_Reporting_Module wiring (injected post-construction via
+	// SetMasterReportingModule from cmd/server/main.go). Each handler in
+	// master_report_handlers.go reads these fields directly; nil values
+	// mean the module hasn't been wired yet and the master-report
+	// endpoints should reject with 503.
+	mrCatalog    *masterreport.Catalog
+	mrSmartLoad  *masterreport.SmartLoader
+	mrForceRecal *masterreport.ForceRecalculator
+	mrJobs       *masterreport.JobRegistry
+	mrExcel      *masterreport.ExcelExporter
+	mrPDF        *masterreport.PDFExporter
+	mrPool       *masterreport.BoundedWorkerPool
+	mrAuditor    *masterreport.Auditor
 }
 
-func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine, openDepotRepo *repository.OpenDepotRepository, jwtAccessSecret, jwtRefreshSecret string, allowHistoricalRecalc bool) *Handler {
+func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepository, rService *service.ReportService, rdb *redis.Client, routeRepo *repository.RouteRepository, routeEngine *service.RouteEngine, openDepotRepo *repository.OpenDepotRepository, rbacRepo *repository.RBACRepository, empVehicleRepo *repository.EmployeeVehicleRepository, jwtAccessSecret, jwtRefreshSecret string, allowHistoricalRecalc bool) *Handler {
 	h := &Handler{
 		vRepo:                        vRepo,
 		gpsRepo:                      gpsRepo,
@@ -70,6 +114,8 @@ func NewHandler(vRepo *repository.VehicleRepository, gpsRepo *repository.GPSRepo
 		rdb:                          rdb,
 		routeRepo:                    routeRepo,
 		routeEngine:                  routeEngine,
+		rbacRepo:                     rbacRepo,
+		empVehicleRepo:               empVehicleRepo,
 		zoneVehiclesCache:            make(map[string][]map[string]interface{}),
 		resolvedAlerts:               make(map[int]ResolvedDetails),
 		jwtAccessSecret:              jwtAccessSecret,
@@ -102,6 +148,42 @@ func (h *Handler) SetUltimateReportEngine(svc *ultimatereport.UltimateReportServ
 	h.ultimateReportService = svc
 	h.excelEngine = engine
 	h.reportTemplatePath = templatePath
+}
+
+// SetMasterReportingModule wires the Master_Reporting_Module components into
+// the handler. Called once from cmd/server/main.go after every component is
+// constructed; passing nil for any argument leaves the corresponding field
+// unset and the master-report HTTP endpoints will report 503.
+//
+// This is the single injection point for the module — keeping it out of
+// NewHandler avoids churning the existing constructor signature every time
+// the module gains a new sub-component.
+func (h *Handler) SetMasterReportingModule(
+	catalog *masterreport.Catalog,
+	loader *masterreport.SmartLoader,
+	recalc *masterreport.ForceRecalculator,
+	jobs *masterreport.JobRegistry,
+	excel *masterreport.ExcelExporter,
+	pdf *masterreport.PDFExporter,
+	pool *masterreport.BoundedWorkerPool,
+	auditor *masterreport.Auditor,
+) {
+	h.mrCatalog = catalog
+	h.mrSmartLoad = loader
+	h.mrForceRecal = recalc
+	h.mrJobs = jobs
+	h.mrExcel = excel
+	h.mrPDF = pdf
+	h.mrPool = pool
+	h.mrAuditor = auditor
+}
+
+// GetAuditLogger exposes the handler's audit.Logger so cmd/server/main.go
+// can pass it to masterreport.NewAuditor without introducing a direct
+// dependency from cmd/server on audit internals. The returned value may be
+// nil if audit logging is not configured.
+func (h *Handler) GetAuditLogger() *audit.Logger {
+	return h.auditLogger
 }
 
 func (h *Handler) RebuildCache() {

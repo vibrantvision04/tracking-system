@@ -124,15 +124,17 @@ func (r *VehicleRepository) GetAll(ctx context.Context) ([]Vehicle, error) {
 			if d.ID > 0 {
 				v.GpsDevice = &d
 			}
-			v.Status = vehicleStatus(v.LastTime, speed)
+			v.Status = VehicleStatus(v.LastTime, speed)
 			vehicles = append(vehicles, v)
 		}
 	}
 	return vehicles, nil
 }
 
-// vehicleStatus computes a human-readable status from the last GPS ping time and speed.
-func vehicleStatus(lastTime *time.Time, speed float64) string {
+// VehicleStatus computes a human-readable status from the last GPS ping time and speed.
+// It is the single canonical status derivation shared by the web live map and the
+// mobile live-tracking handlers (offline if nil/>15min, moving if speed>3, else stopped).
+func VehicleStatus(lastTime *time.Time, speed float64) string {
 	if lastTime == nil {
 		return "offline"
 	}
@@ -187,7 +189,7 @@ func (r *VehicleRepository) GetByIMEI(ctx context.Context, imei string) (*Vehicl
 	v.VehicleTypeID = vTypeId
 	v.VehicleType = &vt
 	v.GpsDevice = &d
-	v.Status = vehicleStatus(v.LastTime, speed)
+	v.Status = VehicleStatus(v.LastTime, speed)
 
 	return &v, nil
 }
@@ -231,7 +233,7 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id int) (*Vehicle, erro
 	if d.ID > 0 {
 		v.GpsDevice = &d
 	}
-	v.Status = vehicleStatus(v.LastTime, speed)
+	v.Status = VehicleStatus(v.LastTime, speed)
 
 	return &v, nil
 }

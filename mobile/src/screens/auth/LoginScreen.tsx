@@ -89,11 +89,16 @@ export default function LoginScreen() {
         timeoutRef.current = null;
       }
 
-      if (err?.message === 'Network Error' || err?.code === 'ERR_NETWORK') {
+      // The API client rejects with a typed ApiError ({ kind, status, message }).
+      // Invalid credentials surface as 401 -> 'unauthorized'; on that path no
+      // token is ever stored because login() is only called on success above.
+      if (err?.kind === 'offline' || err?.message === 'Network Error' || err?.code === 'ERR_NETWORK') {
         setErrorMsg(t('login.errorNetwork'));
-      } else if (err?.status === 401 || err?.error?.includes?.('invalid') || err?.error?.includes?.('Invalid')) {
-        setErrorMsg(t('login.errorInvalid'));
+      } else if (err?.kind === 'timeout') {
+        setErrorMsg(t('login.errorTimeout'));
       } else {
+        // 'unauthorized' (invalid credentials) and any other failure surface a
+        // generic invalid-credentials message without persisting a token.
         setErrorMsg(t('login.errorInvalid'));
       }
     } finally {
