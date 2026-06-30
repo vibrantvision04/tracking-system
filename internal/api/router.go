@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 )
 
 func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
@@ -33,14 +32,27 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 	for _, o := range corsOrigins {
 		allowedOriginsMap[o] = true
 	}
-	r.Use(cors.Handler(cors.Options{
-		AllowOriginFunc:  func(r *http.Request, origin string) bool { return allowedOriginsMap[origin] },
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Requested-With"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
+	// CORS — custom middleware to guarantee single Access-Control-Allow-Origin header.
+	// go-chi/cors v1.2.1 has a known issue with AllowCredentials + AllowOriginFunc
+	// that can produce duplicate headers. This replaces it entirely.
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && allowedOriginsMap[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With")
+				w.Header().Set("Access-Control-Expose-Headers", "Link")
+				w.Header().Set("Access-Control-Max-Age", "300")
+			}
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	// 2. WebSocket
 	r.HandleFunc("/ws/track", hub.ServeHTTP)
