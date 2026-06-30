@@ -580,12 +580,20 @@ func (h *Handler) UpdateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 		regionID = &req.WardIDs[0]
 	}
 
-	_, err = tx.Exec(ctx, `
-		INSERT INTO employee_department_designations (employee_id, department_id, designation_id, region_id)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (employee_id) DO UPDATE SET
-			department_id = $2, designation_id = $3, region_id = COALESCE($4, employee_department_designations.region_id)
-	`, empID, req.DepartmentID, req.DesignationID, regionID)
+	if regionID != nil {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO employee_department_designations (employee_id, department_id, designation_id, region_id)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (employee_id) DO UPDATE SET
+				department_id = $2, designation_id = $3, region_id = $4
+		`, empID, req.DepartmentID, req.DesignationID, *regionID)
+	} else {
+		_, err = tx.Exec(ctx, `
+			UPDATE employee_department_designations
+			SET department_id = $1, designation_id = $2
+			WHERE employee_id = $3
+		`, req.DepartmentID, req.DesignationID, empID)
+	}
 	if err != nil {
 		log.Error().Err(err).Msg("UpdateUnifiedEmployee: failed to upsert employee_department_designations")
 		RespondWithError(w, http.StatusInternalServerError, "Failed to assign department/designation")
