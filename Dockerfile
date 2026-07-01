@@ -24,5 +24,6 @@ ENV PORT=8080
 EXPOSE 8080
 EXPOSE 5027
 
-# TEMP: seed temporary employee accounts on first deploy
-CMD ["sh", "-c", "./migrate-db && ./seed-temp && ./tracker-backend"]
+# Start the server. Migrations run first (tracked + idempotent, safe on every
+# restart). seed-temp is best-effort and must never block the web server.
+CMD ["sh", "-c", "./migrate-db && { ./seed-temp || echo 'seed-temp skipped (non-fatal)'; } && ./tracker-backend"]
