@@ -1,6 +1,8 @@
 # ==========================================
-# Environment / Secrets (CRITICAL)
+# Environment / Secrets
 # ==========================================
+# NOTE: .env is intentionally tracked as committed dev defaults.
+# Only local/personal overrides are ignored.
 .env.local
 .env.*.local
 .env.development.local
@@ -23,6 +25,9 @@
 /server.exe
 /tmp_test
 /tracker-backend
+/tracker-backend-linux
+/test_server.exe
+/tracking.exe
 
 # General compiled files
 *.exe
@@ -36,21 +41,30 @@
 /vendor/
 /tmp/
 go.work
+go.work.sum
+
+# Go build cache (local)
+.gocache/
 
 # ==========================================
-# Node.js & Next.js Frontend
+# Node.js / Next.js / React
 # ==========================================
 node_modules/
 .next/
 out/
 build/
+dist/
 .vercel/
 .cache/
+.parcel-cache/
+.turbo/
 next-env.d.ts
+*.tsbuildinfo
 .tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 .pnpm-debug.log*
 web/node_modules/
 web/.next/
@@ -58,6 +72,73 @@ web/out/
 web/build/
 web/.vercel/
 web/.cache/
+mobile/node_modules/
+
+# ==========================================
+# React Native / Expo
+# ==========================================
+.expo/
+.expo-shared/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+
+# ==========================================
+# Android
+# ==========================================
+android/app/build/
+android/build/
+android/.gradle/
+*.apk
+*.aab
+*.keystore
+
+# ==========================================
+# iOS
+# ==========================================
+ios/build/
+ios/Pods/
+DerivedData/
+*.ipa
+
+# ==========================================
+# Testing / Coverage
+# ==========================================
+coverage/
+.nyc_output/
+playwright-report/
+playwright/.cache/
+test-results/
+cypress/screenshots/
+cypress/videos/
+__snapshots__/*.snap.tmp
+
+# ==========================================
+# AI Agents / IDE Assistants
+# ==========================================
+.kiro/
+.cursor/
+.claude/
+.roo/
+.continue/
+.windsurf/
+.copilot/
+.github/copilot/
+.ai/
+.agent/
+.agents/
+.prompt/
+.prompts/
+.memory/
+.sessions/
+.history/
+.devin/
+.blackboxrules
+.cursorrules
+.clinerules
+AGENTS.md
+AI_Route_Reconstruction_Prompt.md
+ISWM_Mobile_Spec_IDE_Ready.md
 
 # ==========================================
 # IDE / Editors / OS
@@ -74,21 +155,46 @@ Thumbs.db
 *.sln
 *.lsu
 
+# ==========================================
 # Logs & Temporary Files
 # ==========================================
 *.log
 backend.log
 server_local.log
 logs/
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.cache
+nul
 
 # ==========================================
 # Scratch / Temp / Data files
 # ==========================================
 scratch/
+scratch_*.go
+fix_snapping.py
 *.csv
 *.kmz
+temp_*.html
 
-# Large binaries
-*.apk
-nul
+# ==========================================
+# Archives & Large Binaries
+# ==========================================
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.gz
+*.dmg
+*.msi
+*.iso
 
+# ==========================================
+# Stray exports / generated assets (root)
+# ==========================================
+/ULTIMATE REPORTING.xlsx
+/Untitled design*.png
