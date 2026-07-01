@@ -106,6 +106,9 @@ DerivedData/
 # ==========================================
 coverage/
 .nyc_output/
+# Go property-testing (rapid/gopter) auto-generated failure artifacts
+**/testdata/rapid/
+*.fail
 playwright-report/
 playwright/.cache/
 test-results/

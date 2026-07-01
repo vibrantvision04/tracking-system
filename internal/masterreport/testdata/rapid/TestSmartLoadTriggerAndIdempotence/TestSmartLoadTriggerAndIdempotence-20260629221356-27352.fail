@@ -1,8 +1,0 @@
-# 2026/06/29 22:13:56.590523 [TestSmartLoadTriggerAndIdempotence] [rapid] draw state: "computing-fresh"
-# 2026/06/29 22:13:56.590523 [TestSmartLoadTriggerAndIdempotence] [rapid] draw live_day: false
-# 2026/06/29 22:13:56.840684 [TestSmartLoadTriggerAndIdempotence] state="computing-fresh" liveDay=false: expected path="cache_hit" (compute=false), got path="recomputed"
-# 
-v0.4.8#12973390667032864127
-0x6b74f03291620
-0x4
-0x0
