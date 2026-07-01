@@ -56,7 +56,7 @@ func (r *EmployeeVehicleRepository) GetAll(ctx context.Context) ([]EmployeeVehic
 		FROM employee_vehicle_assignments eva
 		JOIN employees e ON e.id = eva.employee_id
 		LEFT JOIN vehicles v ON v.id = eva.vehicle_id
-		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_route_assignments vra ON vra.vehicle_id = eva.vehicle_id AND vra.is_active = true
 		LEFT JOIN shifts s ON vra.shift_id = s.id
 		LEFT JOIN employee_department_designations edd ON edd.employee_id = eva.employee_id

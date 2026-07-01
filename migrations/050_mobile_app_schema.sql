@@ -1,4 +1,4 @@
--- Migration 050: ISWM Mobile App Database Schema Additions
+-- Migration 050: SWIFT Mobile App Database Schema Additions
 
 CREATE TABLE IF NOT EXISTS mobile_attendance (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),

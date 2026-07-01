@@ -13,7 +13,7 @@ interface LanguageContextType {
 }
 
 const translations: Record<Language, TranslationMap> = { en, hi };
-const STORAGE_KEY = 'iswm_language_preference';
+const STORAGE_KEY = 'swift_language_preference';
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 

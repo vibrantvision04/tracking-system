@@ -202,7 +202,7 @@ func (r *ReportRepository) Get(ctx context.Context, vehicleID int, from, to time
 			  r.stoppages
 			  FROM movement_reports r
 			  JOIN vehicles v ON r.vehicle_id = v.id
-			  LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id `
+			  LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id `
 
 	countQuery := `SELECT COUNT(*) 
 	               FROM movement_reports r 

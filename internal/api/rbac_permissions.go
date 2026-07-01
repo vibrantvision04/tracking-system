@@ -59,7 +59,7 @@ func allPermissions() []repository.Permission {
 		{CategoryID: 6, Code: "attendance.export", Name: "Export Attendance", PermissionType: "action", DisplayOrder: 3},
 
 		// ---- Approvals (category 7) ----
-		{CategoryID: 7, Code: "approvals.view", Name: "View Approvals", PermissionType: "menu", IsMenu: true, MenuPath: "/vswm", DisplayOrder: 1},
+		{CategoryID: 7, Code: "approvals.view", Name: "View Approvals", PermissionType: "menu", IsMenu: true, MenuPath: "/swift", DisplayOrder: 1},
 		{CategoryID: 7, Code: "approvals.approve", Name: "Approve Submissions", PermissionType: "action", DisplayOrder: 2},
 		{CategoryID: 7, Code: "approvals.reject", Name: "Reject Submissions", PermissionType: "action", DisplayOrder: 3},
 		{CategoryID: 7, Code: "approvals.open_depot_cleaning", Name: "Open Depot Cleaning Reviews", PermissionType: "action", DisplayOrder: 4},
@@ -71,7 +71,7 @@ func allPermissions() []repository.Permission {
 		{CategoryID: 8, Code: "transfer_stations.delete", Name: "Delete Transfer Station", PermissionType: "action", DisplayOrder: 4},
 
 		// ---- Open Depots (category 9) ----
-		{CategoryID: 9, Code: "open_depots.view", Name: "View Open Depots", PermissionType: "menu", IsMenu: true, MenuPath: "/vswm/open-depot", DisplayOrder: 1},
+		{CategoryID: 9, Code: "open_depots.view", Name: "View Open Depots", PermissionType: "menu", IsMenu: true, MenuPath: "/swift/open-depot", DisplayOrder: 1},
 		{CategoryID: 9, Code: "open_depots.create", Name: "Create Open Depot", PermissionType: "action", DisplayOrder: 2},
 		{CategoryID: 9, Code: "open_depots.edit", Name: "Edit Open Depot", PermissionType: "action", DisplayOrder: 3},
 		{CategoryID: 9, Code: "open_depots.delete", Name: "Delete Open Depot", PermissionType: "action", DisplayOrder: 4},
@@ -114,7 +114,7 @@ func allPermissions() []repository.Permission {
 		{CategoryID: 15, Code: "system.recalculate", Name: "Recalculate Reports", PermissionType: "action", DisplayOrder: 3},
 
 		// ---- Road Sweeping (category 17) ----
-		{CategoryID: 17, Code: "sweeping.routes.view", Name: "View Sweeping Routes", PermissionType: "menu", IsMenu: true, MenuPath: "/vswm/sweeping-routes", DisplayOrder: 1},
+		{CategoryID: 17, Code: "sweeping.routes.view", Name: "View Sweeping Routes", PermissionType: "menu", IsMenu: true, MenuPath: "/swift/sweeping-routes", DisplayOrder: 1},
 		{CategoryID: 17, Code: "sweeping.routes.create", Name: "Create Sweeping Route", PermissionType: "action", DisplayOrder: 2},
 		{CategoryID: 17, Code: "sweeping.routes.edit", Name: "Edit Sweeping Route", PermissionType: "action", DisplayOrder: 3},
 		{CategoryID: 17, Code: "sweeping.routes.delete", Name: "Delete Sweeping Route", PermissionType: "action", DisplayOrder: 4},

@@ -352,7 +352,7 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN regions w ON rw.ward_id = w.id
 		LEFT JOIN shifts s ON r.shift_id = s.id
 		LEFT JOIN geofences g ON r.geometry_id = g.id
-		LEFT JOIN route_types_vswm rt ON r.route_type_id = rt.id
+		LEFT JOIN route_types_swift rt ON r.route_type_id = rt.id
 		ORDER BY r.id DESC
 	`
 
@@ -433,7 +433,7 @@ func (h *Handler) GetRouteByID(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN regions w ON rw.ward_id = w.id
 		LEFT JOIN shifts s ON r.shift_id = s.id
 		LEFT JOIN geofences g ON r.geometry_id = g.id
-		LEFT JOIN route_types_vswm rt ON r.route_type_id = rt.id
+		LEFT JOIN route_types_swift rt ON r.route_type_id = rt.id
 		WHERE r.id = $1
 	`
 

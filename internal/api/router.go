@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Vibrant Visions. All rights reserved.
+// This software and its associated documentation are the intellectual property of Vibrant Visions.
+// Unauthorized copying, distribution, or modifications of this file is strictly prohibited.
+
 package api
 
 import (
@@ -28,6 +32,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 	if len(corsOrigins) == 0 || (len(corsOrigins) == 1 && corsOrigins[0] == "") {
 		corsOrigins = []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"}
 	}
+	corsOrigins = append(corsOrigins, "http://localhost:8081", "http://localhost:19006")
 	allowedOriginsMap := make(map[string]bool, len(corsOrigins))
 	for _, o := range corsOrigins {
 		allowedOriginsMap[o] = true

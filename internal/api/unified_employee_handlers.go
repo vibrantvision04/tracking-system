@@ -170,7 +170,7 @@ func (h *Handler) CreateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 	// Derive email if not provided
 	email := req.Email
 	if email == "" {
-		email = strings.ToLower(req.EmployeeID) + "@vswm.com"
+		email = strings.ToLower(req.EmployeeID) + "@swift.com"
 	}
 
 	// Hash password
@@ -266,6 +266,14 @@ func (h *Handler) CreateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 		regionID = req.ZoneID
 	} else if len(req.WardIDs) > 0 {
 		regionID = &req.WardIDs[0]
+	}
+
+	if regionID == nil {
+		var fallbackID int
+		err = tx.QueryRow(ctx, `SELECT id FROM regions ORDER BY id ASC LIMIT 1`).Scan(&fallbackID)
+		if err == nil {
+			regionID = &fallbackID
+		}
 	}
 
 	_, err = tx.Exec(ctx, `
@@ -366,7 +374,7 @@ func (h *Handler) loadUnifiedEmployee(ctx context.Context, empID int) (*UnifiedE
 			COALESCE(edd.department_id, 0), d.name,
 			COALESCE(edd.designation_id, 0), des.name
 		FROM employees e
-		LEFT JOIN users u ON u.email = LOWER(e.employee_id) || '@vswm.com'
+		LEFT JOIN users u ON u.email = LOWER(e.employee_id) || '@swift.com'
 		LEFT JOIN user_roles ur ON ur.user_id = u.id
 		LEFT JOIN roles r ON r.id = ur.role_id
 		LEFT JOIN employee_department_designations edd ON edd.employee_id = e.id
@@ -462,7 +470,7 @@ func (h *Handler) UpdateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 	err = db.QueryRow(ctx, `
 		SELECT e.id, COALESCE(u.id, 0), COALESCE(ur.role_id, 0), COALESCE(u.email, '')
 		FROM employees e
-		LEFT JOIN users u ON u.email = LOWER(e.employee_id) || '@vswm.com'
+		LEFT JOIN users u ON u.email = LOWER(e.employee_id) || '@swift.com'
 		LEFT JOIN user_roles ur ON ur.user_id = u.id
 		WHERE e.id = $1
 	`, empID).Scan(&empID, &currentUserID, &currentRoleID, &currentEmail)
@@ -474,10 +482,10 @@ func (h *Handler) UpdateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 	// Derive email if not provided
 	email := req.Email
 	if email == "" {
-		email = strings.ToLower(req.EmployeeID) + "@vswm.com"
+		email = strings.ToLower(req.EmployeeID) + "@swift.com"
 	}
 	// Login email is always derived from employee_id (not personal email)
-	loginEmail := strings.ToLower(req.EmployeeID) + "@vswm.com"
+	loginEmail := strings.ToLower(req.EmployeeID) + "@swift.com"
 
 	// Determine isActive
 	isActive := true
@@ -580,20 +588,20 @@ func (h *Handler) UpdateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 		regionID = &req.WardIDs[0]
 	}
 
-	if regionID != nil {
-		_, err = tx.Exec(ctx, `
-			INSERT INTO employee_department_designations (employee_id, department_id, designation_id, region_id)
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (employee_id) DO UPDATE SET
-				department_id = $2, designation_id = $3, region_id = $4
-		`, empID, req.DepartmentID, req.DesignationID, *regionID)
-	} else {
-		_, err = tx.Exec(ctx, `
-			UPDATE employee_department_designations
-			SET department_id = $1, designation_id = $2
-			WHERE employee_id = $3
-		`, req.DepartmentID, req.DesignationID, empID)
+	if regionID == nil {
+		var fallbackID int
+		err = tx.QueryRow(ctx, `SELECT id FROM regions ORDER BY id ASC LIMIT 1`).Scan(&fallbackID)
+		if err == nil {
+			regionID = &fallbackID
+		}
 	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO employee_department_designations (employee_id, department_id, designation_id, region_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (employee_id) DO UPDATE SET
+			department_id = $2, designation_id = $3, region_id = $4
+	`, empID, req.DepartmentID, req.DesignationID, regionID)
 	if err != nil {
 		log.Error().Err(err).Msg("UpdateUnifiedEmployee: failed to upsert employee_department_designations")
 		RespondWithError(w, http.StatusInternalServerError, "Failed to assign department/designation")
@@ -740,7 +748,7 @@ func (h *Handler) GetUnifiedEmployees(w http.ResponseWriter, r *http.Request) {
 	// Build query with filters
 	baseQuery := `
 		FROM employees e
-		LEFT JOIN users u ON u.email = LOWER(e.employee_id) || '@vswm.com'
+		LEFT JOIN users u ON u.email = LOWER(e.employee_id) || '@swift.com'
 		LEFT JOIN user_roles ur ON ur.user_id = u.id
 		LEFT JOIN roles r ON r.id = ur.role_id
 		LEFT JOIN employee_department_designations edd ON edd.employee_id = e.id
@@ -944,7 +952,7 @@ func (h *Handler) UpdateEmployeeStatus(w http.ResponseWriter, r *http.Request) {
 	_, err = tx.Exec(ctx, `
 		UPDATE users SET is_active = $1
 		WHERE email = (
-			SELECT LOWER(employee_id) || '@vswm.com' FROM employees WHERE id = $2
+			SELECT LOWER(employee_id) || '@swift.com' FROM employees WHERE id = $2
 		)
 	`, isActive, empID)
 	if err != nil {

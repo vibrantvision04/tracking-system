@@ -68,7 +68,7 @@ func (d *Dispatcher) checkAlerts(ctx context.Context, data decoder.AVLData) {
 
 	// Constants for threshold limits
 	const overspeedLimit = 10.10      // 10.10 km/hr
-	const minStoppageDuration = 300.0 // 5 minutes (300 seconds)
+	const minStoppageDuration = 600.0 // 10 minutes (600 seconds)
 
 	wardNo := "Unknown"
 	if v.VehicleType != nil {
@@ -109,7 +109,7 @@ func (d *Dispatcher) checkAlerts(ctx context.Context, data decoder.AVLData) {
 					if alreadyLogged == 0 {
 						// Mark logged
 						d.rdb.Set(ctx, loggedKey, "1", 24*time.Hour)
-						detail := fmt.Sprintf("Stoppage of more than 5:00 Min(s) (Duration: %.1f Min)", durSec/60.0)
+						detail := fmt.Sprintf("Stoppage of more than 10:00 Min(s) (Duration: %.1f Min)", durSec/60.0)
 						d.logAlert(ctx, "Stoppage", data, v.ID, v.RegistrationNo, wardNo, driverName, detail)
 					}
 				}

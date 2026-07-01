@@ -23,8 +23,8 @@ func (h *Handler) GetRouteTypeVehicleTypes(w http.ResponseWriter, r *http.Reques
 	query := `
 		SELECT rtvt.id, rtvt.route_type_id, rt.name, rtvt.vehicle_type_id, vt.vehicle_type_name
 		FROM route_type_vehicle_types rtvt
-		JOIN route_types_vswm rt ON rtvt.route_type_id = rt.id
-		JOIN vehicle_types_vswm vt ON rtvt.vehicle_type_id = vt.id
+		JOIN route_types_swift rt ON rtvt.route_type_id = rt.id
+		JOIN vehicle_types_swift vt ON rtvt.vehicle_type_id = vt.id
 		ORDER BY rtvt.id ASC
 	`
 	rows, err := db.Query(ctx, query)

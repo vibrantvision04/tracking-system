@@ -180,7 +180,7 @@ func (r *UltimateReportRepository) getFleetMasterFallback(ctx context.Context) (
 			COALESCE(w.region_name, '') as assigned_ward,
 			v.is_active
 		FROM vehicles v
-		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN vehicle_regions vr ON v.id = vr.vehicle_id
 		LEFT JOIN regions z ON COALESCE(vr.region_id, v.zone_id) = z.id AND z.region_type_id = 2
 		LEFT JOIN LATERAL (

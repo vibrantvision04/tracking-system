@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Vibrant Visions. All rights reserved.
+// This software and its associated documentation are the intellectual property of Vibrant Visions.
+// Unauthorized copying, distribution, or modifications of this file is strictly prohibited.
+
 package main
 
 import (
@@ -43,7 +47,7 @@ func main() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	log.Info().Msg("Starting VSWM Jaipur Tracking System...")
+	log.Info().Msg("Starting SWIFT Jaipur Tracking System...")
 
 	// 3. Initialize Databases
 	db, err := repository.InitDB(cfg)

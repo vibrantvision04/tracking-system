@@ -1,7 +1,7 @@
--- VSWM Jaipur Heritage Schema Extensions
+-- SWIFT Jaipur Heritage Schema Extensions
 
 -- 1. Vehicle Types (More detailed than initial)
-CREATE TABLE IF NOT EXISTS vehicle_types_vswm (
+CREATE TABLE IF NOT EXISTS vehicle_types_swift (
     id                    SERIAL PRIMARY KEY,
     vehicle_type_name     TEXT NOT NULL,
     partitioned           BOOLEAN DEFAULT false,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS regions (
     updated_at            TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Update gps_data to include all VSWM fields
+-- 3. Update gps_data to include all SWIFT fields
 -- We'll add columns to the existing gps_data table
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS device_type TEXT;
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS hdop FLOAT;
@@ -48,7 +48,7 @@ ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS y_axis INT;
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS z_axis INT;
 ALTER TABLE gps_data ADD COLUMN IF NOT EXISTS distance_delta FLOAT DEFAULT 0;
 
--- 4. Movement Reports (Specific VSWM fields)
+-- 4. Movement Reports (Specific SWIFT fields)
 CREATE TABLE IF NOT EXISTS movement_reports (
     id                          BIGSERIAL PRIMARY KEY,
     imei                        TEXT NOT NULL,

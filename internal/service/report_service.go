@@ -220,7 +220,7 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 		_ = s.gRepo.Pool().QueryRow(ctx, `
 			SELECT v.registration_no, COALESCE(vt.vehicle_type_name, 'Vehicle'), COALESCE(d.imei, '')
 			FROM vehicles v
-			LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+			LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id
 			LEFT JOIN vehicle_gps_map m ON v.id = m.vehicle_id AND m.unassigned_at IS NULL
 			LEFT JOIN gps_devices d ON m.device_id = d.id
 			WHERE v.id = $1
@@ -470,7 +470,7 @@ func (s *ReportService) CalculateMovementReport(ctx context.Context, vehicleID i
 	_ = s.gRepo.Pool().QueryRow(ctx, `
 		SELECT v.registration_no, COALESCE(vt.vehicle_type_name, 'Vehicle')
 		FROM vehicles v
-		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id
 		WHERE v.id = $1
 	`, vehicleID).Scan(&regNo, &vType)
 

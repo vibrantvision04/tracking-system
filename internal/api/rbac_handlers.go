@@ -190,7 +190,7 @@ func (h *Handler) GetRoleEmployees(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(d.name, ''), COALESCE(des.name, '')
 		FROM users u
 		JOIN user_roles ur ON ur.user_id = u.id
-		LEFT JOIN employees e ON LOWER(e.employee_id) || '@vswm.com' = u.email
+		LEFT JOIN employees e ON LOWER(e.employee_id) || '@swift.com' = u.email
 		LEFT JOIN employee_department_designations edd ON edd.employee_id = e.id
 		LEFT JOIN departments d ON d.id = edd.department_id
 		LEFT JOIN designations des ON des.id = edd.designation_id

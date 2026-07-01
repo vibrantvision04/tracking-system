@@ -53,7 +53,7 @@ export default function VehiclesPage() {
     if (!loaded) loadAll();
 
     // Load makes from local storage
-    const cachedMakes = localStorage.getItem("vswm:vehicle-makes");
+    const cachedMakes = localStorage.getItem("swift:vehicle-makes");
     if (cachedMakes) {
       try { setMakes(JSON.parse(cachedMakes)); } catch (e) { setMakes(DEFAULT_MAKES); }
     } else {
@@ -61,7 +61,7 @@ export default function VehiclesPage() {
     }
 
     // Load capacities from local storage
-    const cachedCapacities = localStorage.getItem("vswm:vehicle-capacities");
+    const cachedCapacities = localStorage.getItem("swift:vehicle-capacities");
     if (cachedCapacities) {
       try { setCapacities(JSON.parse(cachedCapacities)); } catch (e) { setCapacities(DEFAULT_CAPACITIES); }
     } else {
@@ -69,7 +69,7 @@ export default function VehiclesPage() {
     }
 
     // Load vehicle metadata map from local storage
-    const cachedMeta = localStorage.getItem("vswm:vehicles-meta");
+    const cachedMeta = localStorage.getItem("swift:vehicles-meta");
     if (cachedMeta) {
       try { setMetaMap(JSON.parse(cachedMeta)); } catch (e) { console.error("Failed to parse vehicles metadata map", e); }
     }
@@ -145,7 +145,7 @@ export default function VehiclesPage() {
           [res.data.id]: newMeta
         };
         setMetaMap(updatedMeta);
-        localStorage.setItem("vswm:vehicles-meta", JSON.stringify(updatedMeta));
+        localStorage.setItem("swift:vehicles-meta", JSON.stringify(updatedMeta));
 
         toast.success(editingVehicle ? "Vehicle updated successfully!" : "Vehicle registered successfully!");
         closeForm();
@@ -166,7 +166,7 @@ export default function VehiclesPage() {
       const updatedMeta = { ...metaMap };
       delete updatedMeta[id];
       setMetaMap(updatedMeta);
-      localStorage.setItem("vswm:vehicles-meta", JSON.stringify(updatedMeta));
+      localStorage.setItem("swift:vehicles-meta", JSON.stringify(updatedMeta));
       
       toast.success("Vehicle deleted successfully!");
     } catch (err) {

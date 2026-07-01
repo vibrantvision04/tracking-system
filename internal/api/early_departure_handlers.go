@@ -136,7 +136,7 @@ func (h *Handler) GetEarlyDepartureReport(w http.ResponseWriter, r *http.Request
 		SELECT v.id, COALESCE(v.registration_no, ''), COALESCE(vt.vehicle_type_name, ''),
 			COALESCE(z.region_name, ''), COALESCE(w.region_name, '')
 		FROM vehicles v
-		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN regions z ON v.zone_id = z.id
 		LEFT JOIN regions w ON v.ward_id = w.id
 		WHERE v.is_active = true

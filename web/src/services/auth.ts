@@ -30,7 +30,7 @@ export async function login(email: string, password: string): Promise<{ user: Au
 
 export async function logout(): Promise<void> {
   try {
-    const token = localStorage.getItem("vswm_access_token");
+    const token = localStorage.getItem("swift_access_token");
     if (token) {
       await fetch(`${API}/api/logout`, {
         method: "POST",
@@ -48,7 +48,7 @@ export async function logout(): Promise<void> {
 }
 
 export async function refreshTokens(): Promise<boolean> {
-  const refreshToken = localStorage.getItem("vswm_refresh_token");
+  const refreshToken = localStorage.getItem("swift_refresh_token");
   if (!refreshToken) return false;
 
   try {

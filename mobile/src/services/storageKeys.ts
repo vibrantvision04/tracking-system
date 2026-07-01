@@ -10,7 +10,7 @@
  * `import { KEYS } from '../services/api'` consumers continue to work.
  */
 export const KEYS = {
-  ACCESS_TOKEN: 'iswm_access_token',
-  REFRESH_TOKEN: 'iswm_refresh_token',
-  USER_PROFILE: 'iswm_user_profile',
+  ACCESS_TOKEN: 'swift_access_token',
+  REFRESH_TOKEN: 'swift_refresh_token',
+  USER_PROFILE: 'swift_user_profile',
 } as const;

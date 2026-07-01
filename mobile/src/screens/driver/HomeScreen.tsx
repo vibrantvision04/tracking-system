@@ -63,6 +63,13 @@ const MENU_ITEMS: MenuItem[] = [
     subtitleKey: 'menu.attendance.subtitle',
     route: 'DriverAttendance',
   },
+  {
+    key: 'complaints',
+    iconName: 'flag-outline',
+    titleKey: 'menu.complaints',
+    subtitleKey: 'menu.complaints.subtitle',
+    route: 'Complaints',
+  },
 ];
 
 export default function DriverHomeScreen({ navigation }: any) {
@@ -131,13 +138,16 @@ export default function DriverHomeScreen({ navigation }: any) {
         <View style={styles.gridContainer}>
           <View style={styles.grid}>
             {MENU_ITEMS.map((item) => {
-              const isDimmed = !item.alwaysAccessible && !isPunchedIn;
-              const isHighlighted = item.key === 'punchIn';
+              const isDimmed = (item.key === 'punchIn' && isPunchedIn) || (!item.alwaysAccessible && !isPunchedIn);
+              const isHighlighted = item.key === 'punchIn' && !isPunchedIn;
 
               if (isDimmed) {
+                const restrictionText = (item.key === 'punchIn' && isPunchedIn)
+                  ? "You are already punched in for your active shift."
+                  : t('home.punchInRequired');
                 return (
                   <View key={item.key} style={styles.gridCell}>
-                    <Pressable onPress={() => setRestrictionMessage(t('home.punchInRequired'))}>
+                    <Pressable onPress={() => setRestrictionMessage(restrictionText)}>
                       <Card
                         highlighted={isHighlighted}
                         dimmed={true}
@@ -145,7 +155,9 @@ export default function DriverHomeScreen({ navigation }: any) {
                       >
                         <Ionicons name={item.iconName} size={28} color={theme.colors.primary} style={styles.cardIcon} />
                         <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
-                        <Text style={styles.cardSubtitle}>{t(item.subtitleKey)}</Text>
+                        <Text style={styles.cardSubtitle}>
+                          {item.key === 'punchIn' && isPunchedIn ? "Shift in progress" : t(item.subtitleKey)}
+                        </Text>
                       </Card>
                     </Pressable>
                   </View>

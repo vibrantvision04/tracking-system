@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Employee } from "@/app/vswm/employee-monitoring/page";
+import type { Employee } from "@/app/swift/employee-monitoring/page";
 
 interface EmployeeMapProps {
   employees: Employee[];

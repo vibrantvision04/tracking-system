@@ -1,0 +1,314 @@
+"use client";
+import React, { useState, useEffect } from 'react';
+import { api, post, del } from '@/lib/api';
+import { z } from "zod";
+
+import PageHeader from '@/components/shared/PageHeader';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import Input from '@/components/ui/Input';
+import Button from '@/components/ui/Button';
+import DeleteButton from '@/components/ui/DeleteButton';
+import Table from '@/components/shared/Table';
+
+type Shift = {
+  id: number;
+  shift_name: string;
+  start_time: string;
+  end_time: string;
+  time_duration: number;
+  report_type_id: number;
+};
+
+const shiftSchema = z.object({
+  shift_name: z.string().trim().min(1, "Shift Name is required").max(100, "Shift Name cannot exceed 100 characters"),
+  start_time: z.string().min(1, "Start Time is required"),
+  end_time: z.string().min(1, "End Time is required"),
+  time_duration: z.number().min(0.1, "Duration must be positive").max(24, "Duration cannot exceed 24 hours"),
+  report_type_id: z.number().int().min(1, "Report Type is required")
+});
+
+export default function ShiftManager() {
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [reportTypes, setReportTypes] = useState<{ id: number; name: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const [form, setForm] = useState({
+    shift_name: "",
+    start_time: "",
+    end_time: "",
+    time_duration: 8,
+    report_type_id: 1
+  });
+
+  useEffect(() => {
+    if (form.start_time && form.end_time) {
+      const [startH, startM] = form.start_time.split(":").map(Number);
+      const [endH, endM] = form.end_time.split(":").map(Number);
+      
+      if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
+        let durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+        if (durationMinutes <= 0) {
+          // Midnight crossing or 24-hour shift
+          durationMinutes += 24 * 60;
+        }
+        
+        const durationHours = Math.round((durationMinutes / 60) * 10) / 10;
+        if (durationHours > 0 && durationHours <= 24) {
+          setForm(prev => {
+            if (prev.time_duration === durationHours) return prev;
+            return { ...prev, time_duration: durationHours };
+          });
+        }
+      }
+    }
+  }, [form.start_time, form.end_time]);
+
+  const loadShifts = async () => {
+    setTableLoading(true);
+    try {
+      const res: any = await api('/api/shifts');
+      if (res.success && res.data) {
+        setShifts(res.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTableLoading(false);
+    }
+  };
+
+  const loadReportTypes = async () => {
+    try {
+      const res: any = await api('/api/report-types');
+      if (res.success && res.data) {
+        setReportTypes(res.data);
+        if (res.data.length > 0 && !form.report_type_id) {
+          setForm(prev => ({ ...prev, report_type_id: res.data[0].id }));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load report types", err);
+    }
+  };
+
+  useEffect(() => {
+    loadShifts();
+    loadReportTypes();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage("");
+    setErrors({});
+
+    const result = shiftSchema.safeParse(form);
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      result.error.issues.forEach(issue => {
+        const path = issue.path[0] as string;
+        fieldErrors[path] = issue.message;
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setLoading(true);
+
+    // Ensure seconds are included in time for postgres time format
+    let st = form.start_time;
+    let et = form.end_time;
+    if (st.split(":").length === 2) st += ":00";
+    if (et.split(":").length === 2) et += ":00";
+
+    try {
+      const res: any = await post('/api/shifts', {
+        shift_name: form.shift_name,
+        start_time: st,
+        end_time: et,
+        time_duration: Number(form.time_duration) * 60,
+        report_type_id: Number(form.report_type_id)
+      });
+      if (res.success) {
+        setMessage("Shift created successfully!");
+        setForm({ shift_name: "", start_time: "", end_time: "", time_duration: 8, report_type_id: 1 });
+        loadShifts();
+      } else {
+        setMessage(res.error || "Failed to create shift");
+      }
+    } catch (err: any) {
+      setMessage("Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      const res: any = await del(`/api/shifts/${id}`);
+      if (res.success) {
+        loadShifts();
+      } else {
+        alert(res.error || "Failed to delete shift");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  return (
+    <div className="flex-1 p-6 lg:p-8 bg-theme-base min-h-screen text-theme-text space-y-6">
+      <PageHeader
+        title="Shift Manager"
+        description="Create and manage operational schedules, timing windows, and working shifts."
+        breadcrumbs={[
+          { label: "SWIFT", href: "/swift/shift" },
+          { label: "Shift Manager" }
+        ]}
+      />
+
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Left Col - Create Form */}
+        <div className="lg:col-span-1 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Shift</CardTitle>
+              <CardDescription>Setup a clean shift configuration block with exact hour boundaries.</CardDescription>
+            </CardHeader>
+            
+            <CardContent>
+              {message && (
+                <div className={`p-3 rounded-lg mb-4 text-xs font-medium border ${
+                  message.includes("success") 
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                    : "bg-red-500/10 text-red-400 border-red-500/20"
+                }`}>
+                  {message}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                  label="Shift Name"
+                  placeholder="e.g. Morning Shift"
+                  required
+                  value={form.shift_name}
+                  onChange={e => setForm({...form, shift_name: e.target.value})}
+                  error={errors.shift_name}
+                />
+
+                <Input
+                  label="Start Time"
+                  type="time"
+                  required
+                  value={form.start_time}
+                  onChange={e => setForm({...form, start_time: e.target.value})}
+                  error={errors.start_time}
+                />
+
+                <Input
+                  label="End Time"
+                  type="time"
+                  required
+                  value={form.end_time}
+                  onChange={e => setForm({...form, end_time: e.target.value})}
+                  error={errors.end_time}
+                />
+
+ <div>
+  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+    Duration
+  </label>
+
+  <div className="flex h-[40px] items-center rounded-md border border-slate-200 bg-slate-50 px-4">
+    <span className="text-sm font-medium text-slate-900">
+      {form.time_duration} Hours
+    </span>
+  </div>
+</div>
+
+                <div className="flex flex-col space-y-1.5">
+                  <label className="text-xs font-semibold text-theme-text-dim">Report Type</label>
+                  <select
+                    className="w-full bg-theme-base border border-theme-border/60 hover:border-theme-border focus:border-theme-accent focus:ring-1 focus:ring-theme-accent rounded-lg p-2.5 text-sm outline-none transition-colors"
+                    value={form.report_type_id}
+                    onChange={e => setForm({...form, report_type_id: Number(e.target.value)})}
+                  >
+                    {reportTypes.map((rt) => (
+                      <option key={rt.id} value={rt.id}>
+                        {rt.name.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    type="submit"
+                    variant="accent"
+                    loading={loading}
+                    loadingText="Creating..."
+                    className="w-full"
+                  >
+                    Create Shift
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Col - List */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Existing Shifts</CardTitle>
+              <CardDescription>View, manage, and remove shifts. Changes update vehicles and routes immediately.</CardDescription>
+            </CardHeader>
+            
+            <CardContent className="p-0">
+              <Table
+                headers={[
+                  "S. NO.",
+                  "Name",
+                  "Report Type",
+                  "Start",
+                  "End",
+                  <div key="dur" className="text-center">Duration</div>,
+                  <div key="act" className="text-center">Action</div>
+                ]}
+                isLoading={tableLoading}
+              >
+                {shifts.map((s, idx) => (
+                  <tr key={s.id} className="hover:bg-theme-base/40 transition-colors">
+                    <td className="px-5 py-3.5 text-theme-text-dim font-mono text-center w-16">{idx + 1}</td>
+                    <td className="px-5 py-3.5 font-semibold text-theme-text">{s.shift_name}</td>
+                    <td className="px-5 py-3.5 font-medium text-xs text-theme-text-dim">
+                      {reportTypes.find(rt => rt.id === s.report_type_id)?.name.replace(/_/g, " ") || `ID: ${s.report_type_id}`}
+                    </td>
+                    <td className="px-5 py-3.5 font-medium">{s.start_time}</td>
+                    <td className="px-5 py-3.5 font-medium">{s.end_time}</td>
+                    <td className="px-5 py-3.5 text-center font-bold text-theme-accent">
+                      {(s.time_duration / 60).toFixed(1).replace(".0", "")} hr
+                    </td>
+                    <td className="px-5 py-3.5 text-center">
+                      <DeleteButton
+                        onDelete={() => handleDelete(s.id)}
+                        confirmMessage={`Are you sure you want to delete shift "${s.shift_name}"?`}
+                        className="mx-auto"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+
+      </div>
+    </div>
+  );
+}

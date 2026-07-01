@@ -78,7 +78,7 @@ describe('Feature: mobile-app-ui-redesign, Property 1: Translation Completeness'
 
 // --- Property 2: Language Persistence Round-Trip ---
 describe('Feature: mobile-app-ui-redesign, Property 2: Language Persistence Round-Trip', () => {
-  const STORAGE_KEY = 'iswm_language_preference';
+  const STORAGE_KEY = 'swift_language_preference';
 
   beforeEach(() => {
     // Clear the in-memory store before each test

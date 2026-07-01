@@ -64,7 +64,7 @@ func (h *Handler) GetAlertDetailReport(w http.ResponseWriter, r *http.Request) {
 			COALESCE(s.shift_name, 'General Shift') AS shift_name
 		FROM alerts a
 		JOIN vehicles v ON a.vehicle_id = v.id
-		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN regions w ON v.ward_id = w.id
 		LEFT JOIN regions z ON v.zone_id = z.id
 		LEFT JOIN (

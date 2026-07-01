@@ -5,6 +5,8 @@ import {
   View,
   ScrollView,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -107,7 +109,10 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.screen}
+    >
       {/* Fixed 56px header with white bg and bottom border */}
       <View style={styles.header}>
         <View style={styles.headerLeft} />
@@ -185,7 +190,7 @@ export default function LoginScreen() {
           loading={loading}
         />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

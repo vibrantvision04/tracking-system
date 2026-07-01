@@ -175,7 +175,7 @@ func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 
 	if req.LoginPassword != "" {
 		// Always derive login email from employee_id for consistent mobile login lookup
-		userEmail := strings.ToLower(req.EmployeeID) + "@vswm.com"
+		userEmail := strings.ToLower(req.EmployeeID) + "@swift.com"
 		role := req.LoginRole
 		if role == "" {
 			role = "USER"
@@ -268,7 +268,7 @@ func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.LoginPassword != "" {
-		userEmail := strings.ToLower(req.EmployeeID) + "@vswm.com"
+		userEmail := strings.ToLower(req.EmployeeID) + "@swift.com"
 		role := req.LoginRole
 		if role == "" {
 			role = "USER"

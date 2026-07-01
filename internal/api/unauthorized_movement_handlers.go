@@ -112,7 +112,7 @@ func (h *Handler) GetUnauthorizedMovementReport(w http.ResponseWriter, r *http.R
 			COALESCE(w.id, 0), COALESCE(w.region_name, 'Unknown'),
 			COALESCE(gz.polygon, '{}'::jsonb), COALESCE(gw.polygon, '{}'::jsonb)
 		FROM vehicles v
-		LEFT JOIN vehicle_types_vswm vt ON v.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_swift vt ON v.vehicle_type_id = vt.id
 		LEFT JOIN regions z ON v.zone_id = z.id
 		LEFT JOIN regions w ON v.ward_id = w.id
 		LEFT JOIN geofences gz ON z.geofence_id = gz.id

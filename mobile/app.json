@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "ISWM Field Mobile",
+    "name": "SWIFT Field Mobile",
     "slug": "swift",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.iswm.mobile",
+      "bundleIdentifier": "com.swift.mobile",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera for face recognition and photo capture.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to track field operations.",
@@ -15,7 +15,7 @@
       }
     },
     "android": {
-      "package": "com.iswm.mobile",
+      "package": "com.swift.mobile",
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",

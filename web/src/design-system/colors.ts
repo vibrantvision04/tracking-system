@@ -1,5 +1,5 @@
 /**
- * Color design tokens for VSWM UI.
+ * Color design tokens for SWIFT UI.
  *
  * Five token groups:
  *   background — page/surface/card/elevated layers

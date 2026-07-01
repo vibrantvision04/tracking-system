@@ -15,7 +15,7 @@ export default function MobileHeader() {
       case "/alerts": return "Alerts";
       case "/devices": return "GPS Devices";
       case "/vehicles": return "Vehicles";
-      default: return "VSWM Jaipur";
+      default: return "SWIFT Jaipur";
     }
   };
 

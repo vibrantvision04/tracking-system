@@ -63,11 +63,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const cachedMeta = localStorage.getItem("vswm:vehicles-meta");
+      const cachedMeta = localStorage.getItem("swift:vehicles-meta");
       if (cachedMeta) {
         try { setVehiclesMeta(JSON.parse(cachedMeta)); } catch (e) {}
       }
-      const cachedCap = localStorage.getItem("vswm:vehicle-capacities");
+      const cachedCap = localStorage.getItem("swift:vehicle-capacities");
       if (cachedCap) {
         try { setCapacities(JSON.parse(cachedCap)); } catch (e) {}
       }

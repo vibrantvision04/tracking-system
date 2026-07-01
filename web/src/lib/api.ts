@@ -5,8 +5,8 @@ if (API && !API.startsWith("http")) {
 const WS = process.env.NEXT_PUBLIC_WS_URL || API.replace(/^http/, "ws") + "/ws/track";
 
 const TOKEN_KEYS = {
-  access: "vswm_access_token",
-  refresh: "vswm_refresh_token",
+  access: "swift_access_token",
+  refresh: "swift_refresh_token",
 };
 
 export function getStoredAccessToken(): string | null {

@@ -85,11 +85,11 @@ func (h *Handler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		SELECT u.id, u.email, COALESCE(u.role, ''), COALESCE(u.password_hash, '')
 		FROM users u
 		WHERE u.email = $1
-		   OR u.email = LOWER($1) || '@vswm.com'
+		   OR u.email = LOWER($1) || '@swift.com'
 		UNION ALL
 		SELECT u.id, u.email, COALESCE(u.role, ''), COALESCE(u.password_hash, '')
 		FROM users u
-		JOIN employees e ON LOWER(u.email) = LOWER(e.employee_id) || '@vswm.com'
+		JOIN employees e ON LOWER(u.email) = LOWER(e.employee_id) || '@swift.com'
 		WHERE e.employee_id = $1 OR e.contact_no = $1
 		LIMIT 1
 	`
@@ -1729,6 +1729,11 @@ func (h *Handler) mobileAlertFeed(w http.ResponseWriter, r *http.Request) {
 
 	alerts := []map[string]interface{}{}
 
+	// Get today's start in IST timezone
+	istLoc := time.FixedZone("IST", 19800)
+	nowLocal := time.Now().In(istLoc)
+	todayStart := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, istLoc)
+
 	// --- Automatic alerts (alerts table, migration 013) -------------------
 	if len(vehicleIDs) > 0 {
 		rows, qerr := db.Query(ctx, `
@@ -1739,9 +1744,10 @@ func (h *Handler) mobileAlertFeed(w http.ResponseWriter, r *http.Request) {
 			       COALESCE(time_reported, created_at, NOW())
 			FROM alerts
 			WHERE vehicle_id = ANY($1)
+			  AND COALESCE(time_reported, created_at, NOW()) >= $2
 			ORDER BY COALESCE(time_reported, created_at, NOW()) DESC
 			LIMIT 200
-		`, vehicleIDs)
+		`, vehicleIDs, todayStart)
 		if qerr != nil {
 			RespondWithError(w, http.StatusInternalServerError, "Failed to load alerts")
 			return
@@ -1793,9 +1799,10 @@ func (h *Handler) mobileAlertFeed(w http.ResponseWriter, r *http.Request) {
 		WHERE va.source = 'manual'
 		  AND COALESCE(va.recipient_role, '') = $1
 		  AND (va.recipient_id IS NULL OR va.recipient_id = $2 OR va.recipient_id = $3)
+		  AND va.created_at >= $4
 		ORDER BY va.created_at DESC
 		LIMIT 200
-	`, scope.Role, scope.UserID, scope.EmployeeID)
+	`, scope.Role, scope.UserID, scope.EmployeeID, todayStart)
 	if qerr != nil {
 		RespondWithError(w, http.StatusInternalServerError, "Failed to load alerts")
 		return

@@ -331,7 +331,7 @@ func (h *Handler) GetVehicleSummaryReport(w http.ResponseWriter, r *http.Request
 			rv.ward_polygon,
 			rv.imei
 		FROM resolved_vehicles rv
-		LEFT JOIN vehicle_types_vswm vt ON rv.vehicle_type_id = vt.id
+		LEFT JOIN vehicle_types_swift vt ON rv.vehicle_type_id = vt.id
 		LEFT JOIN regions z ON rv.zone_id = z.id AND z.region_type_id = 2
 		LEFT JOIN regions w ON rv.ward_id = w.id AND w.region_type_id = 3
 		LEFT JOIN movement_reports mr ON rv.vehicle_id = mr.vehicle_id AND mr.report_date = $1::date

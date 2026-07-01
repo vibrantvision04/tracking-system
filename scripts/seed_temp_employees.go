@@ -38,6 +38,13 @@ func main() {
 	}
 	defer conn.Close(ctx)
 
+	var empCount int
+	err = conn.QueryRow(ctx, `SELECT COUNT(*) FROM employees`).Scan(&empCount)
+	if err == nil && empCount > 0 {
+		fmt.Printf("Database already contains %d employees. Skipping seed-temp to preserve user edits.\n", empCount)
+		return
+	}
+
 	fmt.Println("Connected. Clearing ALL existing employees and related records...")
 
 	conn.Exec(ctx, `SET session_replication_role = 'replica'`)
@@ -46,7 +53,6 @@ func main() {
 	conn.Exec(ctx, `DELETE FROM user_roles`)
 	conn.Exec(ctx, `SET session_replication_role = 'origin'`)
 
-	var empCount int
 	conn.QueryRow(ctx, `SELECT COUNT(*) FROM employees`).Scan(&empCount)
 	fmt.Printf("Remaining employees: %d (should be 0)\n", empCount)
 

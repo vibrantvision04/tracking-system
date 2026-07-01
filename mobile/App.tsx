@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import RootNavigator from './src/navigation/RootNavigator';
 import { AuthProvider } from './src/context/AuthContext';
@@ -25,10 +25,10 @@ export default function App() {
         <AuthProvider>
           <LanguageProvider>
             <OfflineProvider>
-              <View style={styles.container}>
+              <SafeAreaView style={styles.container}>
                 <OfflineBanner />
                 <RootNavigator />
-              </View>
+              </SafeAreaView>
             </OfflineProvider>
             <StatusBar style="auto" />
           </LanguageProvider>
@@ -41,5 +41,8 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'web' ? 12 : 0,
+    paddingBottom: Platform.OS === 'web' ? 32 : 0,
   },
 });

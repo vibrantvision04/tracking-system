@@ -67,7 +67,7 @@ export default function CrudDirectory({
   tableHeaders,
   children,
   totalCount,
-  footerWatermark = "VSWM JAIPUR",
+  footerWatermark = "SWIFT JAIPUR",
 }: CrudDirectoryProps) {
   // Listen for Escape key to close form
   useEffect(() => {
