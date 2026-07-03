@@ -332,7 +332,6 @@ export function buildSequentialSnappedPlaybackDetailed(
         coords.push([p.lat, p.lng]);
         roadIndices.push(-1);
       }
-    } else {
       // Bidirectional windowed search to support both outbound and return movements
       const searchStart = Math.max(0, lastMatchedIdx - LOOKAHEAD_WINDOW);
       const searchEnd = Math.min(lastMatchedIdx + LOOKAHEAD_WINDOW, roadCoords.length - 1);
@@ -344,31 +343,40 @@ export function buildSequentialSnappedPlaybackDetailed(
         }
       }
 
-      if (bestIdx !== -1 && bestDist <= corridorMeters) {
-        lastMatchedIdx = bestIdx;
-        coords.push([roadCoords[bestIdx][0], roadCoords[bestIdx][1]]);
-        roadIndices.push(bestIdx);
-      } else {
-        // Secondary search: if local window fails, search the entire route
-        // to allow re-entry anywhere on the route after long detours or gaps.
-        let secondaryBestDist = Infinity;
-        let secondaryBestIdx = -1;
-        for (let i = 0; i < roadCoords.length; i++) {
-          const d = haversineMeters(p.lat, p.lng, roadCoords[i][0], roadCoords[i][1]);
-          if (d < secondaryBestDist) {
-            secondaryBestDist = d;
-            secondaryBestIdx = i;
-          }
+      // Find the globally closest point on the route
+      let globalBestDist = Infinity;
+      let globalBestIdx = -1;
+      for (let i = 0; i < roadCoords.length; i++) {
+        const d = haversineMeters(p.lat, p.lng, roadCoords[i][0], roadCoords[i][1]);
+        if (d < globalBestDist) {
+          globalBestDist = d;
+          globalBestIdx = i;
         }
+      }
 
-        if (secondaryBestIdx !== -1 && secondaryBestDist <= corridorMeters) {
-          lastMatchedIdx = secondaryBestIdx;
-          coords.push([roadCoords[secondaryBestIdx][0], roadCoords[secondaryBestIdx][1]]);
-          roadIndices.push(secondaryBestIdx);
+      let chosenIdx = -1;
+      if (globalBestDist <= corridorMeters) {
+        if (bestIdx !== -1 && bestDist <= corridorMeters) {
+          // If the globally closest point is significantly closer than the local window match,
+          // snap to the global match (e.g. if the vehicle moved to a parallel road).
+          const diff = bestDist - globalBestDist;
+          if (diff > 15 || (bestDist > 25 && globalBestDist < 10)) {
+            chosenIdx = globalBestIdx;
+          } else {
+            chosenIdx = bestIdx;
+          }
         } else {
-          coords.push([p.lat, p.lng]);
-          roadIndices.push(-1);
+          chosenIdx = globalBestIdx;
         }
+      }
+
+      if (chosenIdx !== -1) {
+        lastMatchedIdx = chosenIdx;
+        coords.push([roadCoords[chosenIdx][0], roadCoords[chosenIdx][1]]);
+        roadIndices.push(chosenIdx);
+      } else {
+        coords.push([p.lat, p.lng]);
+        roadIndices.push(-1);
       }
     }
   }

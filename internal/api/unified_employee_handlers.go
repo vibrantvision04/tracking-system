@@ -172,6 +172,8 @@ func (h *Handler) CreateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 	if email == "" {
 		email = strings.ToLower(req.EmployeeID) + "@swift.com"
 	}
+	// Login email is always derived from employee_id (not personal email)
+	loginEmail := strings.ToLower(req.EmployeeID) + "@swift.com"
 
 	// Hash password
 	passwordHash, err := auth.HashPassword(req.Password)
@@ -240,7 +242,7 @@ func (h *Handler) CreateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 		VALUES ($1, $2, $3)
 		ON CONFLICT (email) DO UPDATE SET password_hash = $2, role = $3
 		RETURNING id
-	`, email, passwordHash, roleName).Scan(&userID)
+	`, loginEmail, passwordHash, roleName).Scan(&userID)
 	if err != nil {
 		log.Error().Err(err).Msg("CreateUnifiedEmployee: failed to upsert user")
 		RespondWithError(w, http.StatusInternalServerError, "Failed to create user account")
@@ -471,6 +473,7 @@ func (h *Handler) UpdateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 		SELECT e.id, COALESCE(u.id, 0), COALESCE(ur.role_id, 0), COALESCE(u.email, '')
 		FROM employees e
 		LEFT JOIN users u ON u.email = LOWER(e.employee_id) || '@swift.com'
+		                  OR (e.email IS NOT NULL AND e.email <> '' AND u.email = e.email)
 		LEFT JOIN user_roles ur ON ur.user_id = u.id
 		WHERE e.id = $1
 	`, empID).Scan(&empID, &currentUserID, &currentRoleID, &currentEmail)
@@ -540,44 +543,64 @@ func (h *Handler) UpdateUnifiedEmployee(w http.ResponseWriter, r *http.Request) 
 
 	// 3. UPDATE or INSERT user — skip password if blank
 	var userID int
-	if req.Password != "" {
-		// Hash new password
-		passwordHash, err := auth.HashPassword(req.Password)
-		if err != nil {
-			RespondWithError(w, http.StatusInternalServerError, "Failed to hash password")
-			return
+	if currentUserID != 0 {
+		userID = currentUserID
+		if req.Password != "" {
+			// Hash new password
+			passwordHash, err := auth.HashPassword(req.Password)
+			if err != nil {
+				RespondWithError(w, http.StatusInternalServerError, "Failed to hash password")
+				return
+			}
+			_, err = tx.Exec(ctx, `
+				UPDATE users
+				SET email = $1, password_hash = $2, role = $3
+				WHERE id = $4
+			`, loginEmail, passwordHash, roleName, currentUserID)
+		} else {
+			// Keep existing password — only update email and role
+			_, err = tx.Exec(ctx, `
+				UPDATE users
+				SET email = $1, role = $2
+				WHERE id = $3
+			`, loginEmail, roleName, currentUserID)
 		}
-		err = tx.QueryRow(ctx, `
-			INSERT INTO users (email, password_hash, role)
-			VALUES ($1, $2, $3)
-			ON CONFLICT (email) DO UPDATE SET password_hash = $2, role = $3
-			RETURNING id
-		`, loginEmail, passwordHash, roleName).Scan(&userID)
 	} else {
-		// Keep existing password — only update role
-		err = tx.QueryRow(ctx, `
-			INSERT INTO users (email, password_hash, role)
-			VALUES ($1, '', $2)
-			ON CONFLICT (email) DO UPDATE SET role = $2
-			RETURNING id
-		`, loginEmail, roleName).Scan(&userID)
+		// No existing user found - only insert if we have a password
+		if req.Password != "" {
+			passwordHash, err := auth.HashPassword(req.Password)
+			if err != nil {
+				RespondWithError(w, http.StatusInternalServerError, "Failed to hash password")
+				return
+			}
+			err = tx.QueryRow(ctx, `
+				INSERT INTO users (email, password_hash, role)
+				VALUES ($1, $2, $3)
+				ON CONFLICT (email) DO UPDATE SET password_hash = $2, role = $3
+				RETURNING id
+			`, loginEmail, passwordHash, roleName).Scan(&userID)
+		} else {
+			log.Warn().Msg("UpdateUnifiedEmployee: skipping user account creation because no password was provided")
+		}
 	}
 	if err != nil {
-		log.Error().Err(err).Msg("UpdateUnifiedEmployee: failed to upsert user")
+		log.Error().Err(err).Msg("UpdateUnifiedEmployee: failed to update/upsert user")
 		RespondWithError(w, http.StatusInternalServerError, "Failed to update user account")
 		return
 	}
 
 	// 4. UPSERT user_roles
-	_, err = tx.Exec(ctx, `
-		INSERT INTO user_roles (user_id, role_id)
-		VALUES ($1, $2)
-		ON CONFLICT (user_id) DO UPDATE SET role_id = $2
-	`, userID, req.RoleID)
-	if err != nil {
-		log.Error().Err(err).Msg("UpdateUnifiedEmployee: failed to upsert user_roles")
-		RespondWithError(w, http.StatusInternalServerError, "Failed to assign role")
-		return
+	if userID != 0 {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO user_roles (user_id, role_id)
+			VALUES ($1, $2)
+			ON CONFLICT (user_id) DO UPDATE SET role_id = $2
+		`, userID, req.RoleID)
+		if err != nil {
+			log.Error().Err(err).Msg("UpdateUnifiedEmployee: failed to upsert user_roles")
+			RespondWithError(w, http.StatusInternalServerError, "Failed to assign role")
+			return
+		}
 	}
 
 	// 5. UPSERT employee_department_designations

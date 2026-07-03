@@ -164,6 +164,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.With(h.RequirePermission("employees.create")).Post("/employee-management/employees", h.CreateUnifiedEmployee)
 			r.With(h.RequirePermission("employees.edit")).Put("/employee-management/employees/{id}", h.UpdateUnifiedEmployee)
 			r.With(h.RequirePermission("employees.edit")).Put("/employee-management/employees/{id}/status", h.UpdateEmployeeStatus)
+			r.With(h.RequirePermission("employees.delete")).Delete("/employee-management/employees/{id}", h.DeleteEmployee)
 
 			// ============== Master Consolidated Reports ==============
 			r.With(h.RequirePermission("reports.view")).Get("/master-reports/catalog", h.GetCatalog)
@@ -386,6 +387,7 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 
 			r.Get("/tracking/ward", h.MobileLiveTrackingWard)
 			r.Get("/tracking/zone", h.MobileLiveTrackingZone)
+			r.Get("/alert-recipients", h.MobileAlertRecipients)
 
 			r.Get("/complaints", h.MobileListComplaints)
 			r.Get("/complaints/{id}", h.MobileGetComplaint)

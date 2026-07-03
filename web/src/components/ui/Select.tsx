@@ -1,4 +1,5 @@
 import React, { useId, useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search, X } from 'lucide-react';
 
 interface SelectOption {
@@ -29,8 +30,41 @@ export default function Select({
   const reactId = useId();
   const generatedId = id || `select-${reactId}`;
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number; openUp: boolean }>({
+    top: 0, left: 0, width: 0, openUp: false,
+  });
+
+  useEffect(() => setMounted(true), []);
+
+  // Position the portal menu relative to the trigger (escapes ancestor overflow)
+  useEffect(() => {
+    if (!isOpen) return;
+    const update = () => {
+      const el = buttonRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const menuHeight = 300;
+      const openUp = r.bottom + menuHeight > window.innerHeight && r.top > menuHeight;
+      setMenuPos({
+        top: openUp ? r.top - 6 : r.bottom + 6,
+        left: r.left,
+        width: r.width,
+        openUp,
+      });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [isOpen]);
 
   // Convert children to options if options prop is not passed
   const parsedOptions = useMemo(() => {
@@ -61,12 +95,14 @@ export default function Select({
     return opts;
   }, [options, children]);
 
-  // Handle click outside to close the dropdown
+  // Handle click outside to close the dropdown (menu lives in a portal, so
+  // check both the trigger container and the menu itself).
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+      const t = event.target as Node;
+      if (containerRef.current && containerRef.current.contains(t)) return;
+      if (menuRef.current && menuRef.current.contains(t)) return;
+      setIsOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -121,6 +157,7 @@ export default function Select({
       <div className="relative">
         <button
           id={generatedId}
+          ref={buttonRef}
           type="button"
           disabled={disabled}
           onClick={() => setIsOpen(!isOpen)}
@@ -134,8 +171,19 @@ export default function Select({
           <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-250 ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
-        {isOpen && !disabled && (
-          <div className="absolute left-0 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col z-[1050] overflow-hidden min-w-[200px] animate-fade-in">
+        {isOpen && !disabled && mounted && createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: "fixed",
+              top: menuPos.top,
+              left: menuPos.left,
+              width: menuPos.width,
+              zIndex: 10050,
+              transform: menuPos.openUp ? "translateY(-100%)" : undefined,
+            }}
+            className="bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col overflow-hidden min-w-[200px] animate-fade-in"
+          >
             {/* Search Input Area */}
             <div className="p-2 border-b border-slate-100 shrink-0 flex items-center gap-2 bg-slate-50">
               <Search className="h-3.5 w-3.5 text-slate-400 ml-1" />
@@ -182,7 +230,8 @@ export default function Select({
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 

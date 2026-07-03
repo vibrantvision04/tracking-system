@@ -414,7 +414,7 @@ func TestProperty3_ValidationRejectsInvalidPayloads(t *testing.T) {
 		}
 
 		// 4. Verify no user record was created
-		derivedEmail := fmt.Sprintf("prop3_emp_%d@vswm.com", suffix)
+		derivedEmail := fmt.Sprintf("prop3_emp_%d@swift.com", suffix)
 		var userCount int
 		err = pool.QueryRow(ctx,
 			`SELECT COUNT(*) FROM users WHERE email = $1`, derivedEmail,

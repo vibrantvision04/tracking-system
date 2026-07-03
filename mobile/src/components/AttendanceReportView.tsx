@@ -16,6 +16,7 @@ import type {
   ApiError,
 } from '../types';
 import StatusBadge from './StatusBadge';
+import DatePicker from './ui/DatePicker';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300; // Req 12.2
@@ -56,7 +57,7 @@ export default function AttendanceReportView() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<AttendanceStatus | 'all'>('all');
-  const [dateInput, setDateInput] = useState('');
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [page, setPage] = useState(1);
 
   // Debounce the search term so a burst of keystrokes issues at most one
@@ -68,13 +69,18 @@ export default function AttendanceReportView() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  const validDate = DATE_PATTERN.test(dateInput.trim()) ? dateInput.trim() : undefined;
+  const formattedDate = useMemo(() => {
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, [selectedDate]);
 
   // Reset to the first page whenever any filter changes so pagination stays
   // consistent with the active filter set (Req 6.5).
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, validDate]);
+  }, [debouncedSearch, statusFilter, formattedDate]);
 
   const params = useMemo(
     () => ({
@@ -82,9 +88,9 @@ export default function AttendanceReportView() {
       page_size: PAGE_SIZE,
       search: debouncedSearch || undefined,
       status: statusFilter === 'all' ? undefined : statusFilter,
-      date: validDate,
+      date: formattedDate,
     }),
-    [page, debouncedSearch, statusFilter, validDate]
+    [page, debouncedSearch, statusFilter, formattedDate]
   );
 
   const { data, isLoading, isError, error, refetch, isFetching } =
@@ -195,23 +201,12 @@ export default function AttendanceReportView() {
       </View>
 
       {/* Date filter */}
-      <View style={styles.dateRow}>
-        <Ionicons name="calendar-outline" size={18} color="#757575" />
-        <TextInput
-          style={styles.dateInput}
-          placeholder="Filter by date (YYYY-MM-DD)"
-          placeholderTextColor="#9e9e9e"
-          value={dateInput}
-          onChangeText={setDateInput}
-          autoCorrect={false}
-          autoCapitalize="none"
-          keyboardType="numbers-and-punctuation"
+      <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+        <DatePicker
+          value={selectedDate}
+          onChange={setSelectedDate}
+          label="Filter by Date"
         />
-        {dateInput.length > 0 && (
-          <TouchableOpacity onPress={() => setDateInput('')}>
-            <Ionicons name="close-circle" size={18} color="#9e9e9e" />
-          </TouchableOpacity>
-        )}
       </View>
 
       <FlatList

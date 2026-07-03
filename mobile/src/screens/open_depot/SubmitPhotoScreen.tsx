@@ -152,6 +152,7 @@ export default function SubmitPhotoScreen({ navigation }: any) {
       <CameraCapture
         facing="back"
         title="Open Depot Photo"
+        requireFace={false}
         onCapture={handlePhotoCaptured}
         onCancel={() => navigation?.navigate('OpenDepotHome')}
       />

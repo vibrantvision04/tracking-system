@@ -1,5 +1,5 @@
--- 066_rename_vswm_tables_to_swift.sql
--- Rename the tables to match the Swift branding
+-- Migration 069: Rename VSWM Tables to Swift Correctly
+-- Corrects the legacy find-and-replace issue from migration 066.
 
 DO $$
 BEGIN

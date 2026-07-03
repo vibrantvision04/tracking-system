@@ -145,7 +145,7 @@ func TestProperty1_AtomicCreationRoundTrip(t *testing.T) {
 
 		// Pre-cleanup: remove any leftover records from prior failed runs
 		ctx := context.Background()
-		derivedEmail := strings.ToLower(employeeID) + "@vswm.com"
+		derivedEmail := strings.ToLower(employeeID) + "@swift.com"
 		pool.Exec(ctx, `DELETE FROM employee_scopes WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 		pool.Exec(ctx, `DELETE FROM employee_department_designations WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 		pool.Exec(ctx, `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email = $1)`, derivedEmail)
@@ -260,8 +260,8 @@ func TestProperty1_AtomicCreationRoundTrip(t *testing.T) {
 			rt.Fatalf("DesignationID mismatch: got %d, want %d", got.DesignationID, prereq.DesignationID)
 		}
 
-		// Verify user email derivation (employee_id@vswm.com)
-		expectedEmail := fmt.Sprintf("%s@vswm.com", strings.ToLower(employeeID))
+		// Verify user email derivation (employee_id@swift.com)
+		expectedEmail := fmt.Sprintf("%s@swift.com", strings.ToLower(employeeID))
 		if got.UserEmail != expectedEmail {
 			rt.Fatalf("UserEmail mismatch: got %q, want %q", got.UserEmail, expectedEmail)
 		}
@@ -368,7 +368,7 @@ func TestProperty13_DriverRoleChangeRemovesVehicleAssignment(t *testing.T) {
 		employeeID := fmt.Sprintf("P13_%d", suffix)
 		contactNo := fmt.Sprintf("7%09d", suffix)
 		password := fmt.Sprintf("Pass_%d!", suffix)
-		derivedEmail := strings.ToLower(employeeID) + "@vswm.com"
+		derivedEmail := strings.ToLower(employeeID) + "@swift.com"
 
 		// Pick a random non-Driver role to change to
 		targetRoleIdx := rapid.IntRange(0, len(nonDriverRoles)-1).Draw(rt, "target_role_idx")
@@ -574,7 +574,7 @@ func TestProperty11_DepartmentFilterReturnsOnlyMatchingEmployees(t *testing.T) {
 				contactNo := fmt.Sprintf("7%04d%05d", iterSuffix%10000, empCounter)
 
 				// Pre-cleanup
-				derivedEmail := strings.ToLower(employeeID) + "@vswm.com"
+				derivedEmail := strings.ToLower(employeeID) + "@swift.com"
 				pool.Exec(ctx, `DELETE FROM employee_scopes WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 				pool.Exec(ctx, `DELETE FROM employee_department_designations WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 				pool.Exec(ctx, `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email = $1)`, derivedEmail)
@@ -727,7 +727,7 @@ func TestProperty15_DeactivationExcludesFromActiveLists(t *testing.T) {
 
 		// Pre-cleanup
 		ctx := context.Background()
-		derivedEmail := strings.ToLower(employeeID) + "@vswm.com"
+		derivedEmail := strings.ToLower(employeeID) + "@swift.com"
 		pool.Exec(ctx, `DELETE FROM employee_scopes WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 		pool.Exec(ctx, `DELETE FROM employee_department_designations WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 		pool.Exec(ctx, `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email = $1)`, derivedEmail)
@@ -874,7 +874,7 @@ func TestProperty16_ReactivationRestoresAccess(t *testing.T) {
 
 		// Pre-cleanup
 		ctx := context.Background()
-		derivedEmail := strings.ToLower(employeeID) + "@vswm.com"
+		derivedEmail := strings.ToLower(employeeID) + "@swift.com"
 		pool.Exec(ctx, `DELETE FROM employee_scopes WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 		pool.Exec(ctx, `DELETE FROM employee_department_designations WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)
 		pool.Exec(ctx, `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email = $1)`, derivedEmail)
@@ -1050,7 +1050,7 @@ func TestProperty4_AtomicUpdatePreservesUnchangedFields(t *testing.T) {
 		}
 
 		// Derive email
-		derivedEmail := strings.ToLower(employeeID) + "@vswm.com"
+		derivedEmail := strings.ToLower(employeeID) + "@swift.com"
 
 		// Pre-cleanup: remove any leftover records from prior failed runs
 		pool.Exec(ctx, `DELETE FROM employee_scopes WHERE employee_id IN (SELECT id FROM employees WHERE employee_id = $1)`, employeeID)

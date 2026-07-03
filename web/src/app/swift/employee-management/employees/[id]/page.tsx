@@ -28,7 +28,8 @@ interface Designation {
 
 interface Region {
   id: number;
-  name: string;
+  region_name: string;
+  region_type_id: number;
 }
 
 interface FieldErrors {
@@ -111,8 +112,8 @@ export default function EmployeeFormPage() {
         if (rolesRes.success) setRoles(rolesRes.data || []);
         if (deptsRes.success) setDepartments(deptsRes.data || []);
         if (desigsRes.success) setDesignations(desigsRes.data || []);
-        if (zonesRes.success) setZones(zonesRes.data || []);
-        if (wardsRes.success) setWards(wardsRes.data || []);
+        if (zonesRes.success) setZones((zonesRes.data || []).filter((r) => r.region_type_id === 2));
+        if (wardsRes.success) setWards((wardsRes.data || []).filter((r) => r.region_type_id === 3));
       } catch {
         toast.error("Failed to load form data");
       }
@@ -500,7 +501,7 @@ export default function EmployeeFormPage() {
                         <option value="">Select a zone</option>
                         {zones.map((zone) => (
                           <option key={zone.id} value={zone.id}>
-                            {zone.name}
+                            {zone.region_name}
                           </option>
                         ))}
                       </select>
@@ -526,7 +527,7 @@ export default function EmployeeFormPage() {
                             onChange={() => handleWardToggle(ward.id)}
                             className="rounded border-theme-border text-emerald-500 focus:ring-emerald-500/30"
                           />
-                          <span className="text-theme-text text-xs">{ward.name}</span>
+                          <span className="text-theme-text text-xs">{ward.region_name}</span>
                         </label>
                       ))}
                     </div>

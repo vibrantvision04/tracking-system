@@ -326,6 +326,9 @@ export default function SweepingRoutesPage() {
                     setDistance={dist => setForm(prev => ({ ...prev, distance: dist }))}
                     geojsonText={form.polyline}
                     setGeojsonText={txt => handleGeoJSONPaste(txt)}
+                    maxPoints={2}
+                    pointARadius={Number(form.point_a_radius_m) || 20}
+                    pointBRadius={Number(form.point_b_radius_m) || 20}
                   />
                 </div>
               </form>

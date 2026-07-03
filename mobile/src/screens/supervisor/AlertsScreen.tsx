@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  FlatList,
   Pressable,
   Modal,
   RefreshControl,
@@ -16,16 +15,9 @@ import { useQuery } from '@tanstack/react-query';
 import { theme } from '../../theme/theme';
 import { Header } from '../../components/ui/Header';
 import { useTranslation } from '../../i18n/useTranslation';
-import { api, BASE_URL } from '../../services/api';
+import { api } from '../../services/api';
+import SearchableSelect, { SelectOption } from '../../components/SearchableSelect';
 import { Alert as AlertType } from '../../types';
-import axios from 'axios';
-
-interface Employee {
-  id: number;
-  first_name: string;
-  last_name: string;
-  employee_id: string;
-}
 
 function getSeverityColor(alert: AlertType): string {
   if (alert.severity === 'major') {
@@ -59,25 +51,37 @@ export default function SupervisorAlertsScreen({ navigation }: any) {
   });
 
   const [selectedAlert, setSelectedAlert] = useState<AlertType | null>(null);
-  const [drivers, setDrivers] = useState<Employee[]>([]);
-  const [selectedDriver, setSelectedDriver] = useState<Employee | null>(null);
-  const [driverSearch, setDriverSearch] = useState('');
-  const [showDriverDropdown, setShowDriverDropdown] = useState(false);
+  const [driverOptions, setDriverOptions] = useState<SelectOption[]>([]);
+  const [roleById, setRoleById] = useState<Record<string, string>>({});
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [customMessage, setCustomMessage] = useState('');
   const [sendingAlert, setSendingAlert] = useState(false);
 
   useEffect(() => {
-    async function fetchDrivers() {
+    async function fetchRecipients() {
       try {
-        const res = await axios.get(`${BASE_URL}/api/employees`);
-        if (res.data && res.data.data) {
-          setDrivers(res.data.data);
-        }
+        // Single mobile endpoint: returns only Driver / Road Sweeper employees,
+        // each with their vehicle number + role, properly authed + scoped server-side.
+        const res = (await api.get('/alert-recipients')) as unknown as {
+          recipients: { id: number; name: string; employee_id: string; vehicle_number: string; role: string }[];
+        };
+        const recipients = res?.recipients || [];
+        const options: SelectOption[] = [];
+        const roles: Record<string, string> = {};
+        recipients.forEach((rc) => {
+          const sub = rc.vehicle_number
+            ? `${rc.employee_id} • ${rc.vehicle_number}`
+            : rc.employee_id;
+          options.push({ value: String(rc.id), label: rc.name, sublabel: sub });
+          roles[String(rc.id)] = rc.role || 'driver';
+        });
+        setDriverOptions(options);
+        setRoleById(roles);
       } catch (err) {
-        console.warn('Failed to load drivers for custom alert:', err);
+        console.warn('Failed to load alert recipients:', err);
       }
     }
-    fetchDrivers();
+    fetchRecipients();
   }, []);
 
   const handleAcknowledge = async (id: string) => {
@@ -87,12 +91,12 @@ export default function SupervisorAlertsScreen({ navigation }: any) {
       setSelectedAlert(null);
       refetch();
     } catch (err: any) {
-      Alert.alert(t('common.error'), t('alerts.acknowledgeError'));
+      Alert.alert(t('common.error'), err?.message || t('alerts.acknowledgeError'));
     }
   };
 
   const handleSendCustomAlert = async () => {
-    if (!selectedDriver) {
+    if (!selectedDriverId) {
       Alert.alert(t('common.error'), t('alerts.driverRequired'));
       return;
     }
@@ -104,32 +108,21 @@ export default function SupervisorAlertsScreen({ navigation }: any) {
     setSendingAlert(true);
     try {
       await api.post('/alerts/custom', {
-        driver_id: selectedDriver.id.toString(),
+        recipient_role: roleById[selectedDriverId] || 'driver',
+        recipient_ids: [Number(selectedDriverId)],
         message: customMessage.trim(),
-        ward_id: '1',
+        severity: 'minor',
       });
 
       Alert.alert(t('alerts.sendSuccess'));
       setCustomMessage('');
-      setSelectedDriver(null);
-      setDriverSearch('');
+      setSelectedDriverId(null);
     } catch (err: any) {
-      Alert.alert(t('common.error'), t('alerts.sendError'));
+      const displayMsg = err?.message || t('alerts.sendError');
+      Alert.alert(t('common.error'), displayMsg);
     } finally {
       setSendingAlert(false);
     }
-  };
-
-  const filteredDrivers = drivers.filter(d =>
-    `${d.first_name} ${d.last_name} ${d.employee_id}`
-      .toLowerCase()
-      .includes(driverSearch.toLowerCase())
-  );
-
-  const handleSelectDriver = (driver: Employee) => {
-    setSelectedDriver(driver);
-    setDriverSearch(`${driver.first_name} ${driver.last_name}`);
-    setShowDriverDropdown(false);
   };
 
   if (isLoading) {
@@ -176,40 +169,14 @@ export default function SupervisorAlertsScreen({ navigation }: any) {
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>{t('alerts.selectDriver')}</Text>
-            <TextInput
-              style={styles.input}
+            <SearchableSelect
+              options={driverOptions}
+              value={selectedDriverId}
+              onSelect={setSelectedDriverId}
               placeholder={t('alerts.driverPlaceholder')}
-              placeholderTextColor={theme.colors.textDim}
-              value={driverSearch}
-              onChangeText={(text) => {
-                setDriverSearch(text);
-                setShowDriverDropdown(true);
-                if (selectedDriver) setSelectedDriver(null);
-              }}
-              onFocus={() => setShowDriverDropdown(true)}
+              searchPlaceholder="Search by name or vehicle no."
               accessibilityLabel={t('alerts.selectDriver')}
             />
-            {showDriverDropdown && driverSearch.length > 0 && (
-              <View style={styles.dropdown}>
-                <FlatList
-                  data={filteredDrivers.slice(0, 5)}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => (
-                    <Pressable
-                      style={styles.dropdownItem}
-                      onPress={() => handleSelectDriver(item)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${item.first_name} ${item.last_name}`}
-                    >
-                      <Text style={styles.dropdownText}>
-                        {item.first_name} {item.last_name} ({item.employee_id})
-                      </Text>
-                    </Pressable>
-                  )}
-                  keyboardShouldPersistTaps="handled"
-                />
-              </View>
-            )}
           </View>
 
           <View style={styles.inputContainer}>

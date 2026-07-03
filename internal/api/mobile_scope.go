@@ -43,7 +43,7 @@ func (h *Handler) resolveScope(ctx context.Context, claims *auth.Claims) (RoleSc
 	}
 
 	scope := RoleScope{
-		Role:   claims.Role,
+		Role:   strings.ToLower(claims.Role),
 		UserID: claims.UserID,
 	}
 

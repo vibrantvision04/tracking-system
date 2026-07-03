@@ -37,7 +37,7 @@ export default function SweeperBeforeImageScreen({ navigation }: any) {
   };
 
   if (showCamera) {
-    return <CameraCapture facing="back" title={t('sweeping.beforeInstruction')} onCapture={handlePhoto} onCancel={() => setShowCamera(false)} />;
+    return <CameraCapture facing="back" requireFace={false} title={t('sweeping.beforeInstruction')} onCapture={handlePhoto} onCancel={() => setShowCamera(false)} />;
   }
 
   return (

@@ -80,8 +80,8 @@ func seedTestRoute(t *testing.T, pool *pgxpool.Pool, polygon *string, color stri
 	// Insert a route row referencing that geofence
 	var routeID int
 	err = pool.QueryRow(ctx, `
-		INSERT INTO routes (route_name, is_sequential, corridor_meters, route_direction, seq_lookahead, geometry_id, is_active, created_at)
-		VALUES ('Test Route', false, 50.0, 'both', 5, $1, true, $2)
+		INSERT INTO routes (route_name, is_sequential, geometry_id, is_active, created_at)
+		VALUES ('Test Route', false, $1, true, $2)
 		RETURNING id
 	`, geofenceID, time.Now()).Scan(&routeID)
 	if err != nil {
@@ -247,18 +247,6 @@ func TestGetRoutePlaybackGeometry_ValidRoute(t *testing.T) {
 	}
 	// is_sequential: bool (zero value false is valid)
 	_ = d.IsSequential
-	// corridor_meters: float64 > 0 (default 50)
-	if d.CorridorMeters <= 0 {
-		t.Errorf("corridor_meters: expected > 0, got %f", d.CorridorMeters)
-	}
-	// route_direction: non-empty string
-	if d.RouteDirection == "" {
-		t.Errorf("route_direction: expected non-empty string")
-	}
-	// seq_lookahead: int >= 0
-	if d.SeqLookahead < 0 {
-		t.Errorf("seq_lookahead: expected >= 0, got %d", d.SeqLookahead)
-	}
 	// geojson: string (may be empty, but field must be present — checked via JSON decode)
 	// color: string
 	_ = d.Color
@@ -280,7 +268,6 @@ func TestGetRoutePlaybackGeometry_ValidRoute(t *testing.T) {
 	}
 	requiredFields := []string{
 		"route_id", "route_name", "is_sequential",
-		"corridor_meters", "route_direction", "seq_lookahead",
 		"geojson", "color", "checkpoints",
 	}
 	for _, field := range requiredFields {

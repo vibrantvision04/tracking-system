@@ -94,6 +94,8 @@ export default function EmployeeMonitoringPage() {
   const filteredEmployees = useMemo(() => {
     if (roleFilter === "all") return employees;
     if (roleFilter === "sweepers") return employees.filter((e) => e.designation?.toLowerCase().includes("sweep"));
+    if (roleFilter === "supervisor") return employees.filter((e) => e.designation?.toLowerCase().includes("superv"));
+    if (roleFilter === "zone_manager") return employees.filter((e) => e.designation?.toLowerCase().includes("zone"));
     return employees;
   }, [employees, roleFilter]);
 
@@ -132,6 +134,8 @@ export default function EmployeeMonitoringPage() {
         </div>
         <div className="flex items-center gap-2 bg-white rounded-lg border p-1 shrink-0">
           <button onClick={() => setRoleFilter("all")} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${roleFilter === "all" ? "bg-emerald-500 text-white" : "text-gray-600 hover:bg-gray-100"}`}>All</button>
+          <button onClick={() => setRoleFilter("zone_manager")} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${roleFilter === "zone_manager" ? "bg-emerald-500 text-white" : "text-gray-600 hover:bg-gray-100"}`}>💼 Zone Managers</button>
+          <button onClick={() => setRoleFilter("supervisor")} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${roleFilter === "supervisor" ? "bg-emerald-500 text-white" : "text-gray-600 hover:bg-gray-100"}`}>👔 Supervisors</button>
           <button onClick={() => setRoleFilter("sweepers")} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${roleFilter === "sweepers" ? "bg-emerald-500 text-white" : "text-gray-600 hover:bg-gray-100"}`}>🧹 Sweepers</button>
         </div>
       </div>

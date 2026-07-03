@@ -23,7 +23,6 @@ export default function SweepingAssignmentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
-  const [wards, setWards] = useState<any[]>([]);
   const [form, setForm] = useState({ employee_id: "", route_id: "", ward_id: "", valid_from: new Date().toISOString().split("T")[0], valid_to: "" });
 
   const loadAssignments = useCallback(async () => {
@@ -34,15 +33,33 @@ export default function SweepingAssignmentsPage() {
 
   useEffect(() => {
     loadAssignments();
-    get<any>("/api/employees?all=true").then((r) => setEmployees(r.data?.data || r.data || [])).catch(() => {});
+    // Employee dropdown must list only Road Sweepers. Employees don't carry
+    // their designation on /api/employees, so cross-reference the
+    // employee-department-designations mapping and keep only sweepers.
+    Promise.all([
+      get<any>("/api/employees?all=true").then((r) => r.data?.data || r.data || []).catch(() => []),
+      get<any>("/api/employee-department-designations").then((r) => r.data?.data || r.data || []).catch(() => []),
+    ]).then(([emps, edds]) => {
+      const sweeperIds = new Set(
+        (edds as any[])
+          .filter((m) => (m.designation_name || "").toLowerCase().includes("sweep"))
+          .map((m) => m.employee_id)
+      );
+      setEmployees((emps as any[]).filter((e) => sweeperIds.has(e.id)));
+    });
     get<any>("/api/sweeping/routes").then((r) => setRoutes(r.data?.data || r.data || [])).catch(() => {});
-    get<any>("/api/wards").then((r) => setWards(r?.data?.data || r?.data || r || [])).catch(() => {});
   }, [loadAssignments]);
 
+  // Ward is derived from the selected route (each route already carries its ward).
+  const selectedRoute = routes.find((r: any) => String(r.id) === form.route_id);
+  const selectedWardName = selectedRoute?.ward_name || "";
+
   const handleSubmit = async () => {
-    if (!form.employee_id || !form.route_id || !form.ward_id) { toast.error("All fields required"); return; }
+    if (!form.employee_id || !form.route_id) { toast.error("Employee and route are required"); return; }
+    const wardId = selectedRoute?.ward_id;
+    if (!wardId) { toast.error("Selected route has no ward assigned"); return; }
     try {
-      await post("/api/sweeping/assignments", { employee_id: parseInt(form.employee_id), route_id: parseInt(form.route_id), ward_id: parseInt(form.ward_id), valid_from: form.valid_from, valid_to: form.valid_to || undefined });
+      await post("/api/sweeping/assignments", { employee_id: parseInt(form.employee_id), route_id: parseInt(form.route_id), ward_id: Number(wardId), valid_from: form.valid_from, valid_to: form.valid_to || undefined });
       toast.success("Assignment created"); setShowForm(false); setForm({ ...form, employee_id: "", route_id: "", ward_id: "" }); loadAssignments();
     } catch (e: any) { toast.error(e.message); }
   };
@@ -64,8 +81,12 @@ export default function SweepingAssignmentsPage() {
               options={employees.map((e: any) => ({ label: `${e.first_name || ""} ${e.last_name || ""} (${e.employee_id})`, value: String(e.id) }))} />
             <Select label="Route" value={form.route_id} onChange={(e: any) => setForm({ ...form, route_id: e.target.value })}
               options={routes.map((r: any) => ({ label: `${r.name} (${r.route_code})`, value: String(r.id) }))} />
-            <Select label="Ward" value={form.ward_id} onChange={(e: any) => setForm({ ...form, ward_id: e.target.value })}
-              options={wards.map((w: any) => ({ label: w.region_name || `Ward #${w.id}`, value: String(w.id) }))} />
+            <div className="space-y-1.5 w-full">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1 leading-none select-none">Ward (from route)</label>
+              <div className="w-full min-h-[38px] bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-sm text-theme-text flex items-center">
+                {selectedWardName || <span className="text-slate-400">Auto-set from selected route</span>}
+              </div>
+            </div>
             <Input label="Valid From" type="date" value={form.valid_from} onChange={(e: any) => setForm({ ...form, valid_from: e.target.value })} />
             <Input label="Valid To (optional)" type="date" value={form.valid_to} onChange={(e: any) => setForm({ ...form, valid_to: e.target.value })} />
             <div className="flex gap-2 items-end">

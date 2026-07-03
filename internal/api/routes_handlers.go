@@ -32,9 +32,6 @@ type RouteResponse struct {
 	Color              string          `json:"color"`
 	UpdatedAt          time.Time       `json:"updated_at"`
 	IsSequential       bool            `json:"is_sequential"`
-	CorridorMeters     float64         `json:"corridor_meters"`
-	RouteDirection     string          `json:"route_direction"`
-	SeqLookahead                int             `json:"seq_lookahead"`
 	AggressiveSnapping          bool            `json:"aggressive_snapping"`
 	AiReconstructionEnabled     bool            `json:"ai_reconstruction_enabled"`
 	AiCoverageRecoveryEnabled   bool            `json:"ai_coverage_recovery_enabled"`
@@ -53,9 +50,6 @@ type CreateRouteRequest struct {
 	Color              string          `json:"color"`
 	Lanes          json.RawMessage `json:"lanes"`
 	IsSequential       *bool           `json:"is_sequential"`
-	CorridorMeters     *float64        `json:"corridor_meters"`
-	RouteDirection     string          `json:"route_direction"`
-	SeqLookahead                *int            `json:"seq_lookahead"`
 	AggressiveSnapping          *bool           `json:"aggressive_snapping"`
 	AiReconstructionEnabled     *bool           `json:"ai_reconstruction_enabled"`
 	AiCoverageRecoveryEnabled   *bool           `json:"ai_coverage_recovery_enabled"`
@@ -339,9 +333,6 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 			COALESCE(g.color, ''),
 			COALESCE(rt.name, 'D2D'),
 			COALESCE(r.is_sequential, false),
-			COALESCE(r.corridor_meters, 50.0),
-			COALESCE(r.route_direction, 'both'),
-			COALESCE(r.seq_lookahead, 5),
 			COALESCE(r.aggressive_snapping, false),
 			COALESCE(r.ai_reconstruction_enabled, false),
 			COALESCE(r.ai_coverage_recovery_enabled, false),
@@ -371,7 +362,7 @@ func (h *Handler) GetRoutes(w http.ResponseWriter, r *http.Request) {
 			&r.ID, &r.RouteName, &r.Identification, &r.Distance, &r.RouteTypeID,
 			&r.GeometryID, &r.WardID, &r.ShiftID, &lanes, &r.IsActive, &r.UpdatedAt,
 			&r.WardName, &r.ShiftName, &r.GeoJSON, &r.Color, &r.RouteTypeName,
-			&r.IsSequential, &r.CorridorMeters, &r.RouteDirection, &r.SeqLookahead, &r.AggressiveSnapping,
+			&r.IsSequential, &r.AggressiveSnapping,
 			&r.AiReconstructionEnabled, &r.AiCoverageRecoveryEnabled, &r.AiPlaybackCorrectionEnabled, &r.GpsQualityMode,
 		); err == nil {
 			if len(lanes) > 0 {
@@ -420,9 +411,6 @@ func (h *Handler) GetRouteByID(w http.ResponseWriter, r *http.Request) {
 			COALESCE(g.color, ''),
 			COALESCE(rt.name, 'D2D'),
 			COALESCE(r.is_sequential, false),
-			COALESCE(r.corridor_meters, 50.0),
-			COALESCE(r.route_direction, 'both'),
-			COALESCE(r.seq_lookahead, 5),
 			COALESCE(r.aggressive_snapping, false),
 			COALESCE(r.ai_reconstruction_enabled, false),
 			COALESCE(r.ai_coverage_recovery_enabled, false),
@@ -445,7 +433,7 @@ func (h *Handler) GetRouteByID(w http.ResponseWriter, r *http.Request) {
 		&route.ID, &route.RouteName, &route.Identification, &route.Distance, &route.RouteTypeID,
 		&route.GeometryID, &route.WardID, &route.ShiftID, &lanes, &route.IsActive, &updatedAt,
 		&route.WardName, &route.ShiftName, &route.GeoJSON, &color, &route.RouteTypeName,
-		&route.IsSequential, &route.CorridorMeters, &route.RouteDirection, &route.SeqLookahead, &route.AggressiveSnapping,
+		&route.IsSequential, &route.AggressiveSnapping,
 		&route.AiReconstructionEnabled, &route.AiCoverageRecoveryEnabled, &route.AiPlaybackCorrectionEnabled, &route.GpsQualityMode,
 	)
 	if err != nil {
@@ -500,18 +488,6 @@ func (h *Handler) CreateRoute(w http.ResponseWriter, r *http.Request) {
 	if req.IsSequential != nil {
 		isSeq = *req.IsSequential
 	}
-	corridor := 50.0
-	if req.CorridorMeters != nil {
-		corridor = *req.CorridorMeters
-	}
-	routeDir := "both"
-	if req.RouteDirection != "" {
-		routeDir = req.RouteDirection
-	}
-	lookahead := 5
-	if req.SeqLookahead != nil {
-		lookahead = *req.SeqLookahead
-	}
 	aggSnap := false
 	if req.AggressiveSnapping != nil {
 		aggSnap = *req.AggressiveSnapping
@@ -535,10 +511,10 @@ func (h *Handler) CreateRoute(w http.ResponseWriter, r *http.Request) {
 
 	var routeID int
 	err := h.gpsRepo.Pool().QueryRow(ctx, `
-		INSERT INTO routes (route_name, identification, distance, route_type_id, geometry_id, shift_id, lanes, is_active, is_sequential, corridor_meters, route_direction, seq_lookahead, aggressive_snapping, ai_reconstruction_enabled, ai_coverage_recovery_enabled, ai_playback_correction_enabled, gps_quality_mode)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		INSERT INTO routes (route_name, identification, distance, route_type_id, geometry_id, shift_id, lanes, is_active, is_sequential, aggressive_snapping, ai_reconstruction_enabled, ai_coverage_recovery_enabled, ai_playback_correction_enabled, gps_quality_mode)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true, $8, $9, $10, $11, $12, $13)
 		RETURNING id
-	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, isSeq, corridor, routeDir, lookahead, aggSnap, aiRecon, aiCov, aiPlay, gpsQuality).Scan(&routeID)
+	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, isSeq, aggSnap, aiRecon, aiCov, aiPlay, gpsQuality).Scan(&routeID)
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create route: " + err.Error()})
@@ -625,18 +601,6 @@ func (h *Handler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 	if req.IsSequential != nil {
 		isSeq = *req.IsSequential
 	}
-	corridor := 50.0
-	if req.CorridorMeters != nil {
-		corridor = *req.CorridorMeters
-	}
-	routeDir := "both"
-	if req.RouteDirection != "" {
-		routeDir = req.RouteDirection
-	}
-	lookahead := 5
-	if req.SeqLookahead != nil {
-		lookahead = *req.SeqLookahead
-	}
 	aggSnap := false
 	if req.AggressiveSnapping != nil {
 		aggSnap = *req.AggressiveSnapping
@@ -664,14 +628,14 @@ func (h *Handler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 		SET route_name = $1, identification = $2, distance = $3, 
 		    route_type_id = $4, geometry_id = $5, 
 		    shift_id = $6, lanes = $7::jsonb,
-		    is_sequential = $9, corridor_meters = $10, route_direction = $11, seq_lookahead = $12,
-		    aggressive_snapping = $13,
-		    ai_reconstruction_enabled = $14,
-		    ai_coverage_recovery_enabled = $15,
-		    ai_playback_correction_enabled = $16,
-		    gps_quality_mode = $17
+		    is_sequential = $9,
+		    aggressive_snapping = $10,
+		    ai_reconstruction_enabled = $11,
+		    ai_coverage_recovery_enabled = $12,
+		    ai_playback_correction_enabled = $13,
+		    gps_quality_mode = $14
 		WHERE id = $8
-	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, routeID, isSeq, corridor, routeDir, lookahead, aggSnap, aiRecon, aiCov, aiPlay, gpsQuality)
+	`, req.RouteName, req.Identification, req.Distance, req.RouteTypeID, geometryID, req.ShiftID, lanesJSON, routeID, isSeq, aggSnap, aiRecon, aiCov, aiPlay, gpsQuality)
 
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to update route: " + err.Error()})

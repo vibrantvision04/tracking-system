@@ -45,9 +45,7 @@ func mapRoleToMobile(dbRole string) string {
 }
 
 func isTestAccount(email string) bool {
-	return email == "test-admin@example.com" ||
-		email == "test-mobile@example.com" ||
-		strings.HasSuffix(email, "@jaipurheritage.swm")
+	return email == "test-admin@example.com"
 }
 
 // 1. MobileLogin
@@ -462,11 +460,17 @@ func (h *Handler) MobilePunchIn(w http.ResponseWriter, r *http.Request) {
 
 	vehID, _ := strconv.Atoi(req.VehicleID)
 
+	scope, _ := h.resolveScope(ctx, claims)
+	var wardID *int
+	if scope.WardID != nil {
+		wardID = scope.WardID
+	}
+
 	_, err := db.Exec(ctx, `
 		INSERT INTO mobile_attendance (
-			user_id, role, punch_in_at, driver_name, helper_name, helper_present, vehicle_id, photo_path, gps_lat, gps_lng
-		) VALUES ($1, $2, NOW(), $3, $4, $5, NULLIF($6, 0), $7, $8, $9)
-	`, empID, claims.Role, req.DriverName, req.HelperName, req.HelperPresent, vehID, photoPath, req.GpsLat, req.GpsLng)
+			user_id, role, punch_in_at, driver_name, helper_name, helper_present, vehicle_id, photo_path, gps_lat, gps_lng, ward_id
+		) VALUES ($1, $2, NOW(), $3, $4, $5, NULLIF($6, 0), $7, $8, $9, $10)
+	`, empID, claims.Role, req.DriverName, req.HelperName, req.HelperPresent, vehID, photoPath, req.GpsLat, req.GpsLng, wardID)
 
 	if err != nil {
 		RespondWithError(w, http.StatusInternalServerError, "Failed to record punch-in: "+err.Error())
@@ -519,11 +523,17 @@ func (h *Handler) MobileMarkAttendance(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	scope, _ := h.resolveScope(ctx, claims)
+	var wardID *int
+	if scope.WardID != nil {
+		wardID = scope.WardID
+	}
+
 	_, err := db.Exec(ctx, `
 		INSERT INTO mobile_attendance (
-			user_id, role, punch_in_at, driver_name, helper_name, helper_present, vehicle_id, photo_path, gps_lat, gps_lng, marked_by
-		) VALUES ($1, 'driver', NOW(), $2, $3, $4, NULLIF($5, 0), $6, $7, $8, $9)
-	`, driverEmpID, req.DriverName, req.HelperName, req.HelperPresent, vehID, photoPath, req.GpsLat, req.GpsLng, supervisorEmpID)
+			user_id, role, punch_in_at, driver_name, helper_name, helper_present, vehicle_id, photo_path, gps_lat, gps_lng, marked_by, ward_id
+		) VALUES ($1, 'driver', NOW(), $2, $3, $4, NULLIF($5, 0), $6, $7, $8, $9, $10)
+	`, driverEmpID, req.DriverName, req.HelperName, req.HelperPresent, vehID, photoPath, req.GpsLat, req.GpsLng, supervisorEmpID, wardID)
 
 	if err != nil {
 		RespondWithError(w, http.StatusInternalServerError, "Failed to mark attendance: "+err.Error())
@@ -1766,13 +1776,14 @@ func (h *Handler) mobileAlertFeed(w http.ResponseWriter, r *http.Request) {
 				message = humanizeAlertType(alertType)
 			}
 			item := map[string]interface{}{
-				"id":         feedID,
-				"type":       mapped,
-				"source":     "automatic",
-				"message":    message,
-				"severity":   defaultAlertSeverity(mapped),
-				"created_at": createdAt,
-				"read":       readIDs[feedID],
+				"id":           feedID,
+				"type":         mapped,
+				"source":       "automatic",
+				"message":      message,
+				"severity":     defaultAlertSeverity(mapped),
+				"created_at":   createdAt,
+				"read":         readIDs[feedID],
+				"acknowledged": readIDs[feedID],
 			}
 			if reg != "" {
 				item["vehicle_number"] = reg
@@ -1817,13 +1828,14 @@ func (h *Handler) mobileAlertFeed(w http.ResponseWriter, r *http.Request) {
 		}
 		feedID := fmt.Sprintf("manual-%d", id)
 		item := map[string]interface{}{
-			"id":         feedID,
-			"type":       alertType,
-			"source":     "manual",
-			"message":    message,
-			"severity":   severity,
-			"created_at": createdAt,
-			"read":       readIDs[feedID],
+			"id":           feedID,
+			"type":         alertType,
+			"source":       "manual",
+			"message":      message,
+			"severity":     severity,
+			"created_at":   createdAt,
+			"read":         readIDs[feedID],
+			"acknowledged": readIDs[feedID],
 		}
 		if reg != "" {
 			item["vehicle_number"] = reg
@@ -2059,15 +2071,17 @@ type manualAlertRequest struct {
 // matrix (Req 8.5–8.7). The critical security property is that this matrix is
 // enforced on the backend regardless of what the client renders:
 //
-//	zone_manager → {supervisor, driver}
-//	supervisor   → {driver}
+//	zone_manager → {driver, road_sweeper}
+//	supervisor   → {driver, road_sweeper}
 //	driver       → {} (may send to no one)
 //
-// Any pair absent from the matrix yields HTTP 403.
+// Alerts may ONLY ever be sent to Driver and Road Sweeper roles — never to
+// admins, managers, or supervisors. Any pair absent from the matrix yields 403.
 var manualAlertMatrix = map[string]map[string]bool{
-	"zone_manager": {"supervisor": true, "driver": true},
-	"supervisor":   {"driver": true},
+	"zone_manager": {"driver": true, "road_sweeper": true},
+	"supervisor":   {"driver": true, "road_sweeper": true},
 	"driver":       {},
+	"road_sweeper": {},
 }
 
 // 18. MobileSendManualAlert — sends a manual Vehicle_Alert with backend-enforced
@@ -2172,7 +2186,7 @@ func (h *Handler) recipientInScope(ctx context.Context, scope RoleScope, recipie
 	// Resolve the recipient's assigned region (ward). The recipient id may be a
 	// users.id (joined to employees by the email local-part convention) or an
 	// employees.id directly.
-	var wardID int
+	var wardID *int
 	err := db.QueryRow(ctx, `
 		SELECT edd.region_id
 		FROM employee_department_designations edd
@@ -2190,11 +2204,11 @@ func (h *Handler) recipientInScope(ctx context.Context, scope RoleScope, recipie
 		}
 		return false, fmt.Errorf("recipientInScope: %w", err)
 	}
-	if wardID == 0 {
+	if wardID == nil || *wardID == 0 {
 		return true, nil
 	}
 
-	return h.wardInScope(ctx, scope, wardID)
+	return h.wardInScope(ctx, scope, *wardID)
 }
 
 // 18b. MobileSendCustomAlert — deprecated alias for the old
@@ -2714,6 +2728,85 @@ func (h *Handler) MobileLiveTrackingZone(w http.ResponseWriter, r *http.Request)
 
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"vehicles": list,
+	})
+}
+
+// MobileAlertRecipients returns the employees a supervisor may send a custom
+// alert to: only Driver and Road Sweeper roles (never admins, managers or other
+// supervisors). Each recipient includes their assigned vehicle number so the
+// client can show / search by driver name OR vehicle number.
+func (h *Handler) MobileAlertRecipients(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := GetClaims(r)
+	if claims == nil {
+		RespondWithError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	scope, err := h.resolveScope(ctx, claims)
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Failed to resolve scope")
+		return
+	}
+
+	db := h.gpsRepo.Pool()
+
+	rows, err := db.Query(ctx, `
+		SELECT DISTINCT ON (e.id)
+			e.id,
+			NULLIF(TRIM(CONCAT_WS(' ', e.first_name, e.last_name)), '') AS name,
+			e.employee_id,
+			COALESCE(v.registration_no, '') AS vehicle_number,
+			CASE
+				WHEN LOWER(COALESCE(des.name, '')) = 'road sweeper'
+				  OR LOWER(COALESCE(u.role, '')) = 'road_sweeper' THEN 'road_sweeper'
+				ELSE 'driver'
+			END AS role
+		FROM employees e
+		LEFT JOIN employee_department_designations edd ON edd.employee_id = e.id
+		LEFT JOIN designations des ON des.id = edd.designation_id
+		LEFT JOIN users u ON LOWER(split_part(u.email, '@', 1)) = LOWER(e.employee_id)
+		LEFT JOIN employee_vehicle_assignments eva ON eva.employee_id = e.id AND COALESCE(eva.is_active, true) = true
+		LEFT JOIN vehicles v ON v.id = eva.vehicle_id
+		WHERE LOWER(COALESCE(des.name, '')) IN ('driver', 'road sweeper')
+		   OR LOWER(COALESCE(u.role, '')) IN ('driver', 'road_sweeper')
+		ORDER BY e.id, v.registration_no NULLS LAST
+	`)
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Failed to load recipients: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type recipient struct {
+		ID            int    `json:"id"`
+		Name          string `json:"name"`
+		EmployeeID    string `json:"employee_id"`
+		VehicleNumber string `json:"vehicle_number"`
+		Role          string `json:"role"`
+	}
+	list := []recipient{}
+	for rows.Next() {
+		var rec recipient
+		var name *string
+		if err := rows.Scan(&rec.ID, &name, &rec.EmployeeID, &rec.VehicleNumber, &rec.Role); err != nil {
+			continue
+		}
+		if name != nil {
+			rec.Name = *name
+		}
+		if rec.Name == "" {
+			rec.Name = rec.EmployeeID
+		}
+
+		inScope, err := h.recipientInScope(ctx, scope, rec.ID)
+		if err == nil && inScope {
+			list = append(list, rec)
+		}
+	}
+
+	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"recipients": list,
 	})
 }
 

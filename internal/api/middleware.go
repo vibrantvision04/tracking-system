@@ -48,8 +48,10 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 				return
 			}
 
+			userRole := strings.ToUpper(claims.Role)
 			for _, role := range roles {
-				if claims.Role == role {
+				targetRole := strings.ToUpper(role)
+				if userRole == targetRole || (targetRole == "ADMIN" && (userRole == "SUPER ADMIN" || userRole == "SUPER_ADMIN")) {
 					next.ServeHTTP(w, r)
 					return
 				}

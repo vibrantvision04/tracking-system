@@ -155,7 +155,7 @@ func createTestEmployeeWithScopes(
 
 	// Insert employee
 	var empID int
-	email := fmt.Sprintf("prop5_%s@vswm.com", empCode)
+	email := fmt.Sprintf("prop5_%s@swift.com", empCode)
 	err = tx.QueryRow(ctx, `
 		INSERT INTO employees (first_name, last_name, employee_id, aadhaar_no, contact_no, address, is_active)
 		VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING id
@@ -265,7 +265,7 @@ func simulateRoleChange(
 		UPDATE user_roles SET role_id = $1
 		WHERE user_id = (
 			SELECT u.id FROM users u
-			JOIN employees e ON u.email = LOWER(e.employee_id) || '@vswm.com'
+			JOIN employees e ON u.email = LOWER(e.employee_id) || '@swift.com'
 			WHERE e.id = $2
 		)
 	`, newRole.ID, empID)
@@ -506,8 +506,8 @@ func TestProperty5_RoleChangeClearsStaleScopes(t *testing.T) {
 		// Cleanup this iteration's employee data
 		pool.Exec(ctx, `DELETE FROM employee_scopes WHERE employee_id = $1`, empID)
 		pool.Exec(ctx, `DELETE FROM employee_department_designations WHERE employee_id = $1`, empID)
-		pool.Exec(ctx, `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email = $1)`, fmt.Sprintf("prop5_%s@vswm.com", empCode))
-		pool.Exec(ctx, `DELETE FROM users WHERE email = $1`, fmt.Sprintf("prop5_%s@vswm.com", empCode))
+		pool.Exec(ctx, `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email = $1)`, fmt.Sprintf("prop5_%s@swift.com", empCode))
+		pool.Exec(ctx, `DELETE FROM users WHERE email = $1`, fmt.Sprintf("prop5_%s@swift.com", empCode))
 		pool.Exec(ctx, `DELETE FROM employees WHERE id = $1`, empID)
 	})
 }
@@ -746,7 +746,7 @@ func updateEmployeeScope(t *testing.T, pool *pgxpool.Pool, empID int, scopeType 
 // cleanupTestEmployee removes all test data for a single employee created during property testing.
 func cleanupTestEmployee(pool *pgxpool.Pool, empID int, empCode string) {
 	ctx := context.Background()
-	email := fmt.Sprintf("prop5_%s@vswm.com", empCode)
+	email := fmt.Sprintf("prop5_%s@swift.com", empCode)
 	pool.Exec(ctx, `DELETE FROM employee_scopes WHERE employee_id = $1`, empID)
 	pool.Exec(ctx, `DELETE FROM employee_department_designations WHERE employee_id = $1`, empID)
 	pool.Exec(ctx, `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email = $1)`, email)

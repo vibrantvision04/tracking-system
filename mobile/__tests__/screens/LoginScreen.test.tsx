@@ -202,6 +202,7 @@ jest.mock('react-native', () => {
     Image,
     StyleSheet,
     Platform,
+    KeyboardAvoidingView: View,
   };
 });
 

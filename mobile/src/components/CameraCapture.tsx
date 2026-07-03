@@ -17,9 +17,15 @@ interface CameraCaptureProps {
   title?: string;
   /** Maximum allowed people in frame (default 2: driver + helper). */
   maxFaces?: number;
+  /**
+   * Whether a face must be present in the photo (default true).
+   * Set false for area/scene photos (e.g. open-depot garbage area,
+   * road-sweeping before/after) where no person is expected.
+   */
+  requireFace?: boolean;
 }
 
-export default function CameraCapture({ facing = 'back', onCapture, onCancel, title = 'Capture Photo', maxFaces = 2 }: CameraCaptureProps) {
+export default function CameraCapture({ facing = 'back', onCapture, onCancel, title = 'Capture Photo', maxFaces = 2, requireFace = true }: CameraCaptureProps) {
   const [photo, setPhoto] = useState<string | null>(null);
   const [base64, setBase64] = useState<string | null>(null);
   const [uri, setUri] = useState<string | null>(null);
@@ -48,6 +54,12 @@ export default function CameraCapture({ facing = 'back', onCapture, onCancel, ti
 
   const handleConfirm = async () => {
     if (!base64) return;
+    // Area/scene photos (open depot, sweeping before/after) don't require a
+    // person in frame — skip face detection entirely.
+    if (!requireFace) {
+      onCapture(base64, { faceCount: 0, faceDetectionAvailable: false });
+      return;
+    }
     setValidating(true);
     setFaceError(null);
     try {

@@ -34,8 +34,9 @@ export default function CleaningTasksPage() {
       if (filter.employee_id) params.set("employee_id", filter.employee_id);
       const q = params.toString();
       const res = await get<any>(`/api/sweeping/tasks${q ? "?" + q : ""}`);
-      setTasks(res.data || []);
-    } catch {} finally { setLoading(false); }
+      const list = res?.data?.data ?? res?.data ?? [];
+      setTasks(Array.isArray(list) ? list : []);
+    } catch { setTasks([]); } finally { setLoading(false); }
   }, [filter]);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);

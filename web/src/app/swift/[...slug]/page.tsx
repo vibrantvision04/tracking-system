@@ -1,7 +1,7 @@
 "use client";
 import { useParams } from "next/navigation";
 
-export default function VswmPlaceholderPage() {
+export default function SwiftPlaceholderPage() {
   const params = useParams();
   const slug = params.slug;
   const path = Array.isArray(slug) ? slug.join("/") : slug;

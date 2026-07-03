@@ -3,12 +3,14 @@ import { StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, ScrollView
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { LiveVehicle } from '../../types';
+import VehicleMapView from '../../components/VehicleMapView';
 
 export default function LiveTrackingScreen({ navigation }: any) {
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['wardTracking'],
     queryFn: async () => {
-      const res = await api.get('/tracking/ward?ward_id=1');
+      // Ward is derived from the supervisor's JWT scope server-side; any ward_id is ignored.
+      const res = await api.get('/tracking/ward');
       return res as unknown as { vehicles: LiveVehicle[] };
     },
     refetchInterval: 15000, // Poll every 15 seconds
@@ -54,31 +56,17 @@ export default function LiveTrackingScreen({ navigation }: any) {
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={['#1565C0']} />
         }
       >
-        {/* Mock Map Canvas */}
-        <View style={styles.mapCanvas}>
-          <Text style={styles.mapCanvasText}>🗺️ Live Map Tracking Ward #1</Text>
-          <View style={styles.simulatedVehicles}>
-            {vehicles.map((v: any, i: number) => {
-              const statusStyle = getStatusStyle(v.status, v.speed);
-              return (
-                <TouchableOpacity
-                  key={v.vehicle_id}
-                  style={[
-                    styles.vehicleDot,
-                    {
-                      backgroundColor: statusStyle.color,
-                      left: 40 + i * 60,
-                      top: 50 + (i % 2) * 40,
-                    },
-                  ]}
-                  onPress={() => setSelectedVehicle(v)}
-                >
-                  <Text style={styles.vehicleDotText}>{v.vehicle_number.slice(-4)}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <Text style={styles.mapCanvasSubtitle}>Tap any vehicle dot for details</Text>
+        {/* Live vehicle map */}
+        <View style={styles.mapWrapper}>
+          <VehicleMapView
+            vehicles={vehicles as any}
+            title="Live Vehicles — Your Ward"
+            height={300}
+            onSelect={(id) => {
+              const v = vehicles.find((x: any) => x.vehicle_id === id);
+              if (v) setSelectedVehicle(v as any);
+            }}
+          />
         </View>
 
         <Text style={styles.sectionTitle}>Vehicles in Ward ({vehicles.length})</Text>
@@ -206,6 +194,13 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 16,
+  },
+  mapWrapper: {
+    marginBottom: 20,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#b0bec5',
   },
   mapCanvas: {
     height: 180,

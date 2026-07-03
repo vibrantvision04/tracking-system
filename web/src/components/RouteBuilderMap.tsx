@@ -13,6 +13,12 @@ interface Props {
 	setDistance: (dist: number) => void;
 	geojsonText: string;
 	setGeojsonText: (txt: string) => void;
+	/** Cap the number of points that can be drawn (e.g. 2 for an A→B route). */
+	maxPoints?: number;
+	/** Coverage radius (metres) drawn around the first point (A). */
+	pointARadius?: number;
+	/** Coverage radius (metres) drawn around the last point (B). */
+	pointBRadius?: number;
 }
 
 export default function RouteBuilderMap({
@@ -23,6 +29,9 @@ export default function RouteBuilderMap({
 	setDistance,
 	geojsonText,
 	setGeojsonText,
+	maxPoints,
+	pointARadius,
+	pointBRadius,
 }: Props) {
 	const mapContainerRef = useRef<HTMLDivElement>(null);
 	const mapRef = useRef<L.Map | null>(null);
@@ -162,33 +171,48 @@ export default function RouteBuilderMap({
 				return;
 			}
 
-			if (isDrawing) {
-				setRouteCoords((prev) => {
-					const updated = [...prev, { lat: e.latlng.lat, lng: e.latlng.lng }];
-					const leafletUpdated = updated.map((pt) => L.latLng(pt.lat, pt.lng));
-					const newDist = calculateTotalRouteDistance(leafletUpdated);
-					setDistance(newDist);
+			if (!isDrawing) return;
 
-					const geojsonObj = {
-						type: "Feature",
-						geometry: {
-							type: "LineString",
-							coordinates: updated.map((pt) => [pt.lng, pt.lat]),
-						},
-						properties: {},
-					};
-					setGeojsonText(JSON.stringify(geojsonObj, null, 2));
-					return updated;
-				});
-				return;
-			}
+			const pt = { lat: e.latlng.lat, lng: e.latlng.lng };
+			setRouteCoords((prev) => {
+				// Enforce a maximum number of points (e.g. A→B = 2)
+				if (typeof maxPoints === "number" && prev.length >= maxPoints) {
+					return prev;
+				}
+				// Guard against a double-fired click adding two points at the same spot
+				const last = prev[prev.length - 1];
+				if (last && last.lat === pt.lat && last.lng === pt.lng) {
+					return prev;
+				}
+				const updated = [...prev, pt];
+				const leafletUpdated = updated.map((p) => L.latLng(p.lat, p.lng));
+				setDistance(calculateTotalRouteDistance(leafletUpdated));
+
+				const geojsonObj = {
+					type: "Feature",
+					geometry: {
+						type: "LineString",
+						coordinates: updated.map((p) => [p.lng, p.lat]),
+					},
+					properties: {},
+				};
+				setGeojsonText(JSON.stringify(geojsonObj, null, 2));
+				return updated;
+			});
 		};
 
 		m.on("click", onClick);
 		return () => {
 			m.off("click", onClick);
 		};
-	}, [isDrawing, routeCoords]);
+	}, [isDrawing, maxPoints]);
+
+	// Auto-stop drawing once the point cap is reached
+	useEffect(() => {
+		if (typeof maxPoints === "number" && isDrawing && routeCoords.length >= maxPoints) {
+			setIsDrawing(false);
+		}
+	}, [routeCoords, isDrawing, maxPoints]);
 
 	// Render route polyline and start/end markers
 	useEffect(() => {
@@ -393,6 +417,50 @@ export default function RouteBuilderMap({
 
 		const layers: L.Layer[] = [];
 
+		// A→B mode: draw a coverage circle sized to each point's configured radius.
+		const abMode = typeof pointARadius === "number" || typeof pointBRadius === "number";
+		if (abMode) {
+			const drawCoverage = (
+				coord: { lat: number; lng: number },
+				radiusM: number,
+				color: string,
+				label: string
+			) => {
+				const circle = L.circle([coord.lat, coord.lng], {
+					radius: radiusM > 0 ? radiusM : 1,
+					color,
+					weight: 1.5,
+					fillColor: color,
+					fillOpacity: 0.15,
+					interactive: false,
+				}).addTo(m);
+				layers.push(circle);
+				const dot = L.circleMarker([coord.lat, coord.lng], {
+					radius: 3,
+					color: "#ffffff",
+					weight: 1,
+					fillColor: color,
+					fillOpacity: 1,
+				})
+					.bindTooltip(`${label} • ${radiusM}m`, { direction: "top", permanent: false })
+					.addTo(m);
+				layers.push(dot);
+			};
+
+			// Point A (first)
+			drawCoverage(routeCoords[0], typeof pointARadius === "number" ? pointARadius : 20, "#22c55e", "Point A");
+			// Point B (last) — only if a distinct second point exists
+			if (routeCoords.length > 1) {
+				const bIdx = routeCoords.length - 1;
+				drawCoverage(routeCoords[bIdx], typeof pointBRadius === "number" ? pointBRadius : 20, "#ef4444", "Point B");
+			}
+
+			lanePointLayersRef.current = layers;
+			return () => {
+				layers.forEach((layer) => layer.remove());
+			};
+		}
+
 		for (let i = 0; i < routeCoords.length; i++) {
 			const coord = routeCoords[i];
 
@@ -430,7 +498,7 @@ export default function RouteBuilderMap({
 		return () => {
 			layers.forEach((layer) => layer.remove());
 		};
-	}, [routeCoords, showRoute]);
+	}, [routeCoords, showRoute, pointARadius, pointBRadius]);
 
 	// Parse custom input JSON coordinates
 	useEffect(() => {

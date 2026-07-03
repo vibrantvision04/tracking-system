@@ -102,6 +102,14 @@ func main() {
 
 	// Baseline: first run of the tracker on an already-populated database.
 	// Detect an existing schema via a well-known application table.
+	//
+	// Migrations listed in baselineExclude were introduced together with (or
+	// after) this tracking system, so an existing database has NOT applied them
+	// yet. They must NOT be baselined — they run as normal pending migrations.
+	baselineExclude := map[string]bool{
+		"067_operational_roles_designations.sql": true,
+	}
+
 	if !trackingExisted && len(applied) == 0 {
 		var hasExistingSchema bool
 		_ = conn.QueryRow(ctx,
@@ -109,7 +117,11 @@ func main() {
 		).Scan(&hasExistingSchema)
 
 		if hasExistingSchema {
+			baselined := 0
 			for _, fileName := range sqlFiles {
+				if baselineExclude[fileName] {
+					continue // leave unmarked so it runs as a pending migration below
+				}
 				if _, err := conn.Exec(ctx,
 					`INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING`,
 					fileName,
@@ -118,8 +130,9 @@ func main() {
 					os.Exit(1)
 				}
 				applied[fileName] = true
+				baselined++
 			}
-			fmt.Printf("Existing database detected — baselined %d migration(s) as already applied.\n", len(sqlFiles))
+			fmt.Printf("Existing database detected — baselined %d migration(s) as already applied.\n", baselined)
 		}
 	}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Alert, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { usePunchStatus } from '../../hooks/usePunchStatus';
@@ -16,6 +16,7 @@ interface MenuItem {
   titleKey: string;
   subtitleKey: string;
   route: string | null;
+  alwaysAccessible?: boolean;
 }
 
 const MENU_ITEMS: MenuItem[] = [
@@ -25,6 +26,7 @@ const MENU_ITEMS: MenuItem[] = [
     titleKey: 'menu.punchIn',
     subtitleKey: 'menu.punchIn.subtitle',
     route: 'SupervisorPunchIn',
+    alwaysAccessible: true,
   },
   {
     key: 'markAttendance',
@@ -82,6 +84,8 @@ export default function SupervisorHomeScreen({ navigation }: any) {
   const { data: punchData, refetch: refetchPunch } = usePunchStatus();
   const { t } = useTranslation();
 
+  const [restrictionMessage, setRestrictionMessage] = React.useState<string | null>(null);
+
   const isPunchedIn = !!(punchData && punchData.punched_in);
   const showPunchOut = isPunchedIn && !!(punchData && punchData.manual_punchout_enabled);
 
@@ -112,6 +116,7 @@ export default function SupervisorHomeScreen({ navigation }: any) {
       Alert.alert('Coming Soon', 'This feature is not yet available in Phase 1.');
       return;
     }
+    setRestrictionMessage(null);
     navigation.navigate(item.route);
   };
 
@@ -153,11 +158,42 @@ export default function SupervisorHomeScreen({ navigation }: any) {
           message={isPunchedIn ? t('home.punchedIn') : t('home.notPunchedIn')}
         />
 
+        {/* Restriction message (inline) */}
+        {restrictionMessage && (
+          <View style={styles.restrictionBanner}>
+            <Text style={styles.restrictionText}>{restrictionMessage}</Text>
+          </View>
+        )}
+
         {/* 2-column navigation grid */}
         <View style={styles.gridContainer}>
           <View style={styles.grid}>
             {MENU_ITEMS.map((item) => {
-              const isHighlighted = item.key === 'punchIn';
+              const isDimmed = (item.key === 'punchIn' && isPunchedIn) || (!item.alwaysAccessible && !isPunchedIn);
+              const isHighlighted = item.key === 'punchIn' && !isPunchedIn;
+
+              if (isDimmed) {
+                const restrictionText = (item.key === 'punchIn' && isPunchedIn)
+                  ? "You are already punched in for your active shift."
+                  : t('home.punchInRequired');
+                return (
+                  <View key={item.key} style={styles.gridCell}>
+                    <Pressable onPress={() => setRestrictionMessage(restrictionText)}>
+                      <Card
+                        highlighted={isHighlighted}
+                        dimmed={true}
+                        style={styles.navCard}
+                      >
+                        <Ionicons name={item.iconName} size={28} color={theme.colors.primary} style={styles.cardIcon} />
+                        <Text style={styles.cardTitle}>{t(item.titleKey)}</Text>
+                        <Text style={styles.cardSubtitle}>
+                          {item.key === 'punchIn' && isPunchedIn ? "Shift in progress" : t(item.subtitleKey)}
+                        </Text>
+                      </Card>
+                    </Pressable>
+                  </View>
+                );
+              }
 
               return (
                 <View key={item.key} style={styles.gridCell}>
@@ -232,5 +268,17 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.caption.fontSize,
     color: theme.colors.textDim,
     lineHeight: theme.typography.caption.lineHeight,
+  },
+  restrictionBanner: {
+    backgroundColor: theme.colors.warningLight,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.card,
+    marginBottom: theme.spacing.base,
+  },
+  restrictionText: {
+    fontSize: theme.typography.secondary.fontSize,
+    color: theme.colors.warning,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

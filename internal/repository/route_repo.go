@@ -21,9 +21,6 @@ type Route struct {
 	IsActive        bool      `json:"is_active"`
 	CreatedAt       time.Time `json:"created_at"`
 	IsSequential       bool      `json:"is_sequential"`
-	CorridorMeters     float64   `json:"corridor_meters"`
-	RouteDirection     string    `json:"route_direction"`
-	SeqLookahead       int       `json:"seq_lookahead"`
 	AggressiveSnapping bool      `json:"aggressive_snapping"`
 	AiReconstructionEnabled     bool      `json:"ai_reconstruction_enabled"`
 	AiCoverageRecoveryEnabled   bool      `json:"ai_coverage_recovery_enabled"`
@@ -1032,9 +1029,6 @@ func (r *RouteRepository) GetRouteByID(ctx context.Context, id int) (*Route, err
 			COALESCE(r.is_active, true),
 			COALESCE(r.created_at, NOW()),
 			COALESCE(r.is_sequential, false),
-			COALESCE(r.corridor_meters, 50.0),
-			COALESCE(r.route_direction, 'both'),
-			COALESCE(r.seq_lookahead, 5),
 			COALESCE(r.aggressive_snapping, false),
 			COALESCE(r.ai_reconstruction_enabled, false),
 			COALESCE(r.ai_coverage_recovery_enabled, false),
@@ -1049,7 +1043,7 @@ func (r *RouteRepository) GetRouteByID(ctx context.Context, id int) (*Route, err
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&route.ID, &route.RouteName, &route.Identification, &route.Distance, &route.RouteTypeID,
 		&route.GeometryID, &route.IsActive, &route.CreatedAt,
-		&route.IsSequential, &route.CorridorMeters, &route.RouteDirection, &route.SeqLookahead, &route.AggressiveSnapping,
+		&route.IsSequential, &route.AggressiveSnapping,
 		&route.AiReconstructionEnabled, &route.AiCoverageRecoveryEnabled, &route.AiPlaybackCorrectionEnabled, &route.GpsQualityMode,
 		&route.GeoJSON,
 	)

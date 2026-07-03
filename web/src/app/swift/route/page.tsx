@@ -264,7 +264,6 @@ export default function RoutePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.identification) { toast.error("Route name and Identification are required."); return; }
-    if (form.isSequential && form.corridorMeters <= 0) { toast.error("Corridor width must be greater than 0."); return; }
     
     let finalGeoJSON = form.geojson;
     if (routeCoords.length > 0 && !finalGeoJSON) {
@@ -276,9 +275,6 @@ export default function RoutePage() {
       route_type_id: Number(form.routeTypeId), ward_id: form.wardId ? Number(form.wardId) : null,
       shift_id: form.shiftId ? Number(form.shiftId) : null, geojson: finalGeoJSON, color: form.color, lanes: [],
       is_sequential: form.isSequential,
-      corridor_meters: Number(form.corridorMeters),
-      route_direction: form.routeDirection,
-      seq_lookahead: Number(form.seqLookahead),
       aggressive_snapping: form.aggressiveSnapping,
       ai_reconstruction_enabled: form.aiReconstruction,
       ai_coverage_recovery_enabled: form.aiCoverageRecovery,
@@ -401,42 +397,6 @@ export default function RoutePage() {
                           <div className="w-11 h-6 bg-theme-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                         </label>
                       </div>
-
-                      {form.isSequential && (
-                        <div className="grid grid-cols-3 gap-4 pt-2 border-t border-amber-500/10 animate-fade-in">
-                          <div>
-                            <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5 block">Corridor (m)</label>
-                            <input
-                              type="number"
-                              min="0.1"
-                              value={form.corridorMeters}
-                              onChange={(e) => setForm(prev => ({ ...prev, corridorMeters: Number(e.target.value) }))}
-                              className="w-full px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text outline-none focus:border-amber-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5 block">Lookahead</label>
-                            <input
-                              type="number"
-                              value={form.seqLookahead}
-                              onChange={(e) => setForm(prev => ({ ...prev, seqLookahead: Number(e.target.value) }))}
-                              className="w-full px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text outline-none focus:border-amber-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-theme-text-dim uppercase tracking-wider mb-1.5 block">Direction</label>
-                            <select
-                              value={form.routeDirection}
-                              onChange={(e) => setForm(prev => ({ ...prev, routeDirection: e.target.value }))}
-                              className="w-full px-3 py-1.5 bg-theme-surface border border-theme-border rounded-lg text-xs text-theme-text outline-none focus:border-amber-500"
-                            >
-                              <option value="both">Both</option>
-                              <option value="outbound">Outbound</option>
-                              <option value="return">Return</option>
-                            </select>
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     {/* Aggressive Snapping Configuration */}
