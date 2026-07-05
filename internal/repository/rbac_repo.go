@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -316,16 +317,55 @@ func (r *RBACRepository) GetAllUserRoles(ctx context.Context) ([]UserRole, error
 }
 
 func (r *RBACRepository) AssignUserRole(ctx context.Context, userID, roleID int) error {
-	_, err := r.db.Exec(ctx, `
+	var roleName string
+	err := r.db.QueryRow(ctx, "SELECT name FROM roles WHERE id = $1", roleID).Scan(&roleName)
+	if err != nil {
+		return err
+	}
+	legacyRole := strings.ToLower(strings.ReplaceAll(roleName, " ", "_"))
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
 		INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)
 		ON CONFLICT (user_id) DO UPDATE SET role_id=$2
 	`, userID, roleID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE users SET role = $1 WHERE id = $2
+	`, legacyRole, userID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *RBACRepository) RemoveUserRole(ctx context.Context, userID int) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM user_roles WHERE user_id=$1`, userID)
-	return err
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `DELETE FROM user_roles WHERE user_id=$1`, userID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE users SET role = '' WHERE id = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 // --- Permission Checking ---

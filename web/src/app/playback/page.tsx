@@ -1084,10 +1084,10 @@ export default function PlaybackPage() {
       }
 
       // Fetch transfer station trips from GTS trip report
-      const tripRes = await api<any>(`/api/reports?vehicle_id=${vehicleId}&from=${selectedDate}&to=${selectedDate}&limit=1`);
+      const tripRes = await api<any>(`/api/reports/gts-trips?vehicle_id=${vehicleId}&date=${selectedDate}`);
       if (tripRes.success && tripRes.data && tripRes.data.length > 0) {
         const report = tripRes.data[0];
-        setTransferStationTrips(report.transfer_station_trips || 0);
+        setTransferStationTrips(report.trip_count || 0);
       } else {
         setTransferStationTrips(0);
       }

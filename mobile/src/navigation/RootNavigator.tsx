@@ -95,6 +95,8 @@ export default function RootNavigator() {
             <Stack.Screen name="ZoneManagerAlerts" component={ZoneManagerAlerts} />
             <Stack.Screen name="ZoneManagerLiveTracking" component={ZoneManagerLiveTracking} />
             <Stack.Screen name="ZoneManagerAttendance" component={ZoneManagerAttendance} />
+            <Stack.Screen name="BlockageApprovals" component={BlockageApprovals} />
+            <Stack.Screen name="ZoneManagerOpenDepot" component={SupervisorOpenDepot} />
             <Stack.Screen name="Complaints" component={Complaints} />
           </>
         ) : user.role === 'road_sweeper' ? (

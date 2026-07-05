@@ -80,6 +80,7 @@ export default function LoginScreen() {
 
       const res = result as any;
       if (res && res.access_token) {
+        console.log('[SWIFT DEBUG] Logged in user profile:', res.user);
         await login(res.access_token, res.refresh_token, res.user);
       } else {
         setErrorMsg(t('login.errorInvalid'));

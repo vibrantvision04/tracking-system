@@ -101,8 +101,8 @@ export default function EmployeeMonitoringPage() {
 
   const onlineCount = useMemo(() => filteredEmployees.filter((e) => e.status === "Online").length, [filteredEmployees]);
 
-  const handleEmployeeClick = useCallback((emp: Employee) => {
-    setSelectedEmployee((prev) => (prev?.id === emp.id ? null : emp));
+  const handleEmployeeClick = useCallback((emp: Employee | null) => {
+    setSelectedEmployee(emp);
   }, []);
 
   return (

@@ -8,7 +8,7 @@ import type { Employee } from "@/app/swift/employee-monitoring/page";
 interface EmployeeMapProps {
   employees: Employee[];
   selectedEmployee: Employee | null;
-  onEmployeeClick: (employee: Employee) => void;
+  onEmployeeClick: (employee: Employee | null) => void;
 }
 
 // Inject map CSS once
@@ -172,7 +172,11 @@ export default function EmployeeMap({ employees, selectedEmployee, onEmployeeCli
   const mapContainer = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const markersLayer = useRef<L.LayerGroup | null>(null);
+  const onEmployeeClickRef = useRef(onEmployeeClick);
   const markersRef = useRef<Record<number, L.Marker>>({});
+  useEffect(() => {
+    onEmployeeClickRef.current = onEmployeeClick;
+  }, [onEmployeeClick]);
 
   // 1. Init Map
   useEffect(() => {
@@ -194,6 +198,13 @@ export default function EmployeeMap({ employees, selectedEmployee, onEmployeeCli
     L.control.zoom({ position: "bottomright" }).addTo(m);
     markersLayer.current = L.layerGroup().addTo(m);
 
+    // Map click on empty space deselects employee
+    m.on("click", (e) => {
+      if (e.originalEvent && (e.originalEvent.target as HTMLElement).classList.contains("leaflet-container")) {
+        onEmployeeClickRef.current(null);
+      }
+    });
+
     setMapInstance(m);
     setTimeout(() => m.invalidateSize(), 200);
 
@@ -203,6 +214,9 @@ export default function EmployeeMap({ employees, selectedEmployee, onEmployeeCli
       markersLayer.current = null;
     };
   }, []);
+
+  const prevSelectedRef = useRef<Employee | null>(null);
+  const initialFitDone = useRef(false);
 
   // 2. Render Employee Markers
   useEffect(() => {
@@ -237,29 +251,40 @@ export default function EmployeeMap({ employees, selectedEmployee, onEmployeeCli
       marker.bindPopup(buildPopupContent(employee), { maxWidth: 300, minWidth: 280 });
 
       // Click handler
-      marker.on("click", () => {
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
         onEmployeeClick(employee);
       });
 
       markersRef.current[employee.id] = marker;
     });
 
-    if (bounds.length > 0) {
+    // Determine if we should fit bounds:
+    // 1. Initial load of employees: when map is ready and we haven't fit bounds yet.
+    // 2. Deselection: when selectedEmployee transitions from non-null to null.
+    const isInitialLoad = !initialFitDone.current && bounds.length > 0;
+    const isDeselection = prevSelectedRef.current !== null && selectedEmployee === null;
+
+    if (bounds.length > 0 && (isInitialLoad || isDeselection)) {
       try {
         mapInstance.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+        initialFitDone.current = true;
       } catch (e) {
         console.error("Failed to fit employee map bounds", e);
       }
     }
+
+    // Update ref for next render/effect run
+    prevSelectedRef.current = selectedEmployee;
   }, [mapInstance, employees, selectedEmployee, onEmployeeClick]);
 
-  // 3. Zoom to selected employee
+  // 3. Zoom to selected employee (pan to position, preserving current zoom level)
   useEffect(() => {
     if (!mapInstance || !selectedEmployee) return;
 
     const marker = markersRef.current[selectedEmployee.id];
     if (marker) {
-      mapInstance.setView([selectedEmployee.latitude, selectedEmployee.longitude], 16);
+      mapInstance.panTo([selectedEmployee.latitude, selectedEmployee.longitude]);
       marker.openPopup();
     }
   }, [mapInstance, selectedEmployee]);

@@ -28,8 +28,9 @@ import (
 
 // Mapped Mobile Role Helper
 func mapRoleToMobile(dbRole string) string {
-	switch strings.ToLower(dbRole) {
-	case "city administrator", "zone_manager":
+	normalized := strings.ToLower(strings.ReplaceAll(dbRole, " ", "_"))
+	switch normalized {
+	case "city_administrator", "zone_manager":
 		return "zone_manager"
 	case "csi", "supervisor":
 		return "supervisor"
@@ -2071,14 +2072,14 @@ type manualAlertRequest struct {
 // matrix (Req 8.5–8.7). The critical security property is that this matrix is
 // enforced on the backend regardless of what the client renders:
 //
-//	zone_manager → {driver, road_sweeper}
+//	zone_manager → {supervisor, driver, road_sweeper}
 //	supervisor   → {driver, road_sweeper}
 //	driver       → {} (may send to no one)
 //
-// Alerts may ONLY ever be sent to Driver and Road Sweeper roles — never to
-// admins, managers, or supervisors. Any pair absent from the matrix yields 403.
+// zone_manager may also target supervisors within their zone.
+// Any pair absent from the matrix yields 403.
 var manualAlertMatrix = map[string]map[string]bool{
-	"zone_manager": {"driver": true, "road_sweeper": true},
+	"zone_manager": {"supervisor": true, "driver": true, "road_sweeper": true},
 	"supervisor":   {"driver": true, "road_sweeper": true},
 	"driver":       {},
 	"road_sweeper": {},
@@ -2731,10 +2732,9 @@ func (h *Handler) MobileLiveTrackingZone(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// MobileAlertRecipients returns the employees a supervisor may send a custom
-// alert to: only Driver and Road Sweeper roles (never admins, managers or other
-// supervisors). Each recipient includes their assigned vehicle number so the
-// client can show / search by driver name OR vehicle number.
+// MobileAlertRecipients returns the employees a supervisor or zone manager may
+// send a manual alert to. Supervisors get Driver + Road Sweeper employees;
+// zone managers additionally get Supervisors within their zone scope.
 func (h *Handler) MobileAlertRecipients(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims := GetClaims(r)
@@ -2751,6 +2751,17 @@ func (h *Handler) MobileAlertRecipients(w http.ResponseWriter, r *http.Request) 
 
 	db := h.gpsRepo.Pool()
 
+	// Zone managers can also send to supervisors; supervisors can only send
+	// to drivers and road sweepers.
+	includeSupervisor := scope.Role == "zone_manager"
+
+	// scopeResolved is true when the sender has a ward/zone we can use to
+	// narrow recipients. When it is false (e.g. the user's employee record has
+	// no region assignment yet — common in dev / fresh installs) we skip scope
+	// filtering so the list is not silently empty. The role matrix enforced in
+	// MobileSendManualAlert remains the authoritative security control.
+	scopeResolved := scope.WardID != nil || scope.ZoneID != nil
+
 	rows, err := db.Query(ctx, `
 		SELECT DISTINCT ON (e.id)
 			e.id,
@@ -2760,6 +2771,8 @@ func (h *Handler) MobileAlertRecipients(w http.ResponseWriter, r *http.Request) 
 			CASE
 				WHEN LOWER(COALESCE(des.name, '')) = 'road sweeper'
 				  OR LOWER(COALESCE(u.role, '')) = 'road_sweeper' THEN 'road_sweeper'
+				WHEN LOWER(COALESCE(des.name, '')) IN ('supervisor')
+				  OR LOWER(COALESCE(u.role, '')) = 'supervisor' THEN 'supervisor'
 				ELSE 'driver'
 			END AS role
 		FROM employees e
@@ -2768,10 +2781,17 @@ func (h *Handler) MobileAlertRecipients(w http.ResponseWriter, r *http.Request) 
 		LEFT JOIN users u ON LOWER(split_part(u.email, '@', 1)) = LOWER(e.employee_id)
 		LEFT JOIN employee_vehicle_assignments eva ON eva.employee_id = e.id AND COALESCE(eva.is_active, true) = true
 		LEFT JOIN vehicles v ON v.id = eva.vehicle_id
-		WHERE LOWER(COALESCE(des.name, '')) IN ('driver', 'road sweeper')
-		   OR LOWER(COALESCE(u.role, '')) IN ('driver', 'road_sweeper')
+		WHERE (
+			LOWER(COALESCE(des.name, '')) IN ('driver', 'road sweeper')
+			OR LOWER(COALESCE(u.role, '')) IN ('driver', 'road_sweeper')
+		) OR (
+			$1 AND (
+				LOWER(COALESCE(des.name, '')) = 'supervisor'
+				OR LOWER(COALESCE(u.role, '')) = 'supervisor'
+			)
+		)
 		ORDER BY e.id, v.registration_no NULLS LAST
-	`)
+	`, includeSupervisor)
 	if err != nil {
 		RespondWithError(w, http.StatusInternalServerError, "Failed to load recipients: "+err.Error())
 		return
@@ -2799,10 +2819,13 @@ func (h *Handler) MobileAlertRecipients(w http.ResponseWriter, r *http.Request) 
 			rec.Name = rec.EmployeeID
 		}
 
-		inScope, err := h.recipientInScope(ctx, scope, rec.ID)
-		if err == nil && inScope {
-			list = append(list, rec)
+		if scopeResolved {
+			inScope, serr := h.recipientInScope(ctx, scope, rec.ID)
+			if serr != nil || !inScope {
+				continue
+			}
 		}
+		list = append(list, rec)
 	}
 
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{

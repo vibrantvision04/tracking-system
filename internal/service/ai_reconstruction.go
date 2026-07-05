@@ -69,10 +69,7 @@ func (s *AIReconstructionService) ReconstructRoute(ctx context.Context, routeID 
 		return out, 100.0, nil
 	}
 
-	corridor := route.CorridorMeters
-	if corridor <= 0 {
-		corridor = 18.0 // default snaps to 18m corridor
-	}
+	corridor := 18.0
 	if route.AggressiveSnapping {
 		corridor = math.Max(corridor*2.0, 35.0)
 	}

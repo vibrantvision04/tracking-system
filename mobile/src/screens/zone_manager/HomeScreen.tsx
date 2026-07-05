@@ -57,6 +57,20 @@ const MENU_ITEMS: MenuItem[] = [
     route: 'ZoneManagerAlerts',
   },
   {
+    key: 'blockageApprovals',
+    iconName: 'warning-outline',
+    titleKey: 'menu.blockageApprovals',
+    subtitleKey: 'menu.blockageApprovals.subtitle',
+    route: 'BlockageApprovals',
+  },
+  {
+    key: 'openDepot',
+    iconName: 'trash-outline',
+    titleKey: 'menu.openDepot',
+    subtitleKey: 'menu.openDepot.subtitle',
+    route: 'ZoneManagerOpenDepot',
+  },
+  {
     key: 'complaints',
     iconName: 'flag-outline',
     titleKey: 'menu.complaints',

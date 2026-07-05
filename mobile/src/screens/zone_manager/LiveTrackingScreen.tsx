@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { LiveVehicle } from '../../types';
+import VehicleMapView from '../../components/VehicleMapView';
 
 export default function ZoneManagerLiveTrackingScreen({ navigation }: any) {
   const { data, isLoading, refetch, isRefetching } = useQuery({
@@ -56,34 +57,17 @@ export default function ZoneManagerLiveTrackingScreen({ navigation }: any) {
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={['#1565C0']} />
         }
       >
-        {/* Simulated Map */}
-        <View style={styles.mapCanvas}>
-          <View style={styles.mapCanvasHeader}>
-            <Ionicons name="map-outline" size={14} color="#059669" />
-            <Text style={styles.mapCanvasText}> Live Map Tracking (Zone-Wide)</Text>
-          </View>
-          <View style={styles.simulatedVehicles}>
-            {vehicles.map((v: any, i: number) => {
-              const statusStyle = getStatusStyle(v.status, v.speed);
-              return (
-                <TouchableOpacity
-                  key={v.vehicle_id}
-                  style={[
-                    styles.vehicleDot,
-                    {
-                      backgroundColor: statusStyle.color,
-                      left: 20 + i * 45,
-                      top: 40 + (i % 3) * 35,
-                    },
-                  ]}
-                  onPress={() => setSelectedVehicle(v)}
-                >
-                  <Text style={styles.vehicleDotText}>{v.vehicle_number.slice(-4)}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <Text style={styles.mapCanvasSubtitle}>Tap vehicle dots to inspect details</Text>
+        {/* Live vehicle map */}
+        <View style={styles.mapWrapper}>
+          <VehicleMapView
+            vehicles={vehicles as any}
+            title="Live Vehicles — Your Zone"
+            height={300}
+            onSelect={(id) => {
+              const v = vehicles.find((x: any) => x.vehicle_id === id);
+              if (v) setSelectedVehicle(v as any);
+            }}
+          />
         </View>
 
         <Text style={styles.sectionTitle}>Zone Vehicles ({vehicles.length})</Text>
@@ -212,58 +196,13 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 16,
   },
-  mapCanvas: {
-    height: 180,
-    backgroundColor: '#eceff1',
+  mapWrapper: {
+    height: 300,
+    marginBottom: 20,
     borderRadius: 8,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#b0bec5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    marginBottom: 20,
-  },
-  mapCanvasHeader: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mapCanvasText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#37474f',
-    marginLeft: 2,
-  },
-  mapCanvasSubtitle: {
-    position: 'absolute',
-    bottom: 8,
-    fontSize: 10,
-    color: '#546e7a',
-  },
-  simulatedVehicles: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-  },
-  vehicleDot: {
-    position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000000',
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  vehicleDotText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: 'bold',
   },
   sectionTitle: {
     fontSize: 16,
