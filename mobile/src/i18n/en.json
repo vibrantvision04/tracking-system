@@ -60,6 +60,8 @@
   "menu.attendancePanel.subtitle": "Manage attendance",
   "menu.zoneAlerts": "Zone Alerts",
   "menu.zoneAlerts.subtitle": "Zone warnings",
+  "menu.rfidScanner": "RFID Tag Scanner",
+  "menu.rfidScanner.subtitle": "Register & scan tag",
 
   "supervisor.title": "Supervisor Control Panel",
   "supervisor.markAttendance": "Mark Driver Attendance",

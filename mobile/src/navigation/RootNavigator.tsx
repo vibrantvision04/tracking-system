@@ -51,6 +51,14 @@ import SweeperAlerts from '../screens/road_sweeper/AlertsScreen';
 // Shared Screens
 import Complaints from '../screens/shared/ComplaintsScreen';
 
+// RFID Screens
+import RFIDScanner from '../screens/shared/RFIDScannerScreen';
+import RFIDRegistration from '../screens/shared/RFIDRegistrationScreen';
+import RFIDPayment from '../screens/shared/RFIDPaymentScreen';
+import RFIDCoverageConfirm from '../screens/driver/RFIDCoverageConfirmScreen';
+
+import { useRFIDSync } from '../hooks/useRFIDSync';
+
 const Stack = createStackNavigator();
 
 
@@ -58,6 +66,7 @@ export default function RootNavigator() {
   const { user } = useAuth();
 
   useEmployeeLocationTracking(!!user);
+  useRFIDSync(); // Activates automatic background syncing on reconnect
 
   return (
     <NavigationContainer>
@@ -74,6 +83,8 @@ export default function RootNavigator() {
             <Stack.Screen name="DriverBlockage" component={DriverBlockage} />
             <Stack.Screen name="DriverAttendance" component={DriverAttendanceReport} />
             <Stack.Screen name="Complaints" component={Complaints} />
+            <Stack.Screen name="RFIDScanner" component={RFIDScanner} />
+            <Stack.Screen name="RFIDCoverageConfirm" component={RFIDCoverageConfirm} />
           </>
         ) : user.role === 'supervisor' ? (
           <>
@@ -86,6 +97,9 @@ export default function RootNavigator() {
             <Stack.Screen name="SupervisorLiveTracking" component={SupervisorLiveTracking} />
             <Stack.Screen name="SupervisorOpenDepot" component={SupervisorOpenDepot} />
             <Stack.Screen name="Complaints" component={Complaints} />
+            <Stack.Screen name="RFIDScanner" component={RFIDScanner} />
+            <Stack.Screen name="RFIDRegistration" component={RFIDRegistration} />
+            <Stack.Screen name="RFIDPayment" component={RFIDPayment} />
           </>
         ) : user.role === 'zone_manager' ? (
           <>
@@ -98,6 +112,9 @@ export default function RootNavigator() {
             <Stack.Screen name="BlockageApprovals" component={BlockageApprovals} />
             <Stack.Screen name="ZoneManagerOpenDepot" component={SupervisorOpenDepot} />
             <Stack.Screen name="Complaints" component={Complaints} />
+            <Stack.Screen name="RFIDScanner" component={RFIDScanner} />
+            <Stack.Screen name="RFIDRegistration" component={RFIDRegistration} />
+            <Stack.Screen name="RFIDPayment" component={RFIDPayment} />
           </>
         ) : user.role === 'road_sweeper' ? (
           <>

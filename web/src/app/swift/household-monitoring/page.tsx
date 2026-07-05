@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { api } from "@/lib/api";
 import dynamic from "next/dynamic";
 import type { Household } from "@/components/HouseholdMap";
 import SearchableSelect from "@/components/ui/SearchableSelect";
@@ -16,19 +17,6 @@ import {
 const HouseholdMap = dynamic(() => import("@/components/HouseholdMap"), {
   ssr: false,
 });
-
-const DEMO_HOUSEHOLDS: Household[] = [
-  { id: 1, rfid: "RFID-10001", name: "Rajesh Sharma", mobile: "9829012345", address: "12, Brahampuri, Zorawar Singh Gate", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", latitude: 26.9124, longitude: 75.7873, coverage_type: "Auto", last_coverage_time: "2026-06-10T08:30:00Z", survey_date: "2026-06-01" },
-  { id: 2, rfid: "RFID-10002", name: "Sunita Verma", mobile: "9829012346", address: "92, Ghat Gate Road", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", latitude: 26.9234, longitude: 75.7981, coverage_type: "Auto", last_coverage_time: "2026-06-10T09:15:00Z", survey_date: "2026-06-02" },
-  { id: 3, rfid: "RFID-10003", name: "Amit Gupta", mobile: "9829012347", address: "102, Sector 11 Market", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", latitude: 26.9087, longitude: 75.7765, coverage_type: "Manual", last_coverage_time: "2026-06-09T14:00:00Z", survey_date: "2026-06-03" },
-  { id: 4, rfid: "RFID-10004", name: "Priya Chauhan", mobile: "9829012348", address: "157, Sector 2 Extension", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", latitude: 26.9345, longitude: 75.8099, coverage_type: "Auto", last_coverage_time: "2026-06-10T07:45:00Z", survey_date: "2026-06-04" },
-  { id: 5, rfid: "RFID-10005", name: "Vijay Meena", mobile: "9829012349", address: "248, Sanganer Industrial Area", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", latitude: 26.8765, longitude: 75.7654, coverage_type: "Not Covered", last_coverage_time: null, survey_date: "2026-06-05" },
-  { id: 6, rfid: "RFID-10006", name: "Kavita Jain", mobile: "9829012350", address: "Shop 12, Brahampuri", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", latitude: 26.9155, longitude: 75.7890, coverage_type: "Auto", last_coverage_time: "2026-06-10T10:00:00Z", survey_date: "2026-06-06" },
-  { id: 7, rfid: "RFID-10007", name: "Deepak Yadav", mobile: "9829012351", address: "Showroom 2, Ghat Gate Road", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", latitude: 26.9276, longitude: 75.8012, coverage_type: "Manual", last_coverage_time: "2026-06-09T16:30:00Z", survey_date: "2026-06-07" },
-  { id: 8, rfid: "RFID-10008", name: "Neha Sharma", mobile: "9829012352", address: "101, Sector 11 Market", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", latitude: 26.9055, longitude: 75.7732, coverage_type: "Not Covered", last_coverage_time: null, survey_date: "2026-06-08" },
-  { id: 9, rfid: "RFID-10009", name: "Ravi Kumar", mobile: "9829012353", address: "202, Sector 2 Extension", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", latitude: 26.9387, longitude: 75.8133, coverage_type: "Auto", last_coverage_time: "2026-06-10T11:20:00Z", survey_date: "2026-06-09" },
-  { id: 10, rfid: "RFID-10010", name: "Pooja Verma", mobile: "9829012354", address: "55, Sanganer Industrial Area", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", latitude: 26.8732, longitude: 75.7621, coverage_type: "Manual", last_coverage_time: "2026-06-10T12:00:00Z", survey_date: "2026-06-10" },
-];
 
 const COVERAGE_OPTIONS = [
   { value: "All", label: "All Statuses" },
@@ -71,14 +59,50 @@ function StatPill({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function HouseholdMonitoringPage() {
+  const [households, setHouseholds] = useState<Household[]>([]);
+  const [loading, setLoading] = useState(false);
   const [zone, setZone] = useState("");
   const [ward, setWard] = useState("");
   const [area, setArea] = useState("");
   const [coverage, setCoverage] = useState("All");
   const [search, setSearch] = useState("");
 
+  const loadHouseholds = async () => {
+    try {
+      const res = await api<{ data: any[] }>("/api/rfid/household-monitoring");
+      if (res.data) {
+        const mapped: Household[] = res.data.map(h => ({
+          id: h.id,
+          rfid: h.rfid_id,
+          name: h.name,
+          mobile: h.mobile || "",
+          address: h.address || "",
+          zone: h.zone_name || "",
+          ward: h.ward_name || "",
+          area: h.area || "",
+          latitude: h.latitude,
+          longitude: h.longitude,
+          coverage_type: h.last_coverage_time
+            ? (h.last_coverage_source === "gps" ? "Auto" : "Manual")
+            : "Not Covered",
+          last_coverage_time: h.last_coverage_time,
+          survey_date: h.registration_date || "",
+        }));
+        setHouseholds(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to load households:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadHouseholds();
+    const interval = setInterval(loadHouseholds, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   const filtered = useMemo(() => {
-    return DEMO_HOUSEHOLDS.filter((h) => {
+    return households.filter((h) => {
       if (zone && h.zone !== zone) return false;
       if (ward && h.ward !== ward) return false;
       if (area && h.area !== area) return false;
@@ -94,7 +118,7 @@ export default function HouseholdMonitoringPage() {
       }
       return true;
     });
-  }, [zone, ward, area, coverage, search]);
+  }, [households, zone, ward, area, coverage, search]);
 
   const stats = useMemo(() => {
     const total = filtered.length;
@@ -107,25 +131,26 @@ export default function HouseholdMonitoringPage() {
   }, [filtered]);
 
   const zoneOptions = useMemo(() => {
-    const zones = Array.from(new Set(DEMO_HOUSEHOLDS.map((h) => h.zone)));
-    return zones.map((z) => ({ value: z, label: z }));
-  }, []);
+    const zones = Array.from(new Set(households.map((h) => h.zone)));
+    return zones.filter(Boolean).map((z) => ({ value: z, label: z }));
+  }, [households]);
 
   const wardOptions = useMemo(() => {
     const base = zone
-      ? DEMO_HOUSEHOLDS.filter((h) => h.zone === zone).map((h) => h.ward)
-      : DEMO_HOUSEHOLDS.map((h) => h.ward);
-    return Array.from(new Set(base)).map((w) => ({ value: w, label: w }));
-  }, [zone]);
+      ? households.filter((h) => h.zone === zone).map((h) => h.ward)
+      : households.map((h) => h.ward);
+    return Array.from(new Set(base)).filter(Boolean).map((w) => ({ value: w, label: w }));
+  }, [households, zone]);
 
   const areaOptions = useMemo(() => {
-    const base = DEMO_HOUSEHOLDS.filter((h) => {
+    const base = households.filter((h) => {
       if (zone && h.zone !== zone) return false;
       if (ward && h.ward !== ward) return false;
       return true;
     }).map((h) => h.area);
-    return Array.from(new Set(base)).map((a) => ({ value: a, label: a }));
-  }, [zone, ward]);
+    return Array.from(new Set(base)).filter(Boolean).map((a) => ({ value: a, label: a }));
+  }, [households, zone, ward]);
+
 
   return (
     <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans select-none">

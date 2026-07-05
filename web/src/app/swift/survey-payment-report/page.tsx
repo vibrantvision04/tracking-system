@@ -48,33 +48,9 @@ interface SurveyPaymentRow {
 
 // ─── Dummy Data ──────────────────────────────────────────────────────────────
 
-const DUMMY_PAYMENT_DATA: SurveyPaymentRow[] = [
-  { id: 1, date: "2026-06-01", supervisorName: "Anil Sharma", zoneName: "HMZ", wardName: "Ward 10", totalSurveys: 45, ratePerSurvey: 25, totalPayment: 1125, paymentStatus: "Paid", remarks: "All completed on time" },
-  { id: 2, date: "2026-06-02", supervisorName: "Vinod Yadav", zoneName: "Mansarovar", wardName: "Ward 20", totalSurveys: 38, ratePerSurvey: 25, totalPayment: 950, paymentStatus: "Paid", remarks: "" },
-  { id: 3, date: "2026-06-03", supervisorName: "Suresh Meena", zoneName: "Sanganer", wardName: "Ward 30", totalSurveys: 52, ratePerSurvey: 30, totalPayment: 1560, paymentStatus: "Processing", remarks: "Awaiting supervisor approval" },
-  { id: 4, date: "2026-06-04", supervisorName: "Ramesh Kumar", zoneName: "Civil Lines", wardName: "Ward 40", totalSurveys: 29, ratePerSurvey: 25, totalPayment: 725, paymentStatus: "Pending", remarks: "Pending zone manager review" },
-  { id: 5, date: "2026-06-05", supervisorName: "Anil Sharma", zoneName: "Vidhyadhar Nagar", wardName: "Ward 50", totalSurveys: 61, ratePerSurvey: 30, totalPayment: 1830, paymentStatus: "Paid", remarks: "" },
-  { id: 6, date: "2026-06-06", supervisorName: "Vinod Yadav", zoneName: "HMZ", wardName: "Ward 10", totalSurveys: 33, ratePerSurvey: 25, totalPayment: 825, paymentStatus: "Paid", remarks: "Completed ahead of schedule" },
-  { id: 7, date: "2026-06-07", supervisorName: "Suresh Meena", zoneName: "Mansarovar", wardName: "Ward 20", totalSurveys: 47, ratePerSurvey: 25, totalPayment: 1175, paymentStatus: "Processing", remarks: "Quality check in progress" },
-  { id: 8, date: "2026-06-08", supervisorName: "Ramesh Kumar", zoneName: "Sanganer", wardName: "Ward 30", totalSurveys: 55, ratePerSurvey: 30, totalPayment: 1650, paymentStatus: "Pending", remarks: "Documents not yet submitted" },
-  { id: 9, date: "2026-06-09", supervisorName: "Anil Sharma", zoneName: "Civil Lines", wardName: "Ward 40", totalSurveys: 41, ratePerSurvey: 25, totalPayment: 1025, paymentStatus: "Paid", remarks: "" },
-  { id: 10, date: "2026-06-10", supervisorName: "Vinod Yadav", zoneName: "Vidhyadhar Nagar", wardName: "Ward 50", totalSurveys: 36, ratePerSurvey: 30, totalPayment: 1080, paymentStatus: "Processing", remarks: "Partial payment released" },
-];
 
-const SUPERVISOR_OPTIONS = [
-  { value: "", label: "All Supervisors" },
-  { value: "Anil Sharma", label: "Anil Sharma" },
-  { value: "Vinod Yadav", label: "Vinod Yadav" },
-  { value: "Suresh Meena", label: "Suresh Meena" },
-  { value: "Ramesh Kumar", label: "Ramesh Kumar" },
-];
 
-const PAYMENT_STATUS_OPTIONS = [
-  { value: "", label: "All Status" },
-  { value: "Paid", label: "Paid" },
-  { value: "Pending", label: "Pending" },
-  { value: "Processing", label: "Processing" },
-];
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -138,8 +114,16 @@ function PaymentStatusBadge({ status }: { status: string }) {
 // PAGE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "", label: "All Statuses" },
+  { value: "Paid", label: "Paid" },
+  { value: "Pending", label: "Pending" },
+  { value: "Unpaid", label: "Unpaid" }
+];
+
 export default function SurveyPaymentReportPage() {
-  const [data, setData] = useState<SurveyPaymentRow[]>(DUMMY_PAYMENT_DATA);
+  const [data, setData] = useState<SurveyPaymentRow[]>([]);
+  const [supervisors, setSupervisors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(true);
 
@@ -161,6 +145,17 @@ export default function SurveyPaymentReportPage() {
     return new Date().toISOString().split("T")[0];
   });
 
+  const fetchSupervisors = async () => {
+    try {
+      const res = await api<{ data: any[] }>("/api/rfid/survey-report");
+      if (res.data) {
+        setSupervisors(res.data);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch supervisors:", e);
+    }
+  };
+
   // ─── Load filter options on mount ────────────────────────────────────────
   useEffect(() => {
     api("/api/zones")
@@ -169,6 +164,8 @@ export default function SurveyPaymentReportPage() {
     api("/api/wards")
       .then((d: any) => d.success && setWards(d.data || []))
       .catch(console.error);
+    fetchSupervisors();
+    loadReport();
   }, []);
 
   // Filter wards based on selected zone
@@ -179,12 +176,38 @@ export default function SurveyPaymentReportPage() {
   // ─── Load Report Data ────────────────────────────────────────────────────
   const loadReport = async () => {
     setLoading(true);
-    setHasLoaded(true);
     try {
-      setData([]);
-    } catch (err) {
+      const res = await api<{ transactions: any[] }>("/api/rfid/payment-report");
+      if (res && Array.isArray(res.transactions)) {
+        // Group collections by date + collector (supervisor/staff) to form rows
+        const grouped: Record<string, SurveyPaymentRow> = {};
+        res.transactions.forEach((tx: any, idx: number) => {
+          const dateOnly = tx.collected_at.split("T")[0];
+          const key = `${dateOnly}-${tx.collector_name}`;
+          if (!grouped[key]) {
+            grouped[key] = {
+              id: idx + 1,
+              date: dateOnly,
+              supervisorName: tx.collector_name || "Staff",
+              zoneName: "Jaipur City",
+              wardName: tx.ward_name || "Ward Log",
+              totalSurveys: 0,
+              ratePerSurvey: 0,
+              totalPayment: 0,
+              paymentStatus: "Paid",
+              remarks: `Receipt: ${tx.receipt_number}`,
+            };
+          }
+          grouped[key].totalSurveys += 1;
+          grouped[key].totalPayment += tx.amount_paid; // already converted to Rupee
+        });
+        setData(Object.values(grouped));
+      }
+      setHasLoaded(true);
+      toast.success("RFID Payment Collections loaded successfully");
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to load report data.");
+      toast.error("Failed to load report data: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -421,7 +444,15 @@ export default function SurveyPaymentReportPage() {
                 <SearchableSelect
                   value={selectedSupervisor}
                   onChange={setSelectedSupervisor}
-                  options={SUPERVISOR_OPTIONS}
+                  options={[
+                    { value: "", label: "All Supervisors" },
+                    ...supervisors
+                      .filter((s) => !s.name.toLowerCase().includes("zone manager"))
+                      .map((s) => ({
+                        value: String(s.id),
+                        label: s.name,
+                      })),
+                  ]}
                   placeholder="All Supervisors"
                 />
               </div>

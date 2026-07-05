@@ -60,6 +60,8 @@
   "menu.attendancePanel.subtitle": "उपस्थिति प्रबंधन",
   "menu.zoneAlerts": "ज़ोन अलर्ट",
   "menu.zoneAlerts.subtitle": "ज़ोन चेतावनियाँ",
+  "menu.rfidScanner": "आरएफआईडी टैग स्कैनर",
+  "menu.rfidScanner.subtitle": "रजिस्टर और टैग स्कैन करें",
 
   "supervisor.title": "पर्यवेक्षक नियंत्रण कक्ष",
   "supervisor.markAttendance": "ड्राइवर उपस्थिति दर्ज करें",

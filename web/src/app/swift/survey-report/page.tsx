@@ -47,30 +47,10 @@ interface SurveyRecord {
 
 // ─── Dummy Data ──────────────────────────────────────────────────────────────
 
-const DUMMY_SUPERVISORS: Supervisor[] = [
-  { id: 1, name: "Anil Sharma", employee_id: "EMP001", mobile_number: "9829012345", assigned_zone: "HMZ", assigned_ward: "Ward 10", total_rfid_installed: 245, today_installations: 12, monthly_installations: 89, last_installation_date: "2026-06-10", survey_completion_rate: 92, surveys: [] },
-  { id: 2, name: "Vinod Yadav", employee_id: "EMP002", mobile_number: "9829012346", assigned_zone: "Mansarovar", assigned_ward: "Ward 20", total_rfid_installed: 198, today_installations: 8, monthly_installations: 72, last_installation_date: "2026-06-10", survey_completion_rate: 85, surveys: [] },
-  { id: 3, name: "Suresh Meena", employee_id: "EMP003", mobile_number: "9829012347", assigned_zone: "Sanganer", assigned_ward: "Ward 30", total_rfid_installed: 312, today_installations: 15, monthly_installations: 110, last_installation_date: "2026-06-09", survey_completion_rate: 78, surveys: [] },
-  { id: 4, name: "Ramesh Kumar", employee_id: "EMP004", mobile_number: "9829012348", assigned_zone: "Civil Lines", assigned_ward: "Ward 40", total_rfid_installed: 176, today_installations: 5, monthly_installations: 65, last_installation_date: "2026-06-08", survey_completion_rate: 88, surveys: [] },
-  { id: 5, name: "Rajesh Yadav", employee_id: "EMP005", mobile_number: "9829012355", assigned_zone: "Vidhyadhar Nagar", assigned_ward: "Ward 50", total_rfid_installed: 89, today_installations: 3, monthly_installations: 34, last_installation_date: "2026-06-07", survey_completion_rate: 95, surveys: [] },
-];
-
-const DUMMY_SURVEY_RECORDS: SurveyRecord[] = [
-  { id: 1, rfid_number: "RFID-10001", household_name: "Rajesh Sharma", mobile_number: "9829012345", address: "12, Brahampuri", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", supervisor_id: 1, supervisor_name: "Anil Sharma", survey_date: "2026-06-01", status: "Completed", has_photo: true, has_coordinates: true, rfid_activated: true },
-  { id: 2, rfid_number: "RFID-10002", household_name: "Sunita Verma", mobile_number: "9829012346", address: "92, Ghat Gate Road", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", supervisor_id: 2, supervisor_name: "Vinod Yadav", survey_date: "2026-06-02", status: "Completed", has_photo: true, has_coordinates: true, rfid_activated: true },
-  { id: 3, rfid_number: "RFID-10003", household_name: "Amit Gupta", mobile_number: "9829012347", address: "102, Sector 11 Market", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", supervisor_id: 3, supervisor_name: "Suresh Meena", survey_date: "2026-06-03", status: "Approved", has_photo: true, has_coordinates: true, rfid_activated: true },
-  { id: 4, rfid_number: "RFID-10004", household_name: "Priya Chauhan", mobile_number: "9829012348", address: "157, Sector 2 Extension", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", supervisor_id: 4, supervisor_name: "Ramesh Kumar", survey_date: "2026-06-04", status: "Completed", has_photo: false, has_coordinates: true, rfid_activated: true },
-  { id: 5, rfid_number: "RFID-10005", household_name: "Vijay Meena", mobile_number: "9829012349", address: "248, Sanganer Industrial Area", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", supervisor_id: 5, supervisor_name: "Rajesh Yadav", survey_date: "2026-06-05", status: "Pending", has_photo: false, has_coordinates: false, rfid_activated: false },
-  { id: 6, rfid_number: "RFID-10006", household_name: "Kavita Jain", mobile_number: "9829012350", address: "Shop 12, Brahampuri", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", supervisor_id: 1, supervisor_name: "Anil Sharma", survey_date: "2026-06-06", status: "Completed", has_photo: true, has_coordinates: true, rfid_activated: true },
-  { id: 7, rfid_number: "RFID-10007", household_name: "Deepak Yadav", mobile_number: "9829012351", address: "Showroom 2, Ghat Gate Road", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", supervisor_id: 2, supervisor_name: "Vinod Yadav", survey_date: "2026-06-07", status: "Rejected", has_photo: true, has_coordinates: true, rfid_activated: false },
-  { id: 8, rfid_number: "RFID-10008", household_name: "Neha Sharma", mobile_number: "9829012352", address: "101, Sector 11 Market", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", supervisor_id: 3, supervisor_name: "Suresh Meena", survey_date: "2026-06-08", status: "Completed", has_photo: true, has_coordinates: true, rfid_activated: true },
-  { id: 9, rfid_number: "RFID-10009", household_name: "Ravi Kumar", mobile_number: "9829012353", address: "202, Sector 2 Extension", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", supervisor_id: 4, supervisor_name: "Ramesh Kumar", survey_date: "2026-06-09", status: "Approved", has_photo: true, has_coordinates: true, rfid_activated: true },
-  { id: 10, rfid_number: "RFID-10010", household_name: "Pooja Verma", mobile_number: "9829012354", address: "55, Sanganer Industrial Area", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", supervisor_id: 1, supervisor_name: "Anil Sharma", survey_date: "2026-06-10", status: "Pending", has_photo: false, has_coordinates: true, rfid_activated: true },
-];
 
 export default function SurveyReportPage() {
-  const [supervisors, setSupervisors] = useState<Supervisor[]>(DUMMY_SUPERVISORS);
-  const [surveyRecords, setSurveyRecords] = useState<SurveyRecord[]>(DUMMY_SURVEY_RECORDS);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+  const [surveyRecords, setSurveyRecords] = useState<SurveyRecord[]>([]);
   const [zones, setZones] = useState<{ id: number; region_name: string }[]>([]);
   const [wards, setWards] = useState<{ id: number; region_name: string; parent_id: number }[]>([]);
   const [areas, setAreas] = useState<string[]>([]);
@@ -107,17 +87,69 @@ export default function SurveyReportPage() {
 
   useEffect(() => {
     loadInitialOptions();
+    loadReport();
   }, []);
 
-  const loadReport = () => {
+  const loadReport = async () => {
     setLoading(true);
-    setTimeout(() => {
-      setSupervisors(DUMMY_SUPERVISORS);
-      setSurveyRecords(DUMMY_SURVEY_RECORDS);
+    try {
+      // 1. Fetch Supervisor Performance Report
+      const resSurvey = await api<{ data: any[] }>("/api/rfid/survey-report");
+      if (resSurvey.data) {
+        const sups: Supervisor[] = resSurvey.data.map(s => ({
+          id: s.id,
+          name: s.name,
+          employee_id: s.employee_id,
+          mobile_number: s.mobile_number,
+          assigned_zone: s.assigned_zone || "",
+          assigned_ward: s.assigned_ward || "",
+          total_rfid_installed: s.total_rfid_installed,
+          today_installations: s.today_installations,
+          monthly_installations: s.monthly_installations,
+          last_installation_date: s.last_installation_date ? s.last_installation_date.split("T")[0] : null,
+          survey_completion_rate: 100,
+          surveys: [],
+        }));
+        setSupervisors(sups);
+      }
+
+      // 2. Fetch Detailed Property Survey Logs
+      const params = new URLSearchParams();
+      params.append("page", "1");
+      params.append("page_size", "200"); // fetch latest 200 for report logs
+      if (filters.search) params.append("search", filters.search);
+      if (filters.zone_id) params.append("zone_id", filters.zone_id);
+      if (filters.ward_id) params.append("ward_id", filters.ward_id);
+
+      const resProps = await api<{ data: any[] }>(`/api/rfid/properties?${params.toString()}`);
+      if (resProps.data) {
+        const records: SurveyRecord[] = resProps.data.map(p => ({
+          id: p.id,
+          rfid_number: p.rfid_id,
+          household_name: `${p.owner_first_name} ${p.owner_last_name}`.trim(),
+          mobile_number: p.mobile_number || "",
+          address: p.address || "",
+          zone: p.zone_name || "",
+          ward: p.ward_name || "",
+          area: p.area || "",
+          supervisor_id: p.registered_by_id || 0,
+          supervisor_name: p.registered_by_name || "Supervisor",
+          survey_date: p.registration_date,
+          status: p.registration_status === "approved" ? "Approved" : "Pending",
+          has_photo: !!p.photo_path,
+          has_coordinates: !!(p.latitude && p.longitude),
+          rfid_activated: p.registration_status === "approved",
+        }));
+        setSurveyRecords(records);
+      }
+
       setHasLoaded(true);
-      setLoading(false);
       toast.success("RFID Survey Report loaded successfully");
-    }, 500);
+    } catch (err: any) {
+      toast.error("Failed to load report: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExport = (format: "csv" | "excel") => {
@@ -189,8 +221,9 @@ export default function SurveyReportPage() {
   };
 
   const applySurveyFilters = (survey: SurveyRecord) => {
-    if (filters.from_date && survey.survey_date < filters.from_date) return false;
-    if (filters.to_date && survey.survey_date > filters.to_date) return false;
+    const surveyDateOnly = (survey.survey_date || "").split("T")[0];
+    if (filters.from_date && surveyDateOnly < filters.from_date) return false;
+    if (filters.to_date && surveyDateOnly > filters.to_date) return false;
     if (filters.supervisor_id && survey.supervisor_id !== parseInt(filters.supervisor_id)) return false;
     if (filters.zone_id && survey.zone !== zones.find(z => z.id === parseInt(filters.zone_id))?.region_name) return false;
     if (filters.ward_id && survey.ward !== wards.find(w => w.id === parseInt(filters.ward_id))?.region_name) return false;
@@ -278,7 +311,9 @@ export default function SurveyReportPage() {
                   onChange={(val) => setFilters((prev) => ({ ...prev, supervisor_id: val }))}
                   options={[
                     { value: "", label: "All Supervisors" },
-                    ...supervisors.map((s) => ({ value: s.id.toString(), label: s.name }))
+                    ...supervisors
+                      .filter((s) => !s.name.toLowerCase().includes("zone manager"))
+                      .map((s) => ({ value: s.id.toString(), label: s.name }))
                   ]}
                   placeholder="All Supervisors"
                 />

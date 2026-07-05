@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { api, put } from "@/lib/api";
 import { toast } from "react-toastify";
 import {
   Search,
@@ -47,6 +48,13 @@ import Button from "@/components/ui/Button";
 import DeleteButton from "@/components/ui/DeleteButton";
 import Table from "@/components/shared/Table";
 import StatCard from "@/components/shared/StatCard";
+
+const ZONE_OPTIONS = ["Civil Lines", "Mansarovar", "Sanganer", "HMZ", "Vidhyadhar Nagar"];
+const WARD_OPTIONS = ["Ward 10", "Ward 20", "Ward 30", "Ward 40", "Ward 50"];
+const AREA_OPTIONS = ["Zorawar Singh Gate", "Ghat Gate", "Sector 11", "Sector 2", "Sanganer Ind Area"];
+const COLONY_OPTIONS = ["Colony A", "Colony B", "Colony C"];
+const PLOT_OPTIONS = ["Plot 1", "Plot 2", "Plot 3"];
+const SUPERVISOR_OPTIONS = ["Anil Sharma", "Vinod Yadav", "Suresh Meena", "Ramesh Kumar", "Rajesh Yadav"];
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -106,35 +114,25 @@ const PROPERTY_SUB_TYPE_OPTIONS = [
   "School/College",
 ];
 
-const ZONE_OPTIONS = ["HMZ", "Mansarovar", "Sanganer", "Civil Lines", "Vidhyadhar Nagar"];
-const WARD_OPTIONS = ["ward 10", "ward 20", "ward 30", "ward 40", "ward 50"];
-const AREA_OPTIONS = ["Zorawar Singh Gate", "Ghat Gate", "Sector 11", "Sector 2", "Sanganer Ind Area"];
-const COLONY_OPTIONS = ["Brahampuri", "Ghat Gate Road", "Sector 11 Market", "Sector 2 Extension", "Sanganer Industrial Area"];
-const PLOT_OPTIONS = ["12", "92", "102", "157", "248", "Shop 12", "Showroom 2", "101", "202"];
-const SUPERVISOR_OPTIONS = ["Anil Sharma", "Vinod Yadav", "Suresh Meena", "Ramesh Kumar"];
+
 
 // ─── Dummy Data ──────────────────────────────────────────────────────────────
 
-const DUMMY_SURVEY_DATA: SurveyRecord[] = [
-  { id: 1, date: "2026-06-01", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", colonyName: "Brahampuri", plotNo: "12", first_name: "Rajesh", middle_name: "Kumar", last_name: "Sharma", ownerName: "Rajesh Kumar Sharma", phone: "9829012345", email: "rajesh@email.com", floor: "Ground", flatNo: "A-101", numFlats: "1", pinCode: "302001", address: "12, Brahampuri, Zorawar Singh Gate", landmark: "Near Temple", aadhaar: "1234-5678-9012", status: "RESIDENTIAL", propertyType: "Independent House", propertySubType: "Independent House", userCharges: 500, rfid: "RFID-10001", supervisor: "Anil Sharma", isSurveyorSupervisor: true, latitude: 26.9124, longitude: 75.7873 },
-  { id: 2, date: "2026-06-02", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", colonyName: "Ghat Gate Road", plotNo: "92", first_name: "Sunita", middle_name: "", last_name: "Verma", ownerName: "Sunita Verma", phone: "9829012346", email: "sunita@email.com", floor: "First", flatNo: "B-202", numFlats: "2", pinCode: "302002", address: "92, Ghat Gate Road", landmark: "Near Police Station", aadhaar: "2345-6789-0123", status: "RESIDENTIAL", propertyType: "Apartment/Flats", propertySubType: "Apartment/Flats", userCharges: 750, rfid: "RFID-10002", supervisor: "Vinod Yadav", isSurveyorSupervisor: true, latitude: 26.9234, longitude: 75.7981 },
-  { id: 3, date: "2026-06-03", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", colonyName: "Sector 11 Market", plotNo: "102", first_name: "Amit", middle_name: "", last_name: "Gupta", ownerName: "Amit Gupta", phone: "9829012347", email: "amit@email.com", floor: "Ground+1", flatNo: "C-303", numFlats: "4", pinCode: "302003", address: "102, Sector 11 Market", landmark: "Opposite Park", aadhaar: "3456-7890-1234", status: "COMMERCIAL", propertyType: "Commercial shops", propertySubType: "Retail Shop", userCharges: 1200, rfid: "RFID-10003", supervisor: "Suresh Meena", isSurveyorSupervisor: true, latitude: 26.9087, longitude: 75.7765 },
-  { id: 4, date: "2026-06-04", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", colonyName: "Sector 2 Extension", plotNo: "157", first_name: "Priya", middle_name: "Singh", last_name: "Chauhan", ownerName: "Priya Singh Chauhan", phone: "9829012348", email: "priya@email.com", floor: "Second", flatNo: "D-404", numFlats: "2", pinCode: "302004", address: "157, Sector 2 Extension", landmark: "Near School", aadhaar: "4567-8901-2345", status: "RESIDENTIAL", propertyType: "Houses having area more than 50 sq. yards", propertySubType: "Independent House", userCharges: 600, rfid: "RFID-10004", supervisor: "Ramesh Kumar", isSurveyorSupervisor: true, latitude: 26.9345, longitude: 75.8099 },
-  { id: 5, date: "2026-06-05", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", colonyName: "Sanganer Industrial Area", plotNo: "248", first_name: "Vijay", middle_name: "", last_name: "Meena", ownerName: "Vijay Meena", phone: "9829012349", email: "vijay@email.com", floor: "Ground", flatNo: "E-505", numFlats: "1", pinCode: "302005", address: "248, Sanganer Industrial Area", landmark: "Near Factory", aadhaar: "5678-9012-3456", status: "INDUSTRIAL", propertyType: "Medium/Large commercial outlets", propertySubType: "Office", userCharges: 1500, rfid: "RFID-10005", supervisor: "Anil Sharma", isSurveyorSupervisor: true, latitude: 26.8765, longitude: 75.7654 },
-  { id: 6, date: "2026-06-06", zone: "HMZ", ward: "Ward 10", area: "Zorawar Singh Gate", colonyName: "Brahampuri", plotNo: "Shop 12", first_name: "Kavita", middle_name: "", last_name: "Jain", ownerName: "Kavita Jain", phone: "9829012350", email: "kavita@email.com", floor: "Ground", flatNo: "F-606", numFlats: "1", pinCode: "302001", address: "Shop 12, Brahampuri", landmark: "Near Market", aadhaar: "6789-0123-4567", status: "COMMERCIAL", propertyType: "Commercial shops", propertySubType: "Retail Shop", userCharges: 1000, rfid: "RFID-10006", supervisor: "Vinod Yadav", isSurveyorSupervisor: true, latitude: 26.9155, longitude: 75.7890 },
-  { id: 7, date: "2026-06-07", zone: "Mansarovar", ward: "Ward 20", area: "Ghat Gate", colonyName: "Ghat Gate Road", plotNo: "Showroom 2", first_name: "Deepak", middle_name: "", last_name: "Yadav", ownerName: "Deepak Yadav", phone: "9829012351", email: "deepak@email.com", floor: "Ground+2", flatNo: "G-707", numFlats: "6", pinCode: "302002", address: "Showroom 2, Ghat Gate Road", landmark: "Near Mall", aadhaar: "7890-1234-5678", status: "COMMERCIAL", propertyType: "Medium/Large commercial outlets", propertySubType: "Office", userCharges: 2000, rfid: "RFID-10007", supervisor: "Suresh Meena", isSurveyorSupervisor: true, latitude: 26.9276, longitude: 75.8012 },
-  { id: 8, date: "2026-06-08", zone: "Sanganer", ward: "Ward 30", area: "Sector 11", colonyName: "Sector 11 Market", plotNo: "101", first_name: "Neha", middle_name: "", last_name: "Sharma", ownerName: "Neha Sharma", phone: "9829012352", email: "neha@email.com", floor: "First", flatNo: "H-808", numFlats: "3", pinCode: "302003", address: "101, Sector 11 Market", landmark: "Near Hospital", aadhaar: "8901-2345-6789", status: "INSTITUTIONAL", propertyType: "Educational institutions", propertySubType: "School/College", userCharges: 800, rfid: "RFID-10008", supervisor: "Ramesh Kumar", isSurveyorSupervisor: true, latitude: 26.9055, longitude: 75.7732 },
-  { id: 9, date: "2026-06-09", zone: "Civil Lines", ward: "Ward 40", area: "Sector 2", colonyName: "Sector 2 Extension", plotNo: "202", first_name: "Ravi", middle_name: "", last_name: "Kumar", ownerName: "Ravi Kumar", phone: "9829012353", email: "ravi@email.com", floor: "Third", flatNo: "I-909", numFlats: "2", pinCode: "302004", address: "202, Sector 2 Extension", landmark: "Near Park", aadhaar: "9012-3456-7890", status: "RESIDENTIAL", propertyType: "Houses having area less than 50 sq. yards", propertySubType: "Apartment/Flats", userCharges: 400, rfid: "RFID-10009", supervisor: "Anil Sharma", isSurveyorSupervisor: true, latitude: 26.9387, longitude: 75.8133 },
-  { id: 10, date: "2026-06-10", zone: "Vidhyadhar Nagar", ward: "Ward 50", area: "Sanganer Ind Area", colonyName: "Sanganer Industrial Area", plotNo: "55", first_name: "Pooja", middle_name: "", last_name: "Verma", ownerName: "Pooja Verma", phone: "9829012354", email: "pooja@email.com", floor: "Ground", flatNo: "J-1010", numFlats: "1", pinCode: "302005", address: "55, Sanganer Industrial Area", landmark: "Near Temple", aadhaar: "0123-4567-8901", status: "RESIDENTIAL", propertyType: "Independent House", propertySubType: "Independent House", userCharges: 550, rfid: "RFID-10010", supervisor: "Vinod Yadav", isSurveyorSupervisor: true, latitude: 26.8732, longitude: 75.7621 },
-];
+
 
 export default function SurveyListPage() {
-  const [surveys, setSurveys] = useState<SurveyRecord[]>(DUMMY_SURVEY_DATA);
-  const [selectedSurveyId, setSelectedSurveyId] = useState<number | null>(1);
+  const [surveys, setSurveys] = useState<SurveyRecord[]>([]);
+  const [selectedSurveyId, setSelectedSurveyId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"workspace" | "table">("workspace");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const [loading, setLoading] = useState(false);
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // ─── Search & Filter State ────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
@@ -149,9 +147,91 @@ export default function SurveyListPage() {
   const [filterFromDate, setFilterFromDate] = useState("");
   const [filterToDate, setFilterToDate] = useState("");
 
+  const [zonesList, setZonesList] = useState<{ id: number; region_name: string }[]>([]);
+  const [wardsList, setWardsList] = useState<{ id: number; region_name: string }[]>([]);
+
   // ─── Form State for Editing/Viewing ────────────────────────────────────────
   const [editForm, setEditForm] = useState<Partial<SurveyRecord>>({});
   const [activeFormTab, setActiveFormTab] = useState<"property" | "location" | "contact">("property");
+
+  const loadInitialOptions = async () => {
+    try {
+      const zRes = await api<{ data: any[] }>("/api/zones");
+      if (zRes.data) setZonesList(zRes.data);
+      const wRes = await api<{ data: any[] }>("/api/wards");
+      if (wRes.data) setWardsList(wRes.data);
+    } catch (e) {
+      console.error("Failed to load zones/wards", e);
+    }
+  };
+
+  const loadSurveys = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append("page", page.toString());
+      params.append("page_size", "15");
+      if (searchQuery) params.append("search", searchQuery);
+      if (filterRfid) params.append("rfid", filterRfid);
+      if (filterZone) params.append("zone_id", filterZone);
+      if (filterWard) params.append("ward_id", filterWard);
+      if (filterStatus) params.append("status", filterStatus);
+
+      const res = await api<{ data: any[]; total: number; total_pages: number }>(`/api/rfid/properties?${params.toString()}`);
+      if (res.data && Array.isArray(res.data)) {
+        // Map backend properties back to SurveyRecord interface
+        const mapped: SurveyRecord[] = res.data.map((p: any) => ({
+          id: p.id,
+          date: p.registration_date,
+          zone: p.zone_name || "",
+          ward: p.ward_name || "",
+          area: p.area || "",
+          colonyName: p.colony_name || "",
+          plotNo: p.plot_no || "",
+          first_name: p.owner_first_name || "",
+          middle_name: p.owner_middle_name || "",
+          last_name: p.owner_last_name || "",
+          ownerName: `${p.owner_first_name} ${p.owner_last_name}`.trim(),
+          phone: p.mobile_number || "",
+          email: p.email || "",
+          floor: p.floor || "",
+          flatNo: p.house_no || "",
+          numFlats: (p.num_flats || 1).toString(),
+          pinCode: p.pin_code || "",
+          address: p.address || "",
+          landmark: p.landmark || "",
+          aadhaar: p.aadhaar || "",
+          status: p.property_status || "RESIDENTIAL",
+          propertyType: p.property_type || "",
+          propertySubType: p.property_sub_type || "",
+          userCharges: (p.monthly_charge_paisa || 0) / 100,
+          rfid: p.rfid_id || "",
+          supervisor: p.registered_by_name || "Supervisor",
+          isSurveyorSupervisor: true,
+          latitude: p.latitude || 26.9124,
+          longitude: p.longitude || 75.7873,
+        }));
+        setSurveys(mapped);
+        setTotalCount(res.total);
+        setTotalPages(res.total_pages);
+        if (mapped.length > 0 && selectedSurveyId === null) {
+          setSelectedSurveyId(mapped[0].id);
+        }
+      }
+    } catch (e: any) {
+      toast.error("Failed to load properties: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadInitialOptions();
+  }, []);
+
+  useEffect(() => {
+    loadSurveys();
+  }, [page, searchQuery, filterRfid, filterZone, filterWard, filterStatus]);
 
   // Selected Survey details computed
   const selectedSurvey = useMemo(() => {
@@ -165,63 +245,7 @@ export default function SurveyListPage() {
     }
   }, [selectedSurvey, isEditing]);
 
-  // ─── Filtering Logic ───────────────────────────────────────────────────────
-  const filteredSurveys = useMemo(() => {
-    return surveys.filter((s) => {
-      // 1. Text Search query (First/Last name, Plot No, RFID, address)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesOwner = s.ownerName.toLowerCase().includes(q);
-        const matchesPlot = s.plotNo.toLowerCase().includes(q);
-        const matchesRfid = s.rfid.toLowerCase().includes(q);
-        const matchesAddr = s.address.toLowerCase().includes(q);
-        const matchesArea = s.area.toLowerCase().includes(q);
-
-        if (!matchesOwner && !matchesPlot && !matchesRfid && !matchesAddr && !matchesArea) {
-          return false;
-        }
-      }
-
-      // 2. Specific filter dropdowns
-      if (filterRfid.trim() && !s.rfid.includes(filterRfid.trim())) return false;
-      if (filterZone && s.zone !== filterZone) return false;
-      if (filterWard && s.ward !== filterWard) return false;
-      if (filterArea && s.area !== filterArea) return false;
-      if (filterColony && s.colonyName !== filterColony) return false;
-      if (filterPlot && s.plotNo !== filterPlot) return false;
-      if (filterSupervisor && s.supervisor !== filterSupervisor) return false;
-      if (filterStatus && s.status !== filterStatus) return false;
-
-      // 3. Date filter
-      if (filterFromDate) {
-        const fromDate = new Date(filterFromDate);
-        const sDate = new Date(s.date);
-        if (sDate < fromDate) return false;
-      }
-      if (filterToDate) {
-        const toDate = new Date(filterToDate);
-        // End of the day boundary for proper comparison
-        toDate.setHours(23, 59, 59, 999);
-        const sDate = new Date(s.date);
-        if (sDate > toDate) return false;
-      }
-
-      return true;
-    });
-  }, [
-    surveys,
-    searchQuery,
-    filterRfid,
-    filterZone,
-    filterWard,
-    filterArea,
-    filterColony,
-    filterPlot,
-    filterSupervisor,
-    filterStatus,
-    filterFromDate,
-    filterToDate,
-  ]);
+  const filteredSurveys = surveys;
 
   // Compute number of active filters
   const activeFilterCount = useMemo(() => {
@@ -262,22 +286,23 @@ export default function SurveyListPage() {
     setFilterFromDate("");
     setFilterToDate("");
     setSearchQuery("");
+    setPage(1);
     toast.info("All search filters reset.");
   };
 
   // ─── Stat Computations ─────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const total = filteredSurveys.length;
-    const residential = filteredSurveys.filter((s) => s.status === "RESIDENTIAL").length;
-    const commercial = filteredSurveys.filter((s) => s.status === "COMMERCIAL").length;
-    const totalCharges = filteredSurveys.reduce((sum, s) => sum + s.userCharges, 0);
+    const total = totalCount;
+    const residential = surveys.filter((s) => s.status === "RESIDENTIAL").length;
+    const commercial = surveys.filter((s) => s.status === "COMMERCIAL").length;
+    const totalCharges = surveys.reduce((sum, s) => sum + s.userCharges, 0);
 
     return { total, residential, commercial, totalCharges };
-  }, [filteredSurveys]);
+  }, [surveys, totalCount]);
 
   // ─── CRUD Handlers ─────────────────────────────────────────────────────────
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!editForm.first_name || !editForm.status || !editForm.rfid) {
@@ -285,25 +310,47 @@ export default function SurveyListPage() {
       return;
     }
 
-    const fullName = `${editForm.first_name} ${editForm.middle_name ? editForm.middle_name + " " : ""}${editForm.last_name || ""}`.trim();
-    const updatedRecord: SurveyRecord = {
-      ...(editForm as SurveyRecord),
-      ownerName: fullName,
-    };
+    try {
+      const chargeVal = editForm.userCharges || 0;
+      const chargePaisa = Math.round(chargeVal * 100);
 
-    setSurveys((prev) =>
-      prev.map((s) => (s.id === updatedRecord.id ? updatedRecord : s))
-    );
+      await put(`/api/rfid/properties/${editForm.id}`, {
+        property_status: editForm.status,
+        property_type: editForm.propertyType,
+        property_sub_type: editForm.propertySubType,
+        owner_first_name: editForm.first_name,
+        owner_middle_name: editForm.middle_name || "",
+        owner_last_name: editForm.last_name || "",
+        mobile_number: editForm.phone,
+        email: editForm.email || "",
+        address: editForm.address,
+        landmark: editForm.landmark || "",
+        house_no: editForm.flatNo || "",
+        floor: editForm.floor || "",
+        num_flats: parseInt(editForm.numFlats || "1") || 1,
+        pin_code: editForm.pinCode,
+        aadhaar: editForm.aadhaar || "",
+        monthly_charge_paisa: chargePaisa,
+        remarks: "",
+        form_data: editForm,
+      });
 
-    toast.success(`Survey for "${fullName}" updated successfully!`);
-    setIsEditing(false);
+      toast.success("Survey details updated successfully!");
+      setIsEditing(false);
+      loadSurveys();
+    } catch (err: any) {
+      toast.error("Failed to update property: " + err.message);
+    }
   };
 
-  const handleDelete = (id: number) => {
-    setSurveys((prev) => prev.filter((s) => s.id !== id));
-    toast.error("Survey record deleted successfully.");
-    if (selectedSurveyId === id) {
+  const handleDelete = async (id: number) => {
+    try {
+      await put(`/api/rfid/properties/${id}/status`, { status: "deleted" });
+      toast.error("Survey record deleted successfully.");
       setSelectedSurveyId(null);
+      loadSurveys();
+    } catch (err: any) {
+      toast.error("Failed to delete property: " + err.message);
     }
   };
 
@@ -1087,11 +1134,11 @@ export default function SurveyListPage() {
                                 Property Specifications
                               </CardTitle>
                             </CardHeader>
-                            <CardContent className="pb-5 pt-0">
-                              <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
+                            <CardContent className="pb-5 pt-5">
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-6 text-xs">
                                 <div>
                                   <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-0.5">Property Type</div>
-                                  <div className="font-semibold text-theme-text">{selectedSurvey.propertyType}</div>
+                                  <div className="font-semibold text-theme-text">{selectedSurvey.propertyType || "—"}</div>
                                 </div>
                                 <div>
                                   <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-0.5">Property Subtype</div>
@@ -1130,8 +1177,8 @@ export default function SurveyListPage() {
                                 Address & Geography
                               </CardTitle>
                             </CardHeader>
-                            <CardContent className="pb-5 pt-0">
-                              <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
+                            <CardContent className="pb-5 pt-5">
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-6 text-xs">
                                 <div className="col-span-2">
                                   <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-0.5">Complete Address</div>
                                   <div className="font-semibold text-theme-text leading-relaxed">{selectedSurvey.address}</div>
@@ -1146,11 +1193,15 @@ export default function SurveyListPage() {
                                 </div>
                                 <div>
                                   <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-0.5">Zone & Ward</div>
-                                  <div className="font-semibold text-theme-text">{selectedSurvey.zone} / {selectedSurvey.ward}</div>
+                                  <div className="font-semibold text-theme-text">
+                                    {selectedSurvey.zone || "—"}{selectedSurvey.ward ? ` / ${selectedSurvey.ward}` : ""}
+                                  </div>
                                 </div>
                                 <div>
                                   <div className="text-[10px] text-theme-text-dim font-bold uppercase tracking-wider mb-0.5">Colony & Area</div>
-                                  <div className="font-semibold text-theme-text">{selectedSurvey.colonyName} / {selectedSurvey.area}</div>
+                                  <div className="font-semibold text-theme-text">
+                                    {selectedSurvey.colonyName || "—"}{selectedSurvey.area ? ` / ${selectedSurvey.area}` : ""}
+                                  </div>
                                 </div>
                               </div>
                             </CardContent>
@@ -1191,7 +1242,7 @@ export default function SurveyListPage() {
                                 User Charges Details
                               </CardTitle>
                             </CardHeader>
-                            <CardContent className="pb-5 pt-0 space-y-4">
+                            <CardContent className="pb-5 pt-5 space-y-4">
                               <div className="flex items-center justify-between border-b border-theme-border pb-3 text-xs">
                                 <span className="text-theme-text-dim">User Charges Amount</span>
                                 <span className="font-bold text-theme-text text-sm">₹{selectedSurvey.userCharges}</span>
@@ -1387,8 +1438,8 @@ export default function SurveyListPage() {
                   className="bg-theme-base/40 border border-theme-border rounded-xl px-3 py-2 text-xs text-theme-text outline-none focus:border-[#10B981] cursor-pointer"
                 >
                   <option value="">Select zone…</option>
-                  {ZONE_OPTIONS.map((z) => (
-                    <option key={z} value={z}>{z}</option>
+                  {zonesList.map((z) => (
+                    <option key={z.id} value={z.id}>{z.region_name}</option>
                   ))}
                 </select>
               </div>
@@ -1402,8 +1453,8 @@ export default function SurveyListPage() {
                   className="bg-theme-base/40 border border-theme-border rounded-xl px-3 py-2 text-xs text-theme-text outline-none focus:border-[#10B981] cursor-pointer"
                 >
                   <option value="">Select ward…</option>
-                  {WARD_OPTIONS.map((w) => (
-                    <option key={w} value={w}>{w}</option>
+                  {wardsList.map((w) => (
+                    <option key={w.id} value={w.id}>{w.region_name}</option>
                   ))}
                 </select>
               </div>

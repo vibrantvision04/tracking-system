@@ -60,21 +60,10 @@ interface ReportItem extends Household, CoverageRecord {}
 
 // ─── Dummy Data ──────────────────────────────────────────────────────────────
 
-const DUMMY_COVERAGE_DATA: ReportItem[] = [
-  { id: 1, rfid_number: "RFID-10001", household_name: "Rajesh Sharma", mobile_number: "9829012345", address: "12, Brahampuri", zone_id: 1, ward_id: 10, area: "Zorawar Singh Gate", latitude: 26.9124, longitude: 75.7873, survey_date: "2026-06-01", survey_photo: "", zone_name: "HMZ", ward_name: "Ward 10", assigned_vehicle_id: 1, assigned_vehicle_reg: "RJ-14-GB-1234", coverage_method: "AUTOMATIC", automatic_coverage: true, manual_coverage: false, finalStatus: "COVERED", coverage_timestamp: "2026-06-10T08:30:00Z", vehicle_id: 1, vehicle_reg: "RJ-14-GB-1234", speed: 25, distance: 120, user_name: "Anil Sharma", scan_coordinates: { latitude: 26.9124, longitude: 75.7873 }, coverage_history: [{ id: 1, coverage_method: "AUTOMATIC", timestamp: "2026-06-10T08:30:00Z", vehicle_reg: "RJ-14-GB-1234", user_name: "Anil Sharma", speed: 25, distance: 120 }] },
-  { id: 2, rfid_number: "RFID-10002", household_name: "Sunita Verma", mobile_number: "9829012346", address: "92, Ghat Gate Road", zone_id: 2, ward_id: 20, area: "Ghat Gate", latitude: 26.9234, longitude: 75.7981, survey_date: "2026-06-02", survey_photo: "", zone_name: "Mansarovar", ward_name: "Ward 20", assigned_vehicle_id: 2, assigned_vehicle_reg: "RJ-14-GB-5678", coverage_method: "AUTOMATIC", automatic_coverage: true, manual_coverage: false, finalStatus: "COVERED", coverage_timestamp: "2026-06-10T09:15:00Z", vehicle_id: 2, vehicle_reg: "RJ-14-GB-5678", speed: 18, distance: 85, user_name: "Vinod Yadav", scan_coordinates: { latitude: 26.9234, longitude: 75.7981 }, coverage_history: [{ id: 2, coverage_method: "AUTOMATIC", timestamp: "2026-06-10T09:15:00Z", vehicle_reg: "RJ-14-GB-5678", user_name: "Vinod Yadav", speed: 18, distance: 85 }] },
-  { id: 3, rfid_number: "RFID-10003", household_name: "Amit Gupta", mobile_number: "9829012347", address: "102, Sector 11 Market", zone_id: 3, ward_id: 30, area: "Sector 11", latitude: 26.9087, longitude: 75.7765, survey_date: "2026-06-03", survey_photo: "", zone_name: "Sanganer", ward_name: "Ward 30", assigned_vehicle_id: 3, assigned_vehicle_reg: "RJ-14-GB-9012", coverage_method: "MANUAL", automatic_coverage: false, manual_coverage: true, finalStatus: "COVERED", coverage_timestamp: "2026-06-09T14:00:00Z", vehicle_id: null, vehicle_reg: null, speed: null, distance: null, user_name: "Suresh Meena", scan_coordinates: { latitude: 26.9087, longitude: 75.7765 }, coverage_history: [{ id: 3, coverage_method: "MANUAL", timestamp: "2026-06-09T14:00:00Z", vehicle_reg: null, user_name: "Suresh Meena", speed: null, distance: null }] },
-  { id: 4, rfid_number: "RFID-10004", household_name: "Priya Chauhan", mobile_number: "9829012348", address: "157, Sector 2 Extension", zone_id: 4, ward_id: 40, area: "Sector 2", latitude: 26.9345, longitude: 75.8099, survey_date: "2026-06-04", survey_photo: "", zone_name: "Civil Lines", ward_name: "Ward 40", assigned_vehicle_id: 4, assigned_vehicle_reg: "RJ-14-GB-3456", coverage_method: "AUTOMATIC", automatic_coverage: true, manual_coverage: false, finalStatus: "COVERED", coverage_timestamp: "2026-06-10T07:45:00Z", vehicle_id: 4, vehicle_reg: "RJ-14-GB-3456", speed: 22, distance: 95, user_name: "Ramesh Kumar", scan_coordinates: { latitude: 26.9345, longitude: 75.8099 }, coverage_history: [{ id: 4, coverage_method: "AUTOMATIC", timestamp: "2026-06-10T07:45:00Z", vehicle_reg: "RJ-14-GB-3456", user_name: "Ramesh Kumar", speed: 22, distance: 95 }] },
-  { id: 5, rfid_number: "RFID-10005", household_name: "Vijay Meena", mobile_number: "9829012349", address: "248, Sanganer Industrial Area", zone_id: 5, ward_id: 50, area: "Sanganer Ind Area", latitude: 26.8765, longitude: 75.7654, survey_date: "2026-06-05", survey_photo: "", zone_name: "Vidhyadhar Nagar", ward_name: "Ward 50", assigned_vehicle_id: 5, assigned_vehicle_reg: "RJ-14-GB-7890", coverage_method: "UNCOVERED", automatic_coverage: false, manual_coverage: false, finalStatus: "UNCOVERED", coverage_timestamp: null, vehicle_id: null, vehicle_reg: null, speed: null, distance: null, user_name: null, scan_coordinates: null, coverage_history: [] },
-  { id: 6, rfid_number: "RFID-10006", household_name: "Kavita Jain", mobile_number: "9829012350", address: "Shop 12, Brahampuri", zone_id: 1, ward_id: 10, area: "Zorawar Singh Gate", latitude: 26.9155, longitude: 75.7890, survey_date: "2026-06-06", survey_photo: "", zone_name: "HMZ", ward_name: "Ward 10", assigned_vehicle_id: 1, assigned_vehicle_reg: "RJ-14-GB-1234", coverage_method: "AUTOMATIC", automatic_coverage: true, manual_coverage: false, finalStatus: "COVERED", coverage_timestamp: "2026-06-10T10:00:00Z", vehicle_id: 1, vehicle_reg: "RJ-14-GB-1234", speed: 20, distance: 110, user_name: "Anil Sharma", scan_coordinates: { latitude: 26.9155, longitude: 75.7890 }, coverage_history: [{ id: 6, coverage_method: "AUTOMATIC", timestamp: "2026-06-10T10:00:00Z", vehicle_reg: "RJ-14-GB-1234", user_name: "Anil Sharma", speed: 20, distance: 110 }] },
-  { id: 7, rfid_number: "RFID-10007", household_name: "Deepak Yadav", mobile_number: "9829012351", address: "Showroom 2, Ghat Gate Road", zone_id: 2, ward_id: 20, area: "Ghat Gate", latitude: 26.9276, longitude: 75.8012, survey_date: "2026-06-07", survey_photo: "", zone_name: "Mansarovar", ward_name: "Ward 20", assigned_vehicle_id: 2, assigned_vehicle_reg: "RJ-14-GB-5678", coverage_method: "MANUAL", automatic_coverage: false, manual_coverage: true, finalStatus: "COVERED", coverage_timestamp: "2026-06-09T16:30:00Z", vehicle_id: null, vehicle_reg: null, speed: null, distance: null, user_name: "Vinod Yadav", scan_coordinates: { latitude: 26.9276, longitude: 75.8012 }, coverage_history: [{ id: 7, coverage_method: "MANUAL", timestamp: "2026-06-09T16:30:00Z", vehicle_reg: null, user_name: "Vinod Yadav", speed: null, distance: null }] },
-  { id: 8, rfid_number: "RFID-10008", household_name: "Neha Sharma", mobile_number: "9829012352", address: "101, Sector 11 Market", zone_id: 3, ward_id: 30, area: "Sector 11", latitude: 26.9055, longitude: 75.7732, survey_date: "2026-06-08", survey_photo: "", zone_name: "Sanganer", ward_name: "Ward 30", assigned_vehicle_id: 3, assigned_vehicle_reg: "RJ-14-GB-9012", coverage_method: "UNCOVERED", automatic_coverage: false, manual_coverage: false, finalStatus: "UNCOVERED", coverage_timestamp: null, vehicle_id: null, vehicle_reg: null, speed: null, distance: null, user_name: null, scan_coordinates: null, coverage_history: [] },
-  { id: 9, rfid_number: "RFID-10009", household_name: "Ravi Kumar", mobile_number: "9829012353", address: "202, Sector 2 Extension", zone_id: 4, ward_id: 40, area: "Sector 2", latitude: 26.9387, longitude: 75.8133, survey_date: "2026-06-09", survey_photo: "", zone_name: "Civil Lines", ward_name: "Ward 40", assigned_vehicle_id: 4, assigned_vehicle_reg: "RJ-14-GB-3456", coverage_method: "AUTOMATIC", automatic_coverage: true, manual_coverage: false, finalStatus: "COVERED", coverage_timestamp: "2026-06-10T11:20:00Z", vehicle_id: 4, vehicle_reg: "RJ-14-GB-3456", speed: 15, distance: 60, user_name: "Ramesh Kumar", scan_coordinates: { latitude: 26.9387, longitude: 75.8133 }, coverage_history: [{ id: 9, coverage_method: "AUTOMATIC", timestamp: "2026-06-10T11:20:00Z", vehicle_reg: "RJ-14-GB-3456", user_name: "Ramesh Kumar", speed: 15, distance: 60 }] },
-  { id: 10, rfid_number: "RFID-10010", household_name: "Pooja Verma", mobile_number: "9829012354", address: "55, Sanganer Industrial Area", zone_id: 5, ward_id: 50, area: "Sanganer Ind Area", latitude: 26.8732, longitude: 75.7621, survey_date: "2026-06-10", survey_photo: "", zone_name: "Vidhyadhar Nagar", ward_name: "Ward 50", assigned_vehicle_id: 5, assigned_vehicle_reg: "RJ-14-GB-7890", coverage_method: "MANUAL", automatic_coverage: false, manual_coverage: true, finalStatus: "COVERED", coverage_timestamp: "2026-06-10T12:00:00Z", vehicle_id: null, vehicle_reg: null, speed: null, distance: null, user_name: "Anil Sharma", scan_coordinates: { latitude: 26.8732, longitude: 75.7621 }, coverage_history: [{ id: 10, coverage_method: "MANUAL", timestamp: "2026-06-10T12:00:00Z", vehicle_reg: null, user_name: "Anil Sharma", speed: null, distance: null }] },
-];
+
 
 export default function RFIDCoverageReportPage() {
-  const [reportData, setReportData] = useState<ReportItem[]>(DUMMY_COVERAGE_DATA);
+  const [reportData, setReportData] = useState<ReportItem[]>([]);
   const [zones, setZones] = useState<{ id: number; region_name: string }[]>([]);
   const [wards, setWards] = useState<{ id: number; region_name: string; parent_id: number }[]>([]);
   const [vehicles, setVehicles] = useState<{ id: number; vehicle_reg_no: string }[]>([]);
@@ -116,16 +105,55 @@ export default function RFIDCoverageReportPage() {
 
   useEffect(() => {
     loadInitialOptions();
+    loadReport();
   }, []);
 
-  const loadReport = () => {
+  const loadReport = async () => {
     setLoading(true);
-    setTimeout(() => {
-      setReportData(DUMMY_COVERAGE_DATA);
+    try {
+      const params = new URLSearchParams();
+      params.append("date", filters.from_date || new Date().toISOString().split("T")[0]);
+      const res = await api<{ data: any[] }>(`/api/rfid/coverage-report?${params.toString()}`);
+      if (res.data) {
+        const mapped: ReportItem[] = res.data.map((item, idx) => ({
+          id: item.id,
+          rfid_number: item.rfid_id,
+          household_name: item.owner_name,
+          mobile_number: "",
+          address: item.address || "",
+          zone_id: 0,
+          ward_id: 0,
+          area: "",
+          latitude: 26.9124,
+          longitude: 75.7873,
+          survey_date: "",
+          survey_photo: "",
+          zone_name: item.zone_name || "",
+          ward_name: item.ward_name || "",
+          assigned_vehicle_id: null,
+          assigned_vehicle_reg: item.vehicle_reg || null,
+          coverage_method: item.coverage_type === "gps" ? "AUTOMATIC" : "MANUAL",
+          automatic_coverage: item.coverage_type === "gps",
+          manual_coverage: item.coverage_type === "manual_rfid",
+          finalStatus: "COVERED",
+          coverage_timestamp: item.covered_at,
+          vehicle_id: null,
+          vehicle_reg: item.vehicle_reg || null,
+          speed: null,
+          distance: item.distance_m || null,
+          user_name: item.driver_name || null,
+          scan_coordinates: null,
+          coverage_history: [],
+        }));
+        setReportData(mapped);
+      }
       setHasLoaded(true);
-      setLoading(false);
       toast.success("RFID Coverage Report loaded successfully");
-    }, 500);
+    } catch (err: any) {
+      toast.error("Failed to load report data: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExport = (format: "csv" | "excel") => {

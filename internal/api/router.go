@@ -147,6 +147,19 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/complaints", h.ListComplaints)
 			r.Get("/employee-locations", h.GetEmployeeLocations)
 
+			// ============== RFID & Property Lifecycle Management ==============
+			r.Get("/rfid/form-config", h.GetSurveyFormConfig)
+			r.Get("/rfid/properties", h.WebListProperties)
+			r.Get("/rfid/properties/{id}", h.WebListProperties) // will reuse list or single helper as appropriate
+			r.Put("/rfid/properties/{id}", h.WebUpdateProperty)
+			r.Put("/rfid/properties/{id}/status", h.WebUpdatePropertyStatus)
+			r.Get("/rfid/household-monitoring", h.WebHouseholdMonitoring)
+			r.Get("/rfid/coverage-report", h.WebCoverageReport)
+			r.Get("/rfid/survey-report", h.WebSurveyReport)
+			r.Get("/rfid/payment-report", h.WebPaymentReport)
+			r.Get("/rfid/scan-log", h.WebRFIDScanLog)
+			r.Get("/rfid/reports/ward", h.WebWardRFIDReport)
+
 			// ============== Road Sweeping Routes ==============
 			r.Get("/sweeping/routes", h.GetSweepingRoutes)
 			r.Get("/sweeping/assignments", h.GetSweepingAssignments)
@@ -392,6 +405,19 @@ func SetupRouter(h *Handler, hub *ws.Hub, cfg *config.Config) http.Handler {
 			r.Get("/complaints", h.MobileListComplaints)
 			r.Get("/complaints/{id}", h.MobileGetComplaint)
 			r.Post("/location", h.MobileSubmitLocation)
+
+			// ============== RFID Mobile Routes ==============
+			r.Get("/zones", h.GetZones)
+			r.Get("/wards", h.GetWards)
+			r.Get("/rfid/form-config", h.GetSurveyFormConfig)
+			r.Post("/rfid/scan", h.MobileScanRFID)
+			r.Post("/rfid/register", h.MobileRegisterProperty)
+			r.Put("/rfid/property/{id}", h.WebUpdateProperty)
+			r.Get("/rfid/property/{rfid_id}", h.MobileScanRFID) // maps to lookup / scan
+			r.Post("/rfid/coverage", h.MobileRecordCoverage)
+			r.Post("/rfid/payment", h.MobileCollectPayment)
+			r.Get("/rfid/payment/history/{property_id}", h.MobilePaymentHistory)
+			r.Post("/rfid/sync", h.MobileSyncQueue)
 
 			// ============== Road Sweeping Mobile ==============
 			r.Get("/sweeping/route", h.MobileSweepingRoute)

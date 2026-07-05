@@ -70,6 +70,13 @@ const MENU_ITEMS: MenuItem[] = [
     subtitleKey: 'menu.complaints.subtitle',
     route: 'Complaints',
   },
+  {
+    key: 'rfidScanner',
+    iconName: 'barcode-outline',
+    titleKey: 'menu.rfidScanner',
+    subtitleKey: 'menu.rfidScanner.subtitle',
+    route: 'RFIDScanner',
+  },
 ];
 
 export default function DriverHomeScreen({ navigation }: any) {
