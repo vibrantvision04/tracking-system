@@ -341,14 +341,14 @@ func (h *Handler) MobileLogout(w http.ResponseWriter, r *http.Request) {
 // 5. MobileValidatePhoto
 func (h *Handler) MobileValidatePhoto(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		PhotoBase64      string  `json:"photo_base64"`
-		GpsLat           float64 `json:"gps_lat"`
-		GpsLng           float64 `json:"gps_lng"`
-		SkipFaceDetection bool   `json:"skip_face_detection"`
+		PhotoBase64       string  `json:"photo_base64"`
+		GpsLat            float64 `json:"gps_lat"`
+		GpsLng            float64 `json:"gps_lng"`
+		SkipFaceDetection bool    `json:"skip_face_detection"`
 		// FaceCount is the reliable face count detected on-device via Google ML Kit.
 		// When provided (>= 0), the server trusts it and does not run its own
 		// (unreliable) face detection.
-		FaceCount        *int    `json:"face_count"`
+		FaceCount *int `json:"face_count"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondWithError(w, http.StatusBadRequest, "Invalid payload")
@@ -370,16 +370,16 @@ func (h *Handler) MobileValidatePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"valid":        result.Valid,
-		"face_count":   faceCount,
-		"issues":       result.Issues,
-		"gps_valid":    true,
-		"ward_check":   "inside",
-		"blurred":      result.Blurred,
-		"dark":         result.Dark,
-		"overexposed":  result.Overexposed,
-		"width":        result.Width,
-		"height":       result.Height,
+		"valid":       result.Valid,
+		"face_count":  faceCount,
+		"issues":      result.Issues,
+		"gps_valid":   true,
+		"ward_check":  "inside",
+		"blurred":     result.Blurred,
+		"dark":        result.Dark,
+		"overexposed": result.Overexposed,
+		"width":       result.Width,
+		"height":      result.Height,
 	})
 }
 
@@ -706,16 +706,20 @@ func (h *Handler) MobileAttendanceList(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		add("a.ward_id = $%d", *scope.WardID)
+		where = append(where, "a.role = 'driver'")
 	case "zone_manager":
 		switch {
 		case scope.WardID != nil:
 			add("a.ward_id = $%d", *scope.WardID)
 		case scope.ZoneID != nil:
-			add("a.ward_id IN (SELECT id FROM regions WHERE parent_id = $%d)", *scope.ZoneID)
+			if *scope.ZoneID != cityWideSentinel {
+				add("a.ward_id IN (SELECT id FROM regions WHERE parent_id = $%d)", *scope.ZoneID)
+			}
 		default:
 			writeEmptyAttendancePage(w, r)
 			return
 		}
+		where = append(where, "a.role IN ('supervisor', 'driver')")
 	default:
 		// Unknown role: confine to the caller's own records as a safe default.
 		add("a.user_id = $%d", scope.EmployeeID)
@@ -2393,12 +2397,12 @@ func (h *Handler) MobileGetOpenDepots(w http.ResponseWriter, r *http.Request) {
 		var lat, lng, rad float64
 		if err := rows.Scan(&id, &name, &lat, &lng, &rad, &status); err == nil {
 			list = append(list, map[string]interface{}{
-				"id":         id,
-				"name":       name,
-				"latitude":   lat,
-				"longitude":  lng,
-				"radius":     rad,
-				"submitted":  false, // operator check handled on frontend
+				"id":        id,
+				"name":      name,
+				"latitude":  lat,
+				"longitude": lng,
+				"radius":    rad,
+				"submitted": false, // operator check handled on frontend
 			})
 		}
 	}

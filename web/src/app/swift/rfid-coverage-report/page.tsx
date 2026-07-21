@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-toastify";
 import Button from "@/components/ui/Button";
@@ -87,6 +87,7 @@ export default function RFIDCoverageReportPage() {
 
   // Detail drawer state
   const [viewItem, setViewItem] = useState<ReportItem | null>(null);
+  const initialLoadDone = useRef(false);
 
   const loadInitialOptions = async () => {
     try {
@@ -104,6 +105,8 @@ export default function RFIDCoverageReportPage() {
   };
 
   useEffect(() => {
+    if (initialLoadDone.current) return;
+    initialLoadDone.current = true;
     loadInitialOptions();
     loadReport();
   }, []);
