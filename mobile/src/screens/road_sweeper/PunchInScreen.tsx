@@ -114,7 +114,7 @@ export default function SweeperPunchInScreen({ navigation }: any) {
   };
 
   if (showCamera) {
-    return <CameraCapture facing="front" title={t('punch.cameraInstruction')} onCapture={handlePhotoCaptured} onCancel={() => setShowCamera(false)} />;
+    return <CameraCapture facing="front" title={t('punch.cameraInstruction')} requireFace={true} onCapture={handlePhotoCaptured} onCancel={() => setShowCamera(false)} />;
   }
 
   if (step === 'success') {

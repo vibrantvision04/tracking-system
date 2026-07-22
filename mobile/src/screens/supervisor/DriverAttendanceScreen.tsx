@@ -194,6 +194,7 @@ export default function DriverAttendanceScreen({ navigation }: any) {
       <CameraCapture
         facing="front"
         title={`Selfie for: ${driverName}`}
+        requireFace={true}
         onCapture={handlePhotoCaptured}
         onCancel={() => setStep('gps')}
       />

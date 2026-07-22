@@ -157,6 +157,7 @@ export default function SupervisorPunchInScreen({ navigation }: any) {
       <CameraCapture
         facing="front"
         title={t('punch.cameraInstruction')}
+        requireFace={true}
         onCapture={handlePhotoCaptured}
         onCancel={() => setShowCamera(false)}
       />

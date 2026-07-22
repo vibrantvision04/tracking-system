@@ -5,7 +5,7 @@ import { post, put, del } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { toast } from "react-toastify";
 
-import PageHeader from "@/components/shared/PageHeader";
+import ReportHeader from "@/components/shared/ReportHeader";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -175,15 +175,11 @@ export default function VehiclesPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-6 lg:p-8">
-      
-      <PageHeader
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans">
+      <ReportHeader
         title="Vehicle Management"
-        description="Configure municipal vehicle assets, type mapping, and GPS tracking link parameters."
-        breadcrumbs={[
-          { label: "Fleet", href: "/vehicles" },
-          { label: "Vehicles Management" }
-        ]}
+        subtitle="Configure municipal vehicle assets, type mapping, and GPS tracking link parameters."
+        variant="detailed"
         actions={
           <Button
             onClick={formOpen ? closeForm : openAdd}
@@ -195,7 +191,7 @@ export default function VehiclesPage() {
       />
 
       {/* Main content body */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8">
         
         {/* Form panel */}
         {formOpen && (

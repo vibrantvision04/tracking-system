@@ -85,7 +85,7 @@ export default function CrudDirectory({
   const defaultFormDesc = isEditing ? "Modify the fields below. Press Escape to close." : "Enter the details below. Press Escape to close.";
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-4 sm:p-5 lg:p-8">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans">
       
       <PageHeader
         title={title}
@@ -98,7 +98,7 @@ export default function CrudDirectory({
         }
       />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-5 lg:p-8 space-y-6 pb-8">
         
         {/* Conditional Form Card */}
         {formOpen && (

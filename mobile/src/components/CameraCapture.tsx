@@ -25,7 +25,7 @@ interface CameraCaptureProps {
   requireFace?: boolean;
 }
 
-export default function CameraCapture({ facing = 'back', onCapture, onCancel, title = 'Capture Photo', maxFaces = 2, requireFace = true }: CameraCaptureProps) {
+export default function CameraCapture({ facing = 'back', onCapture, onCancel, title = 'Capture Photo', maxFaces = 2, requireFace = false }: CameraCaptureProps) {
   const [photo, setPhoto] = useState<string | null>(null);
   const [base64, setBase64] = useState<string | null>(null);
   const [uri, setUri] = useState<string | null>(null);

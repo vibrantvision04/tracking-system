@@ -33,7 +33,7 @@ export default function AlertsPage() {
   const sevColor: Record<string, string> = { high: "bg-rose-500", medium: "bg-amber-500", low: "bg-blue-500" };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base select-none font-sans space-y-6 p-6 lg:p-8">
+    <div className="flex-1 flex flex-col h-full bg-theme-base select-none font-sans">
       <PageHeader
         title="Alerts & Notifications"
         description="Monitor system events, violations, and real-time notifications."
@@ -42,7 +42,7 @@ export default function AlertsPage() {
           { label: "Alerts & Notifications" }
         ]}
         actions={
-          <div className="flex gap-3 w-[400px]">
+          <div className="flex gap-3 min-w-[300px]">
             <Select
               value={typeF}
               onChange={(e) => setTypeF(e.target.value)}
@@ -68,7 +68,7 @@ export default function AlertsPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 max-w-4xl mx-auto w-full pb-8">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 max-w-4xl mx-auto w-full pb-8">
         {filtered.map((a, idx) => (
           <div key={`${a.id}-${idx}`} className={`bg-gradient-to-br from-white/95 to-slate-50/50 border border-slate-200/60 rounded-xl p-4 flex gap-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md ${a.is_resolved ? "opacity-50" : ""}`}>
             <div className={`w-1 rounded-full shrink-0 ${sevColor[a.severity] || "bg-slate-350"}`} />

@@ -118,7 +118,7 @@ export default function ComplaintsPage() {
   const headers = ["ID", "Title", "Priority", "Status", "Assigned Vehicle", "Assigned Driver", "Created At"];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden font-sans">
       <PageHeader
         title="Complaint Management"
         description="View citizen complaints related to waste management services"
@@ -128,7 +128,8 @@ export default function ComplaintsPage() {
         ]}
       />
 
-      {/* Filters Card */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6 pb-8">
+        {/* Filters Card */}
       <Card className="overflow-visible">
         <CardHeader className="py-4 border-b border-theme-border">
           <CardTitle className="text-sm uppercase tracking-wider text-theme-text">Filters</CardTitle>
@@ -200,6 +201,7 @@ export default function ComplaintsPage() {
           </Table>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

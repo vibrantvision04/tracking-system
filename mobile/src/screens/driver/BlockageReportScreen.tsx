@@ -119,6 +119,7 @@ export default function BlockageReportScreen({ route, navigation }: any) {
       <CameraCapture
         facing="back"
         title={`Blockage Photo: ${pointName}`}
+        requireFace={false}
         onCapture={handlePhotoCaptured}
         onCancel={() => setStep('gps')}
       />

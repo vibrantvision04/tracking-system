@@ -195,6 +195,7 @@ export default function ZoneManagerAttendanceScreen({ navigation }: any) {
       <CameraCapture
         facing="front"
         title={`Selfie for: ${driverName}`}
+        requireFace={true}
         onCapture={handlePhotoCaptured}
         onCancel={() => setStep('gps')}
       />

@@ -101,7 +101,7 @@ export default function DevicesPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans space-y-6 p-6 lg:p-8">
+    <div className="flex-1 flex flex-col h-full bg-theme-base text-theme-text overflow-hidden select-none font-sans">
       
       <PageHeader
         title="GPS Devices Management"
@@ -113,7 +113,7 @@ export default function DevicesPage() {
       />
 
       {/* Main content body */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-8">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-8">
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           

@@ -164,6 +164,7 @@ export default function ZoneManagerPunchInScreen({ navigation }: any) {
       <CameraCapture
         facing="front"
         title={t('punch.cameraInstruction')}
+        requireFace={true}
         onCapture={handlePhotoCaptured}
         onCancel={() => setShowCamera(false)}
       />
